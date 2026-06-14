@@ -1,11 +1,52 @@
 #include "app/JobController.h"
 
+#include <QAbstractSocket>
+#include <QHostAddress>
+#include <QHostInfo>
+#include <QNetworkInterface>
+
 #include "core/SyncJob.h"
 #include "engine/RsyncProcessEngine.h"
+
+namespace {
+// Best-effort primary LAN IPv4: prefer a physical interface (en0) over virtual
+// ones (utun/awdl/Tailscale), which we keep only as a fallback.
+QString detectPrimaryAddress()
+{
+    QString fallback;
+    const auto ifaces = QNetworkInterface::allInterfaces();
+    for (const QNetworkInterface &iface : ifaces) {
+        const auto flags = iface.flags();
+        if (!flags.testFlag(QNetworkInterface::IsUp) || !flags.testFlag(QNetworkInterface::IsRunning))
+            continue;
+        if (flags.testFlag(QNetworkInterface::IsLoopBack))
+            continue;
+        const QString name = iface.name();
+        const bool virtualish = name.startsWith(QLatin1String("utun"))
+            || name.startsWith(QLatin1String("awdl")) || name.startsWith(QLatin1String("llw"))
+            || name.startsWith(QLatin1String("bridge"));
+        for (const QNetworkAddressEntry &entry : iface.addressEntries()) {
+            const QHostAddress ip = entry.ip();
+            if (ip.protocol() != QAbstractSocket::IPv4Protocol || ip.isLoopback())
+                continue;
+            if (virtualish) {
+                if (fallback.isEmpty())
+                    fallback = ip.toString();
+                continue;
+            }
+            return ip.toString();
+        }
+    }
+    return fallback;
+}
+} // namespace
 
 JobController::JobController(QObject *parent)
     : QObject(parent), m_caps(BinaryLocator::locateRsync())
 {
+    m_hostName = QHostInfo::localHostName();
+    m_hostAddress = detectPrimaryAddress();
+
     m_engine = new RsyncProcessEngine(m_caps, this);
 
     connect(m_engine, &SyncEngine::change, &m_changes, &ChangeListModel::append);
@@ -59,7 +100,8 @@ QString JobController::rsyncSummary() const
     return s;
 }
 
-void JobController::preview(const QString &source, const QString &destination)
+void JobController::preview(const QString &source, const QString &destination,
+                            bool archive, bool compress, bool deleteExtras, bool checksum)
 {
     if (m_running)
         return;
@@ -75,7 +117,10 @@ void JobController::preview(const QString &source, const QString &destination)
     SyncJob job;
     job.source = source.trimmed();
     job.destination = destination.trimmed();
-    job.archive = true;
+    job.archive = archive;
+    job.compress = compress;
+    job.deleteExtraneous = deleteExtras;
+    job.checksum = checksum;
 
     m_engine->start(job, /*dryRun=*/true);
 }

@@ -6,7 +6,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
 
 # Qt 6.5+ (loadFromModule / objectCreationFailed). Install via: brew install qt
-find_package(Qt6 6.5 REQUIRED COMPONENTS Core Gui Qml Quick QuickControls2 Test)
+find_package(Qt6 6.5 REQUIRED COMPONENTS Core Gui Qml Quick QuickControls2 Network Test)
 qt_standard_project_setup(REQUIRES 6.5)
 
 # ---------------------------------------------------------------------------
@@ -26,7 +26,7 @@ add_library(ceres_core STATIC
     src/app/JobController.h          src/app/JobController.cpp
 )
 target_include_directories(ceres_core PUBLIC src)
-target_link_libraries(ceres_core PUBLIC Qt6::Core)
+target_link_libraries(ceres_core PUBLIC Qt6::Core Qt6::Network)
 
 # ---------------------------------------------------------------------------
 # ceres: the GUI app (QML/Quick shell over ceres_core).

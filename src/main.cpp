@@ -14,7 +14,7 @@ int main(int argc, char *argv[])
     QGuiApplication::setApplicationName(QStringLiteral("Ceres"));
     QGuiApplication::setOrganizationName(QStringLiteral("Ceres"));
 
-    QQuickStyle::setStyle(QStringLiteral("Material"));
+    QQuickStyle::setStyle(QStringLiteral("Basic"));  // custom high-contrast dark theme, no Material
 
     // ChangeListModel instances are owned by C++ (handed out via controller.changes),
     // so register it as uncreatable just to make the type known to QML.

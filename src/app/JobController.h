@@ -19,6 +19,8 @@ class JobController : public QObject {
     Q_PROPERTY(QString log READ log NOTIFY logChanged)
     Q_PROPERTY(int percent READ percent NOTIFY progressChanged)
     Q_PROPERTY(QString status READ status NOTIFY statusChanged)
+    Q_PROPERTY(QString hostName READ hostName CONSTANT)
+    Q_PROPERTY(QString hostAddress READ hostAddress CONSTANT)
 public:
     explicit JobController(QObject *parent = nullptr);
 
@@ -29,9 +31,12 @@ public:
     QString log() const { return m_log; }
     int percent() const { return m_percent; }
     QString status() const { return m_status; }
+    QString hostName() const { return m_hostName; }
+    QString hostAddress() const { return m_hostAddress; }
 
-    // M1: dry-run preview of a local source -> destination.
-    Q_INVOKABLE void preview(const QString &source, const QString &destination);
+    // Dry-run preview of source -> destination with the chosen flags.
+    Q_INVOKABLE void preview(const QString &source, const QString &destination,
+                             bool archive, bool compress, bool deleteExtras, bool checksum);
     Q_INVOKABLE void cancel();
 
 signals:
@@ -51,6 +56,8 @@ private:
 
     QString m_log;
     QString m_status;
+    QString m_hostName;
+    QString m_hostAddress;
     int m_percent = 0;
     bool m_running = false;
 };
