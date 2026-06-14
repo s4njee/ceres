@@ -28,12 +28,14 @@ QString PathCompleter::completeLocal(const QString &input) const
     if (input.isEmpty())
         return input;
 
-    // Expand a leading ~ for the lookup, remembering to restore it afterwards.
-    const bool tilde = (input == QLatin1String("~") || input.startsWith(QLatin1String("~/")));
-    QString expanded = input;
+    // Bare ~ expands straight to the home folder (QDir::homePath() is
+    // /Users/<you> on macOS, /home/<you> on Linux).
     if (input == QLatin1String("~"))
-        expanded = QDir::homePath();
-    else if (input.startsWith(QLatin1String("~/")))
+        return QDir::homePath() + QLatin1Char('/');
+
+    // Expand a leading ~/ so Tab reveals the real home path rather than keeping ~.
+    QString expanded = input;
+    if (input.startsWith(QLatin1String("~/")))
         expanded = QDir::homePath() + input.mid(1);
 
     const int slash = expanded.lastIndexOf(QLatin1Char('/'));
@@ -58,11 +60,6 @@ QString PathCompleter::completeLocal(const QString &input) const
             result += QLatin1Char('/');
     }
 
-    if (tilde) {  // re-collapse the home dir back to ~
-        const QString home = QDir::homePath();
-        if (result.startsWith(home))
-            result = QStringLiteral("~") + result.mid(home.size());
-    }
     return result;
 }
 

@@ -13,6 +13,7 @@ private slots:
     void completesSingleDirWithSlash();
     void singleFileHasNoSlash();
     void noMatchReturnsInput();
+    void bareTildeExpandsToHome();
 };
 
 static void touch(const QString &path)
@@ -66,6 +67,12 @@ void PathCompleterTest::noMatchReturnsInput()
     PathCompleter c;
     const QString none = tmp.path() + QStringLiteral("/zzz");
     QCOMPARE(c.completeLocal(none), none);
+}
+
+void PathCompleterTest::bareTildeExpandsToHome()
+{
+    PathCompleter c;
+    QCOMPARE(c.completeLocal(QStringLiteral("~")), QDir::homePath() + QStringLiteral("/"));
 }
 
 QTEST_MAIN(PathCompleterTest)
