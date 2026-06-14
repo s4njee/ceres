@@ -92,6 +92,20 @@ ApplicationWindow {
         }
     }
 
+    Connections {
+        target: controller
+        function onJobLoaded(name, source, destination, archive, compress, deleteExtras, checksum) {
+            nameField.text = name.length > 0 ? name : "Untitled sync"
+            fromField.text = source
+            toField.text = destination
+            root.archiveOn = archive
+            root.compressOn = compress
+            root.deleteOn = deleteExtras
+            root.checksumOn = checksum
+            controller.changes.clear()
+        }
+    }
+
     ColumnLayout {
         anchors.fill: parent
         spacing: 0
@@ -146,29 +160,68 @@ ApplicationWindow {
                 ColumnLayout {
                     anchors.fill: parent
                     anchors.margins: 10
-                    spacing: 4
+                    spacing: 6
 
                     Text { text: "JOBS"; color: theme.textTertiary; font.pixelSize: 11; font.letterSpacing: 1 }
-                    Rectangle {
+
+                    ListView {
+                        id: jobsList
                         Layout.fillWidth: true
-                        implicitHeight: 34
-                        radius: theme.radius
-                        color: theme.bgTertiary
-                        border.width: 1
-                        border.color: theme.borderStrong
-                        RowLayout {
-                            anchors.fill: parent; anchors.leftMargin: 8; anchors.rightMargin: 8; spacing: 8
-                            Rectangle { width: 7; height: 7; radius: 4; color: controller.running ? theme.warning : theme.ok }
-                            Text { text: "Current sync"; color: theme.textPrimary; font.pixelSize: 12; Layout.fillWidth: true; elide: Text.ElideRight }
+                        Layout.fillHeight: true
+                        clip: true
+                        spacing: 2
+                        model: controller.jobs
+                        ScrollBar.vertical: ScrollBar {}
+
+                        Text {
+                            anchors.centerIn: parent
+                            visible: controller.jobs.count === 0
+                            text: "No saved jobs yet"
+                            color: theme.textTertiary
+                            font.pixelSize: 12
+                        }
+
+                        delegate: Rectangle {
+                            width: ListView.view.width
+                            height: 42
+                            radius: theme.radius
+                            color: (id === controller.currentId) ? theme.bgTertiary : "transparent"
+                            border.width: (id === controller.currentId) ? 1 : 0
+                            border.color: theme.borderStrong
+
+                            MouseArea {
+                                anchors.fill: parent
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: controller.loadJob(id)
+                            }
+                            RowLayout {
+                                anchors.fill: parent
+                                anchors.leftMargin: 8
+                                anchors.rightMargin: 4
+                                spacing: 8
+                                Rectangle { width: 7; height: 7; radius: 4; color: theme.ok; Layout.alignment: Qt.AlignVCenter }
+                                ColumnLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 0
+                                    Text { text: name; color: theme.textPrimary; font.pixelSize: 12; elide: Text.ElideRight; Layout.fillWidth: true }
+                                    Text { text: summary; color: theme.textTertiary; font.family: theme.mono; font.pixelSize: 10; elide: Text.ElideMiddle; Layout.fillWidth: true }
+                                }
+                                Item {
+                                    implicitWidth: 20
+                                    implicitHeight: 20
+                                    Layout.alignment: Qt.AlignVCenter
+                                    Text { anchors.centerIn: parent; text: "×"; color: theme.textTertiary; font.pixelSize: 15 }
+                                    MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: controller.deleteJob(id) }
+                                }
+                            }
                         }
                     }
 
-                    Text { text: "ON YOUR NETWORK"; color: theme.textTertiary; font.pixelSize: 11; font.letterSpacing: 1; Layout.topMargin: 14 }
+                    FlatButton { Layout.fillWidth: true; label: "+  New sync"; onClicked: controller.newJob() }
+
+                    Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: theme.border; Layout.topMargin: 4 }
+                    Text { text: "ON YOUR NETWORK"; color: theme.textTertiary; font.pixelSize: 11; font.letterSpacing: 1 }
                     Text { text: "Discovery — coming soon"; color: theme.textTertiary; font.pixelSize: 12 }
-
-                    Item { Layout.fillHeight: true }
-
-                    FlatButton { Layout.fillWidth: true; label: "+  New sync"; active: false }
                     Text {
                         text: controller.rsyncSummary
                         color: controller.usingOpenRsync ? theme.warning : theme.textTertiary
@@ -188,7 +241,33 @@ ApplicationWindow {
                 Layout.margins: 16
                 spacing: 12
 
-                Text { text: "Untitled sync"; color: theme.textPrimary; font.pixelSize: 16 }
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 8
+                    TextField {
+                        id: nameField
+                        Layout.fillWidth: true
+                        text: "Untitled sync"
+                        placeholderText: qsTr("Job name")
+                        color: theme.textPrimary
+                        placeholderTextColor: theme.textTertiary
+                        font.pixelSize: 16
+                        background: Rectangle {
+                            color: "transparent"
+                            Rectangle {
+                                anchors.bottom: parent.bottom
+                                width: parent.width
+                                height: 1
+                                color: nameField.activeFocus ? theme.accent : theme.border
+                            }
+                        }
+                    }
+                    FlatButton {
+                        label: "Save job"
+                        onClicked: controller.saveJob(nameField.text, fromField.text, toField.text,
+                                                      root.archiveOn, root.compressOn, root.deleteOn, root.checksumOn)
+                    }
+                }
 
                 GridLayout {
                     columns: 2

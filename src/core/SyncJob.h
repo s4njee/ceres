@@ -7,6 +7,9 @@
 // needs; SSH targets, daemon auth, ordered filter *rules*, and scheduling
 // metadata get layered on in later milestones (see the plan).
 struct SyncJob {
+    QString id;    // stable profile id (empty = unsaved / ad-hoc)
+    QString name;  // display name in the jobs sidebar
+
     QString source;
     QString destination;
 

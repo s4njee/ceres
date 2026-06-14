@@ -7,6 +7,7 @@
 
 #include "app/JobController.h"
 #include "models/ChangeListModel.h"
+#include "models/JobListModel.h"
 
 int main(int argc, char *argv[])
 {
@@ -21,6 +22,9 @@ int main(int argc, char *argv[])
     qmlRegisterUncreatableType<ChangeListModel>(
         "CeresUi", 1, 0, "ChangeListModel",
         QStringLiteral("ChangeListModel is provided by the controller"));
+    qmlRegisterUncreatableType<JobListModel>(
+        "CeresUi", 1, 0, "JobListModel",
+        QStringLiteral("JobListModel is provided by the controller"));
 
     JobController controller;
 

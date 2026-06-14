@@ -4,6 +4,7 @@
 #include <QHostAddress>
 #include <QHostInfo>
 #include <QNetworkInterface>
+#include <QUuid>
 
 #include "core/SyncJob.h"
 #include "engine/RsyncProcessEngine.h"
@@ -46,6 +47,8 @@ JobController::JobController(QObject *parent)
 {
     m_hostName = QHostInfo::localHostName();
     m_hostAddress = detectPrimaryAddress();
+
+    m_jobs.setJobs(m_store.loadAll());
 
     m_engine = new RsyncProcessEngine(m_caps, this);
 
@@ -149,6 +152,55 @@ void JobController::startJob(const QString &source, const QString &destination, 
 void JobController::cancel()
 {
     m_engine->cancel();
+}
+
+void JobController::newJob()
+{
+    m_currentId.clear();
+    emit currentChanged();
+    emit jobLoaded(QString(), QString(), QString(), /*archive=*/true, false, false, false);
+}
+
+void JobController::loadJob(const QString &id)
+{
+    const SyncJob j = m_jobs.jobById(id);
+    if (j.id.isEmpty())
+        return;
+    m_currentId = j.id;
+    emit currentChanged();
+    emit jobLoaded(j.name, j.source, j.destination, j.archive, j.compress, j.deleteExtraneous,
+                   j.checksum);
+}
+
+void JobController::saveJob(const QString &name, const QString &source, const QString &destination,
+                            bool archive, bool compress, bool deleteExtras, bool checksum)
+{
+    SyncJob job;
+    job.id = m_currentId.isEmpty() ? QUuid::createUuid().toString(QUuid::WithoutBraces) : m_currentId;
+    job.name = name.trimmed().isEmpty() ? QStringLiteral("Untitled sync") : name.trimmed();
+    job.source = source.trimmed();
+    job.destination = destination.trimmed();
+    job.archive = archive;
+    job.compress = compress;
+    job.deleteExtraneous = deleteExtras;
+    job.checksum = checksum;
+
+    if (!m_store.save(job)) {
+        setStatus(QStringLiteral("Could not save job"));
+        return;
+    }
+    m_jobs.upsert(job);
+    m_currentId = job.id;
+    emit currentChanged();
+    setStatus(QStringLiteral("Saved '%1'").arg(job.name));
+}
+
+void JobController::deleteJob(const QString &id)
+{
+    m_store.remove(id);
+    m_jobs.removeById(id);
+    if (m_currentId == id)
+        newJob();
 }
 
 void JobController::setRunning(bool running)

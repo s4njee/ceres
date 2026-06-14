@@ -3,8 +3,10 @@
 #include <QObject>
 #include <QString>
 
+#include "core/ProfileStore.h"
 #include "engine/BinaryLocator.h"
 #include "models/ChangeListModel.h"
+#include "models/JobListModel.h"
 
 class RsyncProcessEngine;
 
@@ -21,10 +23,14 @@ class JobController : public QObject {
     Q_PROPERTY(QString status READ status NOTIFY statusChanged)
     Q_PROPERTY(QString hostName READ hostName CONSTANT)
     Q_PROPERTY(QString hostAddress READ hostAddress CONSTANT)
+    Q_PROPERTY(JobListModel *jobs READ jobs CONSTANT)
+    Q_PROPERTY(QString currentId READ currentId NOTIFY currentChanged)
 public:
     explicit JobController(QObject *parent = nullptr);
 
     ChangeListModel *changes() { return &m_changes; }
+    JobListModel *jobs() { return &m_jobs; }
+    QString currentId() const { return m_currentId; }
     bool running() const { return m_running; }
     bool usingOpenRsync() const { return m_caps.isOpenRsync; }
     QString rsyncSummary() const;
@@ -42,11 +48,22 @@ public:
                          bool archive, bool compress, bool deleteExtras, bool checksum);
     Q_INVOKABLE void cancel();
 
+    // Profile management (sidebar jobs).
+    Q_INVOKABLE void newJob();              // reset the editor to a blank, unsaved job
+    Q_INVOKABLE void loadJob(const QString &id);
+    Q_INVOKABLE void saveJob(const QString &name, const QString &source, const QString &destination,
+                             bool archive, bool compress, bool deleteExtras, bool checksum);
+    Q_INVOKABLE void deleteJob(const QString &id);
+
 signals:
     void runningChanged();
     void logChanged();
     void progressChanged();
     void statusChanged();
+    void currentChanged();
+    // Pushes a job's fields into the editor (new job -> all blank, archive on).
+    void jobLoaded(const QString &name, const QString &source, const QString &destination,
+                   bool archive, bool compress, bool deleteExtras, bool checksum);
 
 private:
     void startJob(const QString &source, const QString &destination, bool archive,
@@ -58,6 +75,9 @@ private:
     RsyncCapabilities m_caps;
     RsyncProcessEngine *m_engine = nullptr;
     ChangeListModel m_changes;
+    ProfileStore m_store;
+    JobListModel m_jobs;
+    QString m_currentId;
 
     QString m_log;
     QString m_status;
