@@ -8,8 +8,10 @@
 #include "engine/BinaryLocator.h"
 #include "models/ChangeListModel.h"
 #include "models/JobListModel.h"
+#include "models/PeerModel.h"
 
 class RsyncProcessEngine;
+class DiscoveryService;
 
 // The single object QML talks to. Owns the engine + change model, exposes a
 // dry-run preview, and surfaces progress / log / status as bindable properties.
@@ -26,12 +28,17 @@ class JobController : public QObject {
     Q_PROPERTY(QString hostAddress READ hostAddress CONSTANT)
     Q_PROPERTY(JobListModel *jobs READ jobs CONSTANT)
     Q_PROPERTY(QString currentId READ currentId NOTIFY currentChanged)
+    Q_PROPERTY(PeerModel *peers READ peers CONSTANT)
+    Q_PROPERTY(bool discoverable READ discoverable WRITE setDiscoverable NOTIFY discoverableChanged)
 public:
     explicit JobController(QObject *parent = nullptr);
 
     ChangeListModel *changes() { return &m_changes; }
     JobListModel *jobs() { return &m_jobs; }
     QString currentId() const { return m_currentId; }
+    PeerModel *peers() { return &m_peers; }
+    bool discoverable() const { return m_discoverable; }
+    void setDiscoverable(bool on);
     bool running() const { return m_running; }
     bool usingOpenRsync() const { return m_caps.isOpenRsync; }
     QString rsyncSummary() const;
@@ -53,12 +60,16 @@ public:
     Q_INVOKABLE void saveJob(const QVariantMap &job);
     Q_INVOKABLE void deleteJob(const QString &id);
 
+    // Discovery.
+    Q_INVOKABLE void addPeerByHost(const QString &host);
+
 signals:
     void runningChanged();
     void logChanged();
     void progressChanged();
     void statusChanged();
     void currentChanged();
+    void discoverableChanged();
     // Pushes a job's fields into the editor (new job -> all blank, archive on).
     void jobLoaded(const QVariantMap &job);
 
@@ -76,6 +87,9 @@ private:
     ProfileStore m_store;
     JobListModel m_jobs;
     QString m_currentId;
+    PeerModel m_peers;
+    DiscoveryService *m_discovery = nullptr;
+    bool m_discoverable = true;
 
     QString m_log;
     QString m_status;

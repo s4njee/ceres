@@ -16,6 +16,7 @@ qt_standard_project_setup(REQUIRES 6.5)
 # ---------------------------------------------------------------------------
 add_library(ceres_core STATIC
     src/core/SyncJob.h
+    src/core/Peer.h
     src/core/ProfileStore.h          src/core/ProfileStore.cpp
     src/engine/RsyncEvents.h
     src/engine/SyncEngine.h
@@ -23,8 +24,11 @@ add_library(ceres_core STATIC
     src/engine/ArgvBuilder.h         src/engine/ArgvBuilder.cpp
     src/engine/BinaryLocator.h       src/engine/BinaryLocator.cpp
     src/engine/RsyncProcessEngine.h  src/engine/RsyncProcessEngine.cpp
+    src/net/Beacon.h                 src/net/Beacon.cpp
+    src/net/DiscoveryService.h       src/net/DiscoveryService.cpp
     src/models/ChangeListModel.h     src/models/ChangeListModel.cpp
     src/models/JobListModel.h        src/models/JobListModel.cpp
+    src/models/PeerModel.h           src/models/PeerModel.cpp
     src/app/JobController.h          src/app/JobController.cpp
 )
 target_include_directories(ceres_core PUBLIC src)

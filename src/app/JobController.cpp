@@ -4,10 +4,13 @@
 #include <QHostAddress>
 #include <QHostInfo>
 #include <QNetworkInterface>
+#include <QSysInfo>
 #include <QUuid>
 
+#include "core/Peer.h"
 #include "core/SyncJob.h"
 #include "engine/RsyncProcessEngine.h"
+#include "net/DiscoveryService.h"
 
 namespace {
 // Best-effort primary LAN IPv4: prefer a physical interface (en0) over virtual
@@ -40,6 +43,42 @@ QString detectPrimaryAddress()
     }
     return fallback;
 }
+
+// All non-loopback IPv4 addresses, physical interfaces first, virtual/overlay
+// (utun/awdl/Tailscale) after — so the beacon advertises every reachable route.
+QStringList gatherAddresses()
+{
+    QStringList physical;
+    QStringList virtualish;
+    const auto ifaces = QNetworkInterface::allInterfaces();
+    for (const QNetworkInterface &iface : ifaces) {
+        const auto f = iface.flags();
+        if (!f.testFlag(QNetworkInterface::IsUp) || !f.testFlag(QNetworkInterface::IsRunning)
+            || f.testFlag(QNetworkInterface::IsLoopBack))
+            continue;
+        const QString name = iface.name();
+        const bool v = name.startsWith(QLatin1String("utun")) || name.startsWith(QLatin1String("awdl"))
+            || name.startsWith(QLatin1String("llw")) || name.startsWith(QLatin1String("bridge"));
+        for (const QNetworkAddressEntry &entry : iface.addressEntries()) {
+            const QHostAddress ip = entry.ip();
+            if (ip.protocol() != QAbstractSocket::IPv4Protocol || ip.isLoopback())
+                continue;
+            (v ? virtualish : physical) << ip.toString();
+        }
+    }
+    return physical + virtualish;
+}
+
+QString osName()
+{
+#if defined(Q_OS_MACOS)
+    return QStringLiteral("macOS");
+#elif defined(Q_OS_WIN)
+    return QStringLiteral("Windows");
+#else
+    return QStringLiteral("Linux");
+#endif
+}
 } // namespace
 
 JobController::JobController(QObject *parent)
@@ -49,6 +88,20 @@ JobController::JobController(QObject *parent)
     m_hostAddress = detectPrimaryAddress();
 
     m_jobs.setJobs(m_store.loadAll());
+
+    Peer self;
+    self.id = qEnvironmentVariable("CERES_NODE_ID");  // override lets two dev instances coexist
+    if (self.id.isEmpty())
+        self.id = QString::fromLatin1(QSysInfo::machineUniqueId());
+    if (self.id.isEmpty())
+        self.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    self.name = m_hostName;
+    self.addresses = gatherAddresses();
+    self.os = osName();
+    self.version = QStringLiteral("0.1");
+    self.accepts = {QStringLiteral("ssh")};
+    m_discovery = new DiscoveryService(&m_peers, self, this);
+    m_discovery->start();
 
     m_engine = new RsyncProcessEngine(m_caps, this);
 
@@ -240,6 +293,22 @@ void JobController::deleteJob(const QString &id)
     m_jobs.removeById(id);
     if (m_currentId == id)
         newJob();
+}
+
+void JobController::setDiscoverable(bool on)
+{
+    if (m_discoverable == on)
+        return;
+    m_discoverable = on;
+    if (m_discovery)
+        m_discovery->setAdvertising(on);
+    emit discoverableChanged();
+}
+
+void JobController::addPeerByHost(const QString &host)
+{
+    if (m_discovery)
+        m_discovery->addManualPeer(host);
 }
 
 void JobController::setRunning(bool running)

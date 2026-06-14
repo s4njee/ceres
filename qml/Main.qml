@@ -262,8 +262,91 @@ ApplicationWindow {
                     FlatButton { Layout.fillWidth: true; label: "+  New sync"; onClicked: controller.newJob() }
 
                     Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: theme.border; Layout.topMargin: 4 }
-                    Text { text: "ON YOUR NETWORK"; color: theme.textTertiary; font.pixelSize: 11; font.letterSpacing: 1 }
-                    Text { text: "Discovery — coming soon"; color: theme.textTertiary; font.pixelSize: 12 }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Text { text: "ON YOUR NETWORK"; color: theme.textTertiary; font.pixelSize: 11; font.letterSpacing: 1; Layout.fillWidth: true }
+                        Text { text: controller.discoverable ? "visible" : "hidden"; color: theme.textTertiary; font.pixelSize: 10 }
+                        Rectangle {
+                            width: 30; height: 16; radius: 8
+                            color: controller.discoverable ? theme.accent : theme.bgTertiary
+                            border.width: controller.discoverable ? 0 : 1
+                            border.color: theme.border
+                            Rectangle {
+                                width: 12; height: 12; radius: 6
+                                anchors.verticalCenter: parent.verticalCenter
+                                x: controller.discoverable ? parent.width - 14 : 2
+                                color: controller.discoverable ? "#160a06" : theme.textTertiary
+                                Behavior on x { NumberAnimation { duration: 120 } }
+                            }
+                            MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: controller.discoverable = !controller.discoverable }
+                        }
+                    }
+
+                    ListView {
+                        id: peersList
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: Math.min(contentHeight, 150)
+                        clip: true
+                        spacing: 2
+                        model: controller.peers
+                        ScrollBar.vertical: ScrollBar {}
+
+                        Text {
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            y: 6
+                            visible: controller.peers.count === 0
+                            text: "No machines found"
+                            color: theme.textTertiary
+                            font.pixelSize: 12
+                        }
+
+                        delegate: Rectangle {
+                            width: ListView.view.width
+                            height: 40
+                            radius: theme.radius
+                            color: "transparent"
+                            MouseArea {
+                                anchors.fill: parent
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: {
+                                    toField.text = daemon ? ("rsync://" + address + "/") : (address + ":")
+                                    toField.forceActiveFocus()
+                                }
+                            }
+                            RowLayout {
+                                anchors.fill: parent
+                                anchors.leftMargin: 6
+                                anchors.rightMargin: 6
+                                spacing: 8
+                                Rectangle { width: 7; height: 7; radius: 4; color: theme.ok; Layout.alignment: Qt.AlignVCenter }
+                                ColumnLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 0
+                                    Text { text: name; color: theme.textPrimary; font.pixelSize: 12; elide: Text.ElideRight; Layout.fillWidth: true }
+                                    Text { text: address + " · " + os; color: theme.textTertiary; font.family: theme.mono; font.pixelSize: 10; elide: Text.ElideMiddle; Layout.fillWidth: true }
+                                }
+                                Text { text: accepts; color: theme.textTertiary; font.pixelSize: 10 }
+                            }
+                        }
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 6
+                        Field {
+                            id: hostAddField
+                            Layout.fillWidth: true
+                            font.pixelSize: 12
+                            placeholderText: qsTr("add by host / IP")
+                            onAccepted: { controller.addPeerByHost(text); text = "" }
+                        }
+                        FlatButton {
+                            label: "Add"
+                            active: hostAddField.text.length > 0
+                            onClicked: { controller.addPeerByHost(hostAddField.text); hostAddField.text = "" }
+                        }
+                    }
                     Text {
                         text: controller.rsyncSummary
                         color: controller.usingOpenRsync ? theme.warning : theme.textTertiary
