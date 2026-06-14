@@ -576,83 +576,117 @@ ApplicationWindow {
                     }
                 }
 
-                Rectangle {
+                // Drag the handle to resize the preview vs. the log.
+                SplitView {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
-                    radius: theme.radius
-                    color: "transparent"
-                    border.width: 1
-                    border.color: theme.border
-                    ListView {
-                        id: list
-                        anchors.fill: parent
-                        anchors.margins: 4
-                        clip: true
-                        model: controller.changes
-                        ScrollBar.vertical: ScrollBar {}
-                        delegate: Item {
-                            width: ListView.view.width
-                            height: 24
-                            RowLayout {
-                                anchors.fill: parent
-                                anchors.leftMargin: 8
-                                anchors.rightMargin: 8
-                                spacing: 10
-                                Text {
-                                    text: code
-                                    color: isDelete ? theme.danger : (isNew ? theme.ok : theme.info)
-                                    font.family: theme.mono
-                                    font.pixelSize: 12
-                                    Layout.preferredWidth: 96
+                    orientation: Qt.Vertical
+
+                    handle: Rectangle {
+                        implicitHeight: 9
+                        color: "transparent"
+                        Rectangle {
+                            anchors.centerIn: parent
+                            width: 40
+                            height: 3
+                            radius: 1.5
+                            color: SplitHandle.pressed ? theme.accent
+                                                       : (SplitHandle.hovered ? theme.textTertiary : theme.border)
+                        }
+                    }
+
+                    // Preview (change list)
+                    Rectangle {
+                        SplitView.fillHeight: true
+                        SplitView.minimumHeight: 80
+                        radius: theme.radius
+                        color: "transparent"
+                        border.width: 1
+                        border.color: theme.border
+                        ListView {
+                            id: list
+                            anchors.fill: parent
+                            anchors.margins: 4
+                            clip: true
+                            model: controller.changes
+                            ScrollBar.vertical: ScrollBar {}
+                            delegate: Item {
+                                width: ListView.view.width
+                                height: 24
+                                RowLayout {
+                                    anchors.fill: parent
+                                    anchors.leftMargin: 8
+                                    anchors.rightMargin: 8
+                                    spacing: 10
+                                    Text {
+                                        text: code
+                                        color: isDelete ? theme.danger : (isNew ? theme.ok : theme.info)
+                                        font.family: theme.mono
+                                        font.pixelSize: 12
+                                        Layout.preferredWidth: 96
+                                    }
+                                    Text {
+                                        text: path
+                                        color: theme.textPrimary
+                                        font.family: theme.mono
+                                        font.pixelSize: 12
+                                        elide: Text.ElideMiddle
+                                        Layout.fillWidth: true
+                                    }
                                 }
-                                Text {
-                                    text: path
-                                    color: theme.textPrimary
+                            }
+                        }
+                    }
+
+                    // Log
+                    Rectangle {
+                        SplitView.minimumHeight: 56
+                        SplitView.preferredHeight: 180
+                        radius: theme.radius
+                        color: "transparent"
+                        border.width: 1
+                        border.color: theme.border
+                        ColumnLayout {
+                            anchors.fill: parent
+                            anchors.margins: 4
+                            spacing: 2
+                            Text { text: "LOG"; color: theme.textTertiary; font.pixelSize: 10; font.letterSpacing: 1; Layout.leftMargin: 4 }
+                            ScrollView {
+                                Layout.fillWidth: true
+                                Layout.fillHeight: true
+                                clip: true
+                                TextArea {
+                                    readOnly: true
+                                    text: controller.log
+                                    color: theme.textTertiary
                                     font.family: theme.mono
-                                    font.pixelSize: 12
-                                    elide: Text.ElideMiddle
-                                    Layout.fillWidth: true
+                                    font.pixelSize: 11
+                                    wrapMode: TextEdit.NoWrap
+                                    background: Rectangle { color: "transparent" }
                                 }
                             }
                         }
                     }
                 }
 
+                // Progress / status footer
                 Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: theme.border }
-                ColumnLayout {
+                RowLayout {
                     Layout.fillWidth: true
-                    spacing: 6
-                    RowLayout {
+                    spacing: 10
+                    Rectangle {
                         Layout.fillWidth: true
-                        spacing: 10
+                        implicitHeight: 5
+                        radius: 3
+                        color: theme.bgTertiary
                         Rectangle {
-                            Layout.fillWidth: true
-                            implicitHeight: 5
+                            height: parent.height
                             radius: 3
-                            color: theme.bgTertiary
-                            Rectangle {
-                                height: parent.height
-                                radius: 3
-                                width: parent.width * Math.max(0, Math.min(100, controller.percent)) / 100
-                                color: theme.accent
-                            }
-                        }
-                        Text { text: controller.status; color: theme.textSecondary; font.pixelSize: 12 }
-                    }
-                    ScrollView {
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: 88
-                        clip: true
-                        TextArea {
-                            readOnly: true
-                            text: controller.log
-                            color: theme.textTertiary
-                            font.family: theme.mono
-                            font.pixelSize: 11
-                            wrapMode: TextEdit.NoWrap
-                            background: Rectangle { color: "transparent" }
+                            width: parent.width * Math.max(0, Math.min(100, controller.percent)) / 100
+                            color: theme.accent
                         }
                     }
+                    Text { text: controller.status; color: theme.textSecondary; font.pixelSize: 12 }
                 }
             }
         }
