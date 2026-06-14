@@ -16,6 +16,32 @@ ApplicationWindow {
     property bool checksumOn: false
     property bool confirmOpen: false
 
+    function looksDaemon(p) { return p.indexOf("rsync://") === 0 || p.indexOf("::") >= 0 }
+    function looksRemote(p) {
+        if (!p) return false
+        if (p.indexOf("rsync://") === 0) return true
+        var s = p.indexOf("/"); var c = p.indexOf(":")
+        return c >= 0 && (s < 0 || c < s)
+    }
+    function looksSsh(p) { return looksRemote(p) && !looksDaemon(p) }
+    readonly property bool showSsh: looksSsh(fromField.text) || looksSsh(toField.text)
+    readonly property bool showDaemon: looksDaemon(fromField.text) || looksDaemon(toField.text)
+
+    function jobMap() {
+        return {
+            name: nameField.text,
+            source: fromField.text,
+            destination: toField.text,
+            archive: root.archiveOn,
+            compress: root.compressOn,
+            deleteExtras: root.deleteOn,
+            checksum: root.checksumOn,
+            sshKey: sshKeyField.text,
+            sshPort: parseInt(sshPortField.text) || 0,
+            daemonPassword: daemonPwField.text
+        }
+    }
+
     // High-contrast dark theme (Claude Code / Electron dev-tool aesthetic).
     // Black main surface, dark-grey sidebar. Tokens kept here for now; promote
     // to a QML singleton once components are extracted.
@@ -92,16 +118,32 @@ ApplicationWindow {
         }
     }
 
+    component Field: TextField {
+        color: theme.textPrimary
+        placeholderTextColor: theme.textTertiary
+        font.family: theme.mono
+        font.pixelSize: 13
+        background: Rectangle {
+            color: theme.bgTertiary
+            radius: theme.radius
+            border.width: 1
+            border.color: parent.activeFocus ? theme.accent : theme.border
+        }
+    }
+
     Connections {
         target: controller
-        function onJobLoaded(name, source, destination, archive, compress, deleteExtras, checksum) {
-            nameField.text = name.length > 0 ? name : "Untitled sync"
-            fromField.text = source
-            toField.text = destination
-            root.archiveOn = archive
-            root.compressOn = compress
-            root.deleteOn = deleteExtras
-            root.checksumOn = checksum
+        function onJobLoaded(job) {
+            nameField.text = job.name && job.name.length > 0 ? job.name : "Untitled sync"
+            fromField.text = job.source || ""
+            toField.text = job.destination || ""
+            root.archiveOn = job.archive
+            root.compressOn = job.compress
+            root.deleteOn = job.deleteExtras
+            root.checksumOn = job.checksum
+            sshKeyField.text = job.sshKey || ""
+            sshPortField.text = job.sshPort ? String(job.sshPort) : ""
+            daemonPwField.text = ""
             controller.changes.clear()
         }
     }
@@ -264,8 +306,7 @@ ApplicationWindow {
                     }
                     FlatButton {
                         label: "Save job"
-                        onClicked: controller.saveJob(nameField.text, fromField.text, toField.text,
-                                                      root.archiveOn, root.compressOn, root.deleteOn, root.checksumOn)
+                        onClicked: controller.saveJob(root.jobMap())
                     }
                 }
 
@@ -276,33 +317,17 @@ ApplicationWindow {
                     Layout.fillWidth: true
 
                     Text { text: "From"; color: theme.textSecondary; font.pixelSize: 12 }
-                    TextField {
+                    Field {
                         id: fromField
                         Layout.fillWidth: true
-                        placeholderText: qsTr("source path (trailing / copies contents)")
-                        color: theme.textPrimary
-                        placeholderTextColor: theme.textTertiary
-                        font.family: theme.mono
-                        font.pixelSize: 13
-                        background: Rectangle {
-                            color: theme.bgTertiary; radius: theme.radius
-                            border.width: 1; border.color: fromField.activeFocus ? theme.accent : theme.border
-                        }
+                        placeholderText: qsTr("local path, user@host:/path, or rsync://host/module")
                     }
 
                     Text { text: "To"; color: theme.textSecondary; font.pixelSize: 12 }
-                    TextField {
+                    Field {
                         id: toField
                         Layout.fillWidth: true
-                        placeholderText: qsTr("destination path")
-                        color: theme.textPrimary
-                        placeholderTextColor: theme.textTertiary
-                        font.family: theme.mono
-                        font.pixelSize: 13
-                        background: Rectangle {
-                            color: theme.bgTertiary; radius: theme.radius
-                            border.width: 1; border.color: toField.activeFocus ? theme.accent : theme.border
-                        }
+                        placeholderText: qsTr("local path, user@host:/path, or rsync://host/module")
                     }
                 }
 
@@ -315,6 +340,52 @@ ApplicationWindow {
                     Chip { label: "checksum"; active: root.checksumOn; onToggled: root.checksumOn = !root.checksumOn }
                 }
 
+                // Connection options — appear only when an endpoint is remote.
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 8
+                    visible: root.showSsh || root.showDaemon
+
+                    RowLayout {
+                        visible: root.showSsh
+                        Layout.fillWidth: true
+                        spacing: 8
+                        Text { text: "SSH key"; color: theme.textSecondary; font.pixelSize: 12 }
+                        Field {
+                            id: sshKeyField
+                            Layout.fillWidth: true
+                            placeholderText: qsTr("~/.ssh/id_ed25519 — optional, uses agent/default if blank")
+                        }
+                        Text { text: "Port"; color: theme.textSecondary; font.pixelSize: 12 }
+                        Field {
+                            id: sshPortField
+                            Layout.preferredWidth: 64
+                            placeholderText: "22"
+                            inputMethodHints: Qt.ImhDigitsOnly
+                        }
+                    }
+                    RowLayout {
+                        visible: root.showDaemon
+                        Layout.fillWidth: true
+                        spacing: 8
+                        Text { text: "Password"; color: theme.textSecondary; font.pixelSize: 12 }
+                        Field {
+                            id: daemonPwField
+                            Layout.fillWidth: true
+                            echoMode: TextInput.Password
+                            placeholderText: qsTr("rsync daemon password (kept this session, not saved)")
+                        }
+                    }
+                    Text {
+                        visible: root.showSsh
+                        Layout.fillWidth: true
+                        wrapMode: Text.WordWrap
+                        text: "Over SSH · agent keys honored · host trusted on first use, changed keys rejected"
+                        color: theme.textTertiary
+                        font.pixelSize: 10
+                    }
+                }
+
                 RowLayout {
                     Layout.fillWidth: true
                     spacing: 8
@@ -322,8 +393,7 @@ ApplicationWindow {
                     FlatButton {
                         label: "Preview"
                         active: parent.canStart
-                        onClicked: controller.preview(fromField.text, toField.text,
-                                                      root.archiveOn, root.compressOn, root.deleteOn, root.checksumOn)
+                        onClicked: controller.preview(root.jobMap())
                     }
                     FlatButton {
                         label: controller.running ? "Running…" : "Run sync"
@@ -333,8 +403,7 @@ ApplicationWindow {
                             if (root.deleteOn)
                                 root.confirmOpen = true
                             else
-                                controller.run(fromField.text, toField.text,
-                                               root.archiveOn, root.compressOn, root.deleteOn, root.checksumOn)
+                                controller.run(root.jobMap())
                         }
                     }
                     Item { Layout.fillWidth: true }
@@ -492,8 +561,7 @@ ApplicationWindow {
                         danger: true
                         onClicked: {
                             root.confirmOpen = false
-                            controller.run(fromField.text, toField.text,
-                                           root.archiveOn, root.compressOn, root.deleteOn, root.checksumOn)
+                            controller.run(root.jobMap())
                         }
                     }
                 }

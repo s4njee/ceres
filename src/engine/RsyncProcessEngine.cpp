@@ -72,7 +72,11 @@ void RsyncProcessEngine::start(const SyncJob &job, bool dryRun)
 
     m_process->setProgram(m_caps.path);
     m_process->setArguments(ArgvBuilder::build(job, m_caps, dryRun));
-    m_process->setProcessEnvironment(QProcessEnvironment::systemEnvironment());  // carries SSH_AUTH_SOCK
+
+    QProcessEnvironment env = QProcessEnvironment::systemEnvironment();  // carries SSH_AUTH_SOCK
+    if (!job.daemonPassword.isEmpty())
+        env.insert(QStringLiteral("RSYNC_PASSWORD"), job.daemonPassword);  // rsync:// daemon auth
+    m_process->setProcessEnvironment(env);
 
     emit started();
     m_process->start();

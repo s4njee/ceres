@@ -32,6 +32,10 @@ private slots:
     void excludesPreserveOrder();
     void deleteAndDryRun();
     void sourceAndDestComeLast();
+    void localTargetHasNoSsh();
+    void sshTargetGetsSafeOptions();
+    void sshKeyAndPort();
+    void daemonTargetHasNoSsh();
 };
 
 void ArgvBuilderTest::modernRsyncGetsFullFlagSet()
@@ -110,6 +114,57 @@ void ArgvBuilderTest::sourceAndDestComeLast()
 
     QCOMPARE(args.at(args.size() - 2), QStringLiteral("a/"));
     QCOMPARE(args.last(), QStringLiteral("b/"));
+}
+
+void ArgvBuilderTest::localTargetHasNoSsh()
+{
+    SyncJob job;
+    job.source = QStringLiteral("/tmp/a/");
+    job.destination = QStringLiteral("/tmp/b/");
+    QVERIFY(!ArgvBuilder::usesSsh(job));
+    QVERIFY(!ArgvBuilder::build(job, modern(), false).contains(QStringLiteral("-e")));
+}
+
+void ArgvBuilderTest::sshTargetGetsSafeOptions()
+{
+    SyncJob job;
+    job.source = QStringLiteral("/tmp/a/");
+    job.destination = QStringLiteral("user@host:/backup/");
+    QVERIFY(ArgvBuilder::usesSsh(job));
+
+    const QStringList args = ArgvBuilder::build(job, modern(), false);
+    const int ei = args.indexOf(QStringLiteral("-e"));
+    QVERIFY(ei >= 0);
+    const QString ssh = args.at(ei + 1);
+    QVERIFY(ssh.startsWith(QStringLiteral("ssh ")));
+    QVERIFY(ssh.contains(QStringLiteral("BatchMode=yes")));
+    QVERIFY(ssh.contains(QStringLiteral("StrictHostKeyChecking=accept-new")));
+    QVERIFY(ssh.contains(QStringLiteral("ConnectTimeout=10")));
+    // Never weaken host-key checking.
+    QVERIFY(!ssh.contains(QStringLiteral("StrictHostKeyChecking=no")));
+}
+
+void ArgvBuilderTest::sshKeyAndPort()
+{
+    SyncJob job;
+    job.source = QStringLiteral("server:/data/");
+    job.destination = QStringLiteral("/tmp/b/");
+    job.sshKeyPath = QStringLiteral("/home/me/.ssh/id_ed25519");
+    job.sshPort = 2222;
+
+    const QStringList args = ArgvBuilder::build(job, modern(), false);
+    const QString ssh = args.at(args.indexOf(QStringLiteral("-e")) + 1);
+    QVERIFY(ssh.contains(QStringLiteral("-i /home/me/.ssh/id_ed25519")));
+    QVERIFY(ssh.contains(QStringLiteral("-p 2222")));
+}
+
+void ArgvBuilderTest::daemonTargetHasNoSsh()
+{
+    SyncJob job;
+    job.source = QStringLiteral("/tmp/a/");
+    job.destination = QStringLiteral("rsync://host/module/");
+    QVERIFY(!ArgvBuilder::usesSsh(job));
+    QVERIFY(!ArgvBuilder::build(job, modern(), false).contains(QStringLiteral("-e")));
 }
 
 QTEST_MAIN(ArgvBuilderTest)

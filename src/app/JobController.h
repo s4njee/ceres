@@ -2,6 +2,7 @@
 
 #include <QObject>
 #include <QString>
+#include <QVariantMap>
 
 #include "core/ProfileStore.h"
 #include "engine/BinaryLocator.h"
@@ -40,19 +41,16 @@ public:
     QString hostName() const { return m_hostName; }
     QString hostAddress() const { return m_hostAddress; }
 
-    // Dry-run preview of source -> destination with the chosen flags.
-    Q_INVOKABLE void preview(const QString &source, const QString &destination,
-                             bool archive, bool compress, bool deleteExtras, bool checksum);
-    // Real (non-dry-run) sync. Callers gate destructive deletes in the UI first.
-    Q_INVOKABLE void run(const QString &source, const QString &destination,
-                         bool archive, bool compress, bool deleteExtras, bool checksum);
+    // The job map carries: name, source, destination, archive, compress,
+    // deleteExtras, checksum, sshKey, sshPort, daemonPassword.
+    Q_INVOKABLE void preview(const QVariantMap &job);  // dry-run
+    Q_INVOKABLE void run(const QVariantMap &job);      // real sync (UI gates deletes)
     Q_INVOKABLE void cancel();
 
     // Profile management (sidebar jobs).
-    Q_INVOKABLE void newJob();              // reset the editor to a blank, unsaved job
+    Q_INVOKABLE void newJob();  // reset the editor to a blank, unsaved job
     Q_INVOKABLE void loadJob(const QString &id);
-    Q_INVOKABLE void saveJob(const QString &name, const QString &source, const QString &destination,
-                             bool archive, bool compress, bool deleteExtras, bool checksum);
+    Q_INVOKABLE void saveJob(const QVariantMap &job);
     Q_INVOKABLE void deleteJob(const QString &id);
 
 signals:
@@ -62,12 +60,12 @@ signals:
     void statusChanged();
     void currentChanged();
     // Pushes a job's fields into the editor (new job -> all blank, archive on).
-    void jobLoaded(const QString &name, const QString &source, const QString &destination,
-                   bool archive, bool compress, bool deleteExtras, bool checksum);
+    void jobLoaded(const QVariantMap &job);
 
 private:
-    void startJob(const QString &source, const QString &destination, bool archive,
-                  bool compress, bool deleteExtras, bool checksum, bool dryRun);
+    void startJob(const SyncJob &job, bool dryRun);
+    SyncJob jobFromMap(const QVariantMap &map) const;
+    QVariantMap mapFromJob(const SyncJob &job) const;
     void setRunning(bool running);
     void setStatus(const QString &status);
     void appendLog(const QString &line);

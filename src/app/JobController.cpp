@@ -89,7 +89,31 @@ JobController::JobController(QObject *parent)
                 setStatus(QStringLiteral("Sync complete — %1 item(s)").arg(m_changes.rowCount()));
             }
         } else {
-            setStatus(QStringLiteral("rsync exited with code %1").arg(code));
+            switch (code) {
+            case 5:
+                setStatus(QStringLiteral("Authentication failed (rsync daemon)"));
+                break;
+            case 10:
+            case 11:
+            case 12:
+                setStatus(QStringLiteral("Connection/protocol error (code %1) — check the host, "
+                                         "SSH key, or that the host key is trusted").arg(code));
+                break;
+            case 23:
+            case 24:
+                setStatus(QStringLiteral("Finished with some files skipped (code %1)").arg(code));
+                break;
+            case 30:
+            case 35:
+                setStatus(QStringLiteral("Timed out (code %1)").arg(code));
+                break;
+            case 255:
+                setStatus(QStringLiteral("SSH connection failed (code 255) — check the host, port, "
+                                         "key, or that the host key is trusted"));
+                break;
+            default:
+                setStatus(QStringLiteral("rsync exited with code %1").arg(code));
+            }
         }
     });
 
@@ -110,24 +134,53 @@ QString JobController::rsyncSummary() const
     return s;
 }
 
-void JobController::preview(const QString &source, const QString &destination,
-                            bool archive, bool compress, bool deleteExtras, bool checksum)
+SyncJob JobController::jobFromMap(const QVariantMap &m) const
 {
-    startJob(source, destination, archive, compress, deleteExtras, checksum, /*dryRun=*/true);
+    SyncJob j;
+    j.name = m.value(QStringLiteral("name")).toString();
+    j.source = m.value(QStringLiteral("source")).toString().trimmed();
+    j.destination = m.value(QStringLiteral("destination")).toString().trimmed();
+    j.archive = m.value(QStringLiteral("archive"), true).toBool();
+    j.compress = m.value(QStringLiteral("compress"), false).toBool();
+    j.deleteExtraneous = m.value(QStringLiteral("deleteExtras"), false).toBool();
+    j.checksum = m.value(QStringLiteral("checksum"), false).toBool();
+    j.sshKeyPath = m.value(QStringLiteral("sshKey")).toString().trimmed();
+    j.sshPort = m.value(QStringLiteral("sshPort")).toInt();
+    j.daemonPassword = m.value(QStringLiteral("daemonPassword")).toString();
+    return j;
 }
 
-void JobController::run(const QString &source, const QString &destination,
-                        bool archive, bool compress, bool deleteExtras, bool checksum)
+QVariantMap JobController::mapFromJob(const SyncJob &j) const
 {
-    startJob(source, destination, archive, compress, deleteExtras, checksum, /*dryRun=*/false);
+    return {
+        {QStringLiteral("name"), j.name},
+        {QStringLiteral("source"), j.source},
+        {QStringLiteral("destination"), j.destination},
+        {QStringLiteral("archive"), j.archive},
+        {QStringLiteral("compress"), j.compress},
+        {QStringLiteral("deleteExtras"), j.deleteExtraneous},
+        {QStringLiteral("checksum"), j.checksum},
+        {QStringLiteral("sshKey"), j.sshKeyPath},
+        {QStringLiteral("sshPort"), j.sshPort},
+        // daemonPassword is session-only and never pushed back into the editor.
+    };
 }
 
-void JobController::startJob(const QString &source, const QString &destination, bool archive,
-                             bool compress, bool deleteExtras, bool checksum, bool dryRun)
+void JobController::preview(const QVariantMap &job)
+{
+    startJob(jobFromMap(job), /*dryRun=*/true);
+}
+
+void JobController::run(const QVariantMap &job)
+{
+    startJob(jobFromMap(job), /*dryRun=*/false);
+}
+
+void JobController::startJob(const SyncJob &job, bool dryRun)
 {
     if (m_running)
         return;
-    if (source.trimmed().isEmpty() || destination.trimmed().isEmpty()) {
+    if (job.source.isEmpty() || job.destination.isEmpty()) {
         setStatus(QStringLiteral("Set both a source and a destination"));
         return;
     }
@@ -137,15 +190,6 @@ void JobController::startJob(const QString &source, const QString &destination, 
     }
 
     m_activeDryRun = dryRun;
-
-    SyncJob job;
-    job.source = source.trimmed();
-    job.destination = destination.trimmed();
-    job.archive = archive;
-    job.compress = compress;
-    job.deleteExtraneous = deleteExtras;
-    job.checksum = checksum;
-
     m_engine->start(job, dryRun);
 }
 
@@ -158,7 +202,7 @@ void JobController::newJob()
 {
     m_currentId.clear();
     emit currentChanged();
-    emit jobLoaded(QString(), QString(), QString(), /*archive=*/true, false, false, false);
+    emit jobLoaded(mapFromJob(SyncJob{}));  // blank, archive on by default
 }
 
 void JobController::loadJob(const QString &id)
@@ -168,22 +212,17 @@ void JobController::loadJob(const QString &id)
         return;
     m_currentId = j.id;
     emit currentChanged();
-    emit jobLoaded(j.name, j.source, j.destination, j.archive, j.compress, j.deleteExtraneous,
-                   j.checksum);
+    emit jobLoaded(mapFromJob(j));
 }
 
-void JobController::saveJob(const QString &name, const QString &source, const QString &destination,
-                            bool archive, bool compress, bool deleteExtras, bool checksum)
+void JobController::saveJob(const QVariantMap &jobMap)
 {
-    SyncJob job;
+    SyncJob job = jobFromMap(jobMap);
     job.id = m_currentId.isEmpty() ? QUuid::createUuid().toString(QUuid::WithoutBraces) : m_currentId;
-    job.name = name.trimmed().isEmpty() ? QStringLiteral("Untitled sync") : name.trimmed();
-    job.source = source.trimmed();
-    job.destination = destination.trimmed();
-    job.archive = archive;
-    job.compress = compress;
-    job.deleteExtraneous = deleteExtras;
-    job.checksum = checksum;
+    if (job.name.trimmed().isEmpty())
+        job.name = QStringLiteral("Untitled sync");
+    else
+        job.name = job.name.trimmed();
 
     if (!m_store.save(job)) {
         setStatus(QStringLiteral("Could not save job"));

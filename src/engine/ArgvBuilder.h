@@ -12,4 +12,8 @@
 class ArgvBuilder {
 public:
     static QStringList build(const SyncJob &job, const RsyncCapabilities &caps, bool dryRun);
+
+    // True if either endpoint is a remote SSH spec (user@host:path / host:path),
+    // as opposed to local or an rsync:// daemon target.
+    static bool usesSsh(const SyncJob &job);
 };

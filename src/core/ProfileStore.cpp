@@ -39,6 +39,9 @@ QJsonObject ProfileStore::toJson(const SyncJob &job)
     o[QStringLiteral("checksum")] = job.checksum;
     o[QStringLiteral("excludes")] = QJsonArray::fromStringList(job.excludes);
     o[QStringLiteral("extraArgs")] = QJsonArray::fromStringList(job.extraArgs);
+    o[QStringLiteral("sshKeyPath")] = job.sshKeyPath;
+    o[QStringLiteral("sshPort")] = job.sshPort;
+    // daemonPassword is intentionally never persisted.
     return o;
 }
 
@@ -57,6 +60,8 @@ SyncJob ProfileStore::fromJson(const QJsonObject &o)
         j.excludes << v.toString();
     for (const QJsonValue &v : o.value(QStringLiteral("extraArgs")).toArray())
         j.extraArgs << v.toString();
+    j.sshKeyPath = o.value(QStringLiteral("sshKeyPath")).toString();
+    j.sshPort = o.value(QStringLiteral("sshPort")).toInt();
     return j;
 }
 

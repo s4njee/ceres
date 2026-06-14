@@ -22,4 +22,9 @@ struct SyncJob {
 
     QStringList excludes;           // order-significant -> --exclude=<pat>
     QStringList extraArgs;          // appended verbatim before SRC/DEST
+
+    // Remote transport. Only relevant when an endpoint is remote.
+    QString sshKeyPath;       // -e 'ssh -i <key>' (optional; agent/default key if empty)
+    int sshPort = 0;          // -e 'ssh -p <port>' (0 = default 22)
+    QString daemonPassword;   // transient: RSYNC_PASSWORD for rsync:// auth (never persisted)
 };
