@@ -5,6 +5,7 @@
 #include <QVariantMap>
 
 #include "core/ProfileStore.h"
+#include "core/SecretStore.h"
 #include "engine/BinaryLocator.h"
 #include "models/ChangeListModel.h"
 #include "models/JobListModel.h"
@@ -86,6 +87,7 @@ private:
     RsyncProcessEngine *m_engine = nullptr;
     ChangeListModel m_changes;
     ProfileStore m_store;
+    SecretStore m_secrets;
     JobListModel m_jobs;
     QString m_currentId;
     PeerModel m_peers;

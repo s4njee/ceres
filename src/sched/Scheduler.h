@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QString>
+#include <QStringList>
 
 #include "core/SyncJob.h"
 
@@ -14,6 +15,7 @@ public:
     bool apply(const SyncJob &job, const QString &runnerPath) const;
     bool remove(const QString &id) const;
     bool isRegistered(const QString &id) const;
+    QStringList installedJobIds() const;  // ids of all registered Ceres units (for pruning)
 
     static QString runnerPath();                  // ceres-runner next to the app
     static QString labelFor(const QString &id);   // com.ceres.job.<id>

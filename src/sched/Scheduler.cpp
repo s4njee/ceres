@@ -191,8 +191,12 @@ bool Scheduler::remove(const QString &id) const
 #if defined(Q_OS_MACOS)
     const QString label = labelFor(id);
     const QString domain = QStringLiteral("gui/%1").arg(getuid());
+    const QString plistPath = launchAgentsDir() + QStringLiteral("/") + label + QStringLiteral(".plist");
+    // Delete the plist BEFORE bootout: bootout may terminate the caller (the
+    // runner self-removing), so the file must already be gone to prevent reload.
+    QFile::remove(plistPath);
     QProcess::execute(QStringLiteral("launchctl"), {QStringLiteral("bootout"), domain + QStringLiteral("/") + label});
-    return QFile::remove(launchAgentsDir() + QStringLiteral("/") + label + QStringLiteral(".plist"));
+    return !QFile::exists(plistPath);  // success = the unit is gone (whoever removed it)
 #elif defined(Q_OS_LINUX)
     const QString unitDir = QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation)
         + QStringLiteral("/systemd/user");
@@ -208,6 +212,32 @@ bool Scheduler::remove(const QString &id) const
     Q_UNUSED(id);
     return false;
 #endif
+}
+
+QStringList Scheduler::installedJobIds() const
+{
+    QStringList ids;
+#if defined(Q_OS_MACOS)
+    const QString prefix = QStringLiteral("com.ceres.job.");
+    const auto files = QDir(launchAgentsDir())
+                           .entryList({prefix + QStringLiteral("*.plist")}, QDir::Files);
+    for (QString f : files) {
+        f.chop(6);  // ".plist"
+        if (f.startsWith(prefix))
+            ids << f.mid(prefix.size());
+    }
+#elif defined(Q_OS_LINUX)
+    const QString unitDir = QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation)
+        + QStringLiteral("/systemd/user");
+    const auto files = QDir(unitDir).entryList({QStringLiteral("ceres-*.timer")}, QDir::Files);
+    const QString prefix = QStringLiteral("ceres-");
+    for (QString f : files) {
+        f.chop(6);  // ".timer"
+        if (f.startsWith(prefix))
+            ids << f.mid(prefix.size());
+    }
+#endif
+    return ids;
 }
 
 bool Scheduler::isRegistered(const QString &id) const

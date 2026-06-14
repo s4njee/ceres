@@ -37,6 +37,7 @@ QJsonObject ProfileStore::toJson(const SyncJob &job)
     o[QStringLiteral("compress")] = job.compress;
     o[QStringLiteral("delete")] = job.deleteExtraneous;
     o[QStringLiteral("checksum")] = job.checksum;
+    o[QStringLiteral("maxDelete")] = job.maxDelete;
     o[QStringLiteral("excludes")] = QJsonArray::fromStringList(job.excludes);
     o[QStringLiteral("extraArgs")] = QJsonArray::fromStringList(job.extraArgs);
     o[QStringLiteral("sshKeyPath")] = job.sshKeyPath;
@@ -61,6 +62,7 @@ SyncJob ProfileStore::fromJson(const QJsonObject &o)
     j.compress = o.value(QStringLiteral("compress")).toBool(false);
     j.deleteExtraneous = o.value(QStringLiteral("delete")).toBool(false);
     j.checksum = o.value(QStringLiteral("checksum")).toBool(false);
+    j.maxDelete = o.value(QStringLiteral("maxDelete")).toInt(0);
     for (const QJsonValue &v : o.value(QStringLiteral("excludes")).toArray())
         j.excludes << v.toString();
     for (const QJsonValue &v : o.value(QStringLiteral("extraArgs")).toArray())
@@ -94,6 +96,20 @@ QList<SyncJob> ProfileStore::loadAll() const
             jobs << job;
     }
     return jobs;
+}
+
+QStringList ProfileStore::presentJobIds() const
+{
+    QStringList ids;
+    QDir dir(m_dir);
+    if (!dir.exists())
+        return ids;
+    for (QString f : dir.entryList({QStringLiteral("*.json")}, QDir::Files, QDir::Name)) {
+        f.chop(5);  // ".json"
+        if (!f.isEmpty())
+            ids << f;
+    }
+    return ids;
 }
 
 SyncJob ProfileStore::load(const QString &id) const

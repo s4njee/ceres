@@ -1,5 +1,6 @@
 #include <QtTest>
 
+#include <QFile>
 #include <QJsonObject>
 #include <QTemporaryDir>
 
@@ -12,6 +13,7 @@ private slots:
     void jsonRoundTrip();
     void saveLoadDelete();
     void scheduleRoundTrip();
+    void presentJobIdsSeesUnparseableFiles();
 };
 
 void ProfileStoreTest::jsonRoundTrip()
@@ -94,6 +96,33 @@ void ProfileStoreTest::scheduleRoundTrip()
 
     // Default (no schedule key) decodes as Manual.
     QCOMPARE(ProfileStore::fromJson(QJsonObject{}).schedule, ScheduleKind::Manual);
+}
+
+void ProfileStoreTest::presentJobIdsSeesUnparseableFiles()
+{
+    QTemporaryDir tmp;
+    QVERIFY(tmp.isValid());
+    const ProfileStore store(tmp.path());
+
+    SyncJob good;
+    good.id = QStringLiteral("good-1");
+    good.name = QStringLiteral("Good");
+    QVERIFY(store.save(good));
+
+    // A corrupt profile that loadAll() will skip, but whose file is on disk.
+    QFile bad(tmp.path() + QStringLiteral("/corrupt-2.json"));
+    QVERIFY(bad.open(QIODevice::WriteOnly));
+    bad.write("{ this is not valid json");
+    bad.close();
+
+    // loadAll drops the corrupt one...
+    QCOMPARE(store.loadAll().size(), 1);
+    // ...but presentJobIds reports BOTH, so the prune can't mistake a transiently
+    // unreadable profile for a deleted job.
+    const QStringList present = store.presentJobIds();
+    QCOMPARE(present.size(), 2);
+    QVERIFY(present.contains(QStringLiteral("good-1")));
+    QVERIFY(present.contains(QStringLiteral("corrupt-2")));
 }
 
 QTEST_MAIN(ProfileStoreTest)

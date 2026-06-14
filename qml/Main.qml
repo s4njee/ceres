@@ -39,6 +39,7 @@ ApplicationWindow {
             compress: root.compressOn,
             deleteExtras: root.deleteOn,
             checksum: root.checksumOn,
+            maxDelete: parseInt(maxDeleteField.text) || 0,
             sshKey: sshKeyField.text,
             sshPort: parseInt(sshPortField.text) || 0,
             daemonPassword: daemonPwField.text,
@@ -149,6 +150,7 @@ ApplicationWindow {
             root.compressOn = job.compress
             root.deleteOn = job.deleteExtras
             root.checksumOn = job.checksum
+            maxDeleteField.text = job.maxDelete ? String(job.maxDelete) : ""
             sshKeyField.text = job.sshKey || ""
             sshPortField.text = job.sshPort ? String(job.sshPort) : ""
             daemonPwField.text = ""
@@ -433,6 +435,15 @@ ApplicationWindow {
                     Chip { label: "compress"; active: root.compressOn; onToggled: root.compressOn = !root.compressOn }
                     Chip { label: "delete extras"; warn: true; active: root.deleteOn; onToggled: root.deleteOn = !root.deleteOn }
                     Chip { label: "checksum"; active: root.checksumOn; onToggled: root.checksumOn = !root.checksumOn }
+                }
+
+                RowLayout {
+                    visible: root.deleteOn
+                    Layout.fillWidth: true
+                    spacing: 8
+                    Text { text: "limit deletions to"; color: theme.textSecondary; font.pixelSize: 12 }
+                    Field { id: maxDeleteField; Layout.preferredWidth: 80; placeholderText: "0 = no limit"; inputMethodHints: Qt.ImhDigitsOnly }
+                    Text { text: "files — aborts if a sync would delete more"; color: theme.textTertiary; font.pixelSize: 11 }
                 }
 
                 // Connection options — appear only when an endpoint is remote.

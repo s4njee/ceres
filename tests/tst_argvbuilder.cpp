@@ -1,5 +1,7 @@
 #include <QtTest>
 
+#include <algorithm>
+
 #include "core/SyncJob.h"
 #include "engine/ArgvBuilder.h"
 #include "engine/BinaryLocator.h"
@@ -36,6 +38,7 @@ private slots:
     void sshTargetGetsSafeOptions();
     void sshKeyAndPort();
     void daemonTargetHasNoSsh();
+    void maxDeleteCap();
 };
 
 void ArgvBuilderTest::modernRsyncGetsFullFlagSet()
@@ -165,6 +168,29 @@ void ArgvBuilderTest::daemonTargetHasNoSsh()
     job.destination = QStringLiteral("rsync://host/module/");
     QVERIFY(!ArgvBuilder::usesSsh(job));
     QVERIFY(!ArgvBuilder::build(job, modern(), false).contains(QStringLiteral("-e")));
+}
+
+void ArgvBuilderTest::maxDeleteCap()
+{
+    SyncJob job;
+    job.source = QStringLiteral("a/");
+    job.destination = QStringLiteral("b/");
+    job.deleteExtraneous = true;
+    job.maxDelete = 50;
+    QVERIFY(ArgvBuilder::build(job, modern(), false).contains(QStringLiteral("--max-delete=50")));
+
+    // No cap when the value is 0.
+    job.maxDelete = 0;
+    const QStringList none = ArgvBuilder::build(job, modern(), false);
+    QVERIFY(std::none_of(none.cbegin(), none.cend(),
+                         [](const QString &a) { return a.startsWith(QStringLiteral("--max-delete")); }));
+
+    // No cap (or --delete) when deletion is off, even if maxDelete is set.
+    job.deleteExtraneous = false;
+    job.maxDelete = 50;
+    const QStringList off = ArgvBuilder::build(job, modern(), false);
+    QVERIFY(!off.contains(QStringLiteral("--delete")));
+    QVERIFY(!off.contains(QStringLiteral("--max-delete=50")));
 }
 
 QTEST_MAIN(ArgvBuilderTest)

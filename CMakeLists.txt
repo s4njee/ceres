@@ -18,6 +18,7 @@ add_library(ceres_core STATIC
     src/core/SyncJob.h
     src/core/Peer.h
     src/core/ProfileStore.h          src/core/ProfileStore.cpp
+    src/core/SecretStore.h           src/core/SecretStore.cpp
     src/engine/RsyncEvents.h
     src/engine/SyncEngine.h
     src/engine/OutputParser.h        src/engine/OutputParser.cpp

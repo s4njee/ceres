@@ -2,6 +2,7 @@
 
 #include <QList>
 #include <QString>
+#include <QStringList>
 
 #include "core/SyncJob.h"
 
@@ -18,6 +19,9 @@ public:
     QString directory() const { return m_dir; }
 
     QList<SyncJob> loadAll() const;
+    // Ids of every profile file on disk, regardless of whether it parses — so
+    // callers can tell "deleted" from "temporarily unreadable".
+    QStringList presentJobIds() const;
     SyncJob load(const QString &id) const;  // single job, empty id if missing
     bool save(const SyncJob &job) const;    // atomic write of <id>.json
     bool remove(const QString &id) const;

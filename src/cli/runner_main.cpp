@@ -2,9 +2,21 @@
 #include <QTextStream>
 
 #include "core/ProfileStore.h"
+#include "core/SecretStore.h"
 #include "core/SyncJob.h"
 #include "engine/BinaryLocator.h"
 #include "engine/RsyncProcessEngine.h"
+#include "sched/Scheduler.h"
+
+namespace {
+bool isDaemonTarget(const SyncJob &j)
+{
+    const auto daemon = [](const QString &p) {
+        return p.startsWith(QLatin1String("rsync://")) || p.contains(QLatin1String("::"));
+    };
+    return daemon(j.source) || daemon(j.destination);
+}
+}
 
 // Headless runner for a saved job — the entry point the OS scheduler invokes:
 //   ceres-runner --job <id>
@@ -32,7 +44,10 @@ int main(int argc, char *argv[])
     const ProfileStore store;
     const SyncJob job = store.load(jobId);
     if (job.id.isEmpty()) {
-        err << "ceres-runner: job not found: " << jobId << "\n";
+        // The job was deleted out from under a registered schedule — unregister
+        // ourselves so this orphaned unit stops firing.
+        err << "ceres-runner: job not found: " << jobId << " — removing its schedule\n";
+        Scheduler().remove(jobId);
         return 65;
     }
 
@@ -41,6 +56,10 @@ int main(int argc, char *argv[])
         err << "ceres-runner: no rsync binary found\n";
         return 69;
     }
+
+    SyncJob runJob = job;
+    if (isDaemonTarget(runJob))  // daemon password lives in the keychain, not the profile
+        runJob.daemonPassword = SecretStore().get(runJob.id);
 
     out << "ceres-runner: '" << job.name << "'  " << job.source << " -> " << job.destination << "\n";
     out.flush();
@@ -62,6 +81,6 @@ int main(int argc, char *argv[])
         QCoreApplication::exit(code);
     });
 
-    engine.start(job, /*dryRun=*/false);
+    engine.start(runJob, /*dryRun=*/false);
     return app.exec();
 }

@@ -32,8 +32,11 @@ QStringList ArgvBuilder::build(const SyncJob &job, const RsyncCapabilities &caps
         args << QStringLiteral("-z");
     if (job.checksum)
         args << QStringLiteral("-c");
-    if (job.deleteExtraneous)
+    if (job.deleteExtraneous) {
         args << QStringLiteral("--delete");
+        if (job.maxDelete > 0)  // abort instead of mass-deleting (e.g. an empty/unmounted source)
+            args << (QStringLiteral("--max-delete=") + QString::number(job.maxDelete));
+    }
 
     // Always-on machine-readable output that drives the UI.
     args << QStringLiteral("--itemize-changes") << QStringLiteral("--stats");

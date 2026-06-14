@@ -79,6 +79,14 @@ QString osName()
     return QStringLiteral("Linux");
 #endif
 }
+
+bool isDaemonTarget(const SyncJob &j)
+{
+    const auto daemon = [](const QString &p) {
+        return p.startsWith(QLatin1String("rsync://")) || p.contains(QLatin1String("::"));
+    };
+    return daemon(j.source) || daemon(j.destination);
+}
 } // namespace
 
 JobController::JobController(QObject *parent)
@@ -93,9 +101,26 @@ JobController::JobController(QObject *parent)
     // band). Re-applying an already-registered job would reload its launchd agent
     // and reset a StartInterval countdown on every launch; saveJob() already
     // re-applies when a schedule is edited.
+    QStringList loadedIds;
+    QStringList liveScheduled;
     for (const SyncJob &j : loaded) {
-        if (j.schedule != ScheduleKind::Manual && !m_scheduler.isRegistered(j.id))
-            m_scheduler.apply(j, Scheduler::runnerPath());
+        loadedIds << j.id;
+        if (j.schedule != ScheduleKind::Manual) {
+            liveScheduled << j.id;
+            if (!m_scheduler.isRegistered(j.id))
+                m_scheduler.apply(j, Scheduler::runnerPath());
+        }
+    }
+    // Prune an installed unit only when its job is genuinely gone (no profile file
+    // at all) or loaded as Manual. A profile that is present but failed to load
+    // (locked / corrupt this run) is left alone, so a transient read error can't
+    // silently destroy a live schedule.
+    const QStringList onDisk = m_store.presentJobIds();
+    for (const QString &id : m_scheduler.installedJobIds()) {
+        if (liveScheduled.contains(id))
+            continue;
+        if (loadedIds.contains(id) || !onDisk.contains(id))
+            m_scheduler.remove(id);
     }
 
     Peer self;
@@ -206,6 +231,7 @@ SyncJob JobController::jobFromMap(const QVariantMap &m) const
     j.compress = m.value(QStringLiteral("compress"), false).toBool();
     j.deleteExtraneous = m.value(QStringLiteral("deleteExtras"), false).toBool();
     j.checksum = m.value(QStringLiteral("checksum"), false).toBool();
+    j.maxDelete = m.value(QStringLiteral("maxDelete"), 0).toInt();
     j.sshKeyPath = m.value(QStringLiteral("sshKey")).toString().trimmed();
     j.sshPort = m.value(QStringLiteral("sshPort")).toInt();
     j.daemonPassword = m.value(QStringLiteral("daemonPassword")).toString();
@@ -227,6 +253,7 @@ QVariantMap JobController::mapFromJob(const SyncJob &j) const
         {QStringLiteral("compress"), j.compress},
         {QStringLiteral("deleteExtras"), j.deleteExtraneous},
         {QStringLiteral("checksum"), j.checksum},
+        {QStringLiteral("maxDelete"), j.maxDelete},
         {QStringLiteral("sshKey"), j.sshKeyPath},
         {QStringLiteral("sshPort"), j.sshPort},
         {QStringLiteral("schedule"), scheduleKindToString(j.schedule)},
@@ -262,7 +289,17 @@ void JobController::startJob(const SyncJob &job, bool dryRun)
     }
 
     m_activeDryRun = dryRun;
-    m_engine->start(job, dryRun);
+
+    SyncJob j = job;
+    // For a daemon target with no password typed this session, pull the stored one
+    // from the keychain — but only if the edited endpoint still matches the saved
+    // job, so we never send one server's password to a newly-typed host.
+    if (j.daemonPassword.isEmpty() && isDaemonTarget(j) && !m_currentId.isEmpty()) {
+        const SyncJob saved = m_jobs.jobById(m_currentId);
+        if (saved.source == j.source && saved.destination == j.destination)
+            j.daemonPassword = m_secrets.get(m_currentId);
+    }
+    m_engine->start(j, dryRun);
 }
 
 void JobController::cancel()
@@ -301,6 +338,10 @@ void JobController::saveJob(const QVariantMap &jobMap)
         return;
     }
     m_jobs.upsert(job);
+    if (!job.daemonPassword.isEmpty())
+        m_secrets.set(job.id, job.daemonPassword);  // keychain, never the profile JSON
+    else if (!isDaemonTarget(job))
+        m_secrets.remove(job.id);  // target no longer a daemon -> drop any stale secret
     m_currentId = job.id;
     emit currentChanged();
 
@@ -308,23 +349,19 @@ void JobController::saveJob(const QVariantMap &jobMap)
 
     if (job.schedule == ScheduleKind::Manual) {
         setStatus(QStringLiteral("Saved '%1'").arg(job.name));
+    } else if (isDaemonTarget(job) && m_secrets.get(job.id).isEmpty()) {
+        // A scheduled daemon sync with no stored password can't authenticate.
+        setStatus(QStringLiteral("Saved '%1' · scheduled — set a daemon password so "
+                                 "scheduled runs can authenticate").arg(job.name));
     } else {
-        // The daemon password is session-only (never persisted), so a scheduled
-        // rsync:// run can't authenticate — warn rather than silently mislead.
-        const auto isDaemon = [](const QString &p) {
-            return p.startsWith(QStringLiteral("rsync://")) || p.contains(QStringLiteral("::"));
-        };
-        if (isDaemon(job.source) || isDaemon(job.destination))
-            setStatus(QStringLiteral("Saved '%1' · scheduled — note: daemon password isn't saved, "
-                                     "scheduled runs need an SSH target").arg(job.name));
-        else
-            setStatus(QStringLiteral("Saved '%1' · scheduled").arg(job.name));
+        setStatus(QStringLiteral("Saved '%1' · scheduled").arg(job.name));
     }
 }
 
 void JobController::deleteJob(const QString &id)
 {
     m_scheduler.remove(id);  // drop any OS schedule first
+    m_secrets.remove(id);    // and its stored daemon password
     m_store.remove(id);
     m_jobs.removeById(id);
     if (m_currentId == id)

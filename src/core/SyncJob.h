@@ -39,6 +39,7 @@ struct SyncJob {
     bool compress = false;          // -z
     bool checksum = false;          // -c
     bool deleteExtraneous = false;  // --delete
+    int maxDelete = 0;              // --max-delete=N safety cap (0 = no limit)
 
     QStringList excludes;           // order-significant -> --exclude=<pat>
     QStringList extraArgs;          // appended verbatim before SRC/DEST
