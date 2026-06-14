@@ -6,6 +6,7 @@
 #include <QtQml>
 
 #include "app/JobController.h"
+#include "app/PathCompleter.h"
 #include "models/ChangeListModel.h"
 #include "models/JobListModel.h"
 #include "models/PeerModel.h"
@@ -31,9 +32,11 @@ int main(int argc, char *argv[])
         QStringLiteral("PeerModel is provided by the controller"));
 
     JobController controller;
+    PathCompleter completer;
 
     QQmlApplicationEngine engine;
     engine.rootContext()->setContextProperty(QStringLiteral("controller"), &controller);
+    engine.rootContext()->setContextProperty(QStringLiteral("completer"), &completer);
 
     QObject::connect(
         &engine, &QQmlApplicationEngine::objectCreationFailed, &app,

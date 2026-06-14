@@ -32,6 +32,7 @@ add_library(ceres_core STATIC
     src/models/JobListModel.h        src/models/JobListModel.cpp
     src/models/PeerModel.h           src/models/PeerModel.cpp
     src/app/JobController.h          src/app/JobController.cpp
+    src/app/PathCompleter.h          src/app/PathCompleter.cpp
 )
 target_include_directories(ceres_core PUBLIC src)
 target_link_libraries(ceres_core PUBLIC Qt6::Core Qt6::Network)

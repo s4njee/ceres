@@ -19,3 +19,7 @@ add_test(NAME Beacon COMMAND tst_beacon)
 qt_add_executable(tst_scheduler tst_scheduler.cpp)
 target_link_libraries(tst_scheduler PRIVATE ceres_core Qt6::Test)
 add_test(NAME Scheduler COMMAND tst_scheduler)
+
+qt_add_executable(tst_pathcompleter tst_pathcompleter.cpp)
+target_link_libraries(tst_pathcompleter PRIVATE ceres_core Qt6::Test)
+add_test(NAME PathCompleter COMMAND tst_pathcompleter)

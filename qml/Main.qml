@@ -27,6 +27,20 @@ ApplicationWindow {
         return c >= 0 && (s < 0 || c < s)
     }
     function looksSsh(p) { return looksRemote(p) && !looksDaemon(p) }
+
+    // Tab-complete a path field: local paths complete synchronously; remote
+    // (user@host:) targets complete over ssh and arrive via onRemoteCompleted.
+    function completePath(field) {
+        var t = field.text
+        if (t.length === 0 || looksDaemon(t)) return
+        if (looksSsh(t)) {
+            completer.completeRemote(t, sshKeyField.text, parseInt(sshPortField.text) || 0)
+        } else {
+            var c = completer.completeLocal(t)
+            if (c.length > 0 && c !== t) { field.text = c; field.cursorPosition = c.length }
+        }
+    }
+
     readonly property bool showSsh: looksSsh(fromField.text) || looksSsh(toField.text)
     readonly property bool showDaemon: looksDaemon(fromField.text) || looksDaemon(toField.text)
 
@@ -159,6 +173,15 @@ ApplicationWindow {
             timeField.text = pad(job.atHour) + ":" + pad(job.atMinute)
             root.weekday = job.weekday || 0
             controller.changes.clear()
+        }
+    }
+
+    Connections {
+        target: completer
+        function onRemoteCompleted(input, completion) {
+            if (completion.length === 0) return
+            if (fromField.text === input) { fromField.text = completion; fromField.cursorPosition = completion.length }
+            else if (toField.text === input) { toField.text = completion; toField.cursorPosition = completion.length }
         }
     }
 
@@ -421,6 +444,9 @@ ApplicationWindow {
                         id: fromField
                         Layout.fillWidth: true
                         placeholderText: qsTr("local path, user@host:/path, or rsync://host/module")
+                        Keys.onPressed: function(event) {
+                            if (event.key === Qt.Key_Tab) { root.completePath(fromField); event.accepted = true }
+                        }
                     }
 
                     Text { text: "To"; color: theme.textSecondary; font.pixelSize: 12 }
@@ -428,6 +454,9 @@ ApplicationWindow {
                         id: toField
                         Layout.fillWidth: true
                         placeholderText: qsTr("local path, user@host:/path, or rsync://host/module")
+                        Keys.onPressed: function(event) {
+                            if (event.key === Qt.Key_Tab) { root.completePath(toField); event.accepted = true }
+                        }
                     }
                 }
 
