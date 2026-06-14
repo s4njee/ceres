@@ -1,5 +1,7 @@
 #include <QtTest>
 
+#include <QDir>
+
 #include <algorithm>
 
 #include "core/SyncJob.h"
@@ -39,6 +41,7 @@ private slots:
     void sshKeyAndPort();
     void daemonTargetHasNoSsh();
     void maxDeleteCap();
+    void expandsLocalTilde();
 };
 
 void ArgvBuilderTest::modernRsyncGetsFullFlagSet()
@@ -191,6 +194,32 @@ void ArgvBuilderTest::maxDeleteCap()
     const QStringList off = ArgvBuilder::build(job, modern(), false);
     QVERIFY(!off.contains(QStringLiteral("--delete")));
     QVERIFY(!off.contains(QStringLiteral("--max-delete=50")));
+}
+
+void ArgvBuilderTest::expandsLocalTilde()
+{
+    const QString home = QDir::homePath();
+
+    // Leading ~/ on a local path is expanded.
+    SyncJob j;
+    j.source = QStringLiteral("~/src/");
+    j.destination = QStringLiteral("/tmp/d/");
+    const QStringList a = ArgvBuilder::build(j, modern(), false);
+    QCOMPARE(a.at(a.size() - 2), home + QStringLiteral("/src/"));
+    QCOMPARE(a.last(), QStringLiteral("/tmp/d/"));
+
+    // Bare ~ becomes the home dir.
+    SyncJob bare;
+    bare.source = QStringLiteral("~");
+    bare.destination = QStringLiteral("/tmp/d/");
+    const QStringList b = ArgvBuilder::build(bare, modern(), false);
+    QCOMPARE(b.at(b.size() - 2), home);
+
+    // A remote tilde is left for the remote shell.
+    SyncJob remote;
+    remote.source = QStringLiteral("/tmp/s/");
+    remote.destination = QStringLiteral("host:~/backup/");
+    QCOMPARE(ArgvBuilder::build(remote, modern(), false).last(), QStringLiteral("host:~/backup/"));
 }
 
 QTEST_MAIN(ArgvBuilderTest)

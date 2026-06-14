@@ -1,5 +1,7 @@
 #include "engine/ArgvBuilder.h"
 
+#include <QDir>
+
 namespace {
 // rsync:// or host::module — the daemon protocol, which does not use ssh.
 bool isDaemon(const QString &p)
@@ -14,6 +16,20 @@ bool isRemoteSsh(const QString &p)
     const int slash = p.indexOf(QLatin1Char('/'));
     const int colon = p.indexOf(QLatin1Char(':'));
     return colon >= 0 && (slash < 0 || colon < slash);
+}
+
+// Expand a leading ~ to the home dir for LOCAL paths only. We invoke rsync via
+// QProcess (no shell), so nothing expands ~ for us; remote (ssh/daemon) tildes
+// are left for the remote shell to expand.
+QString expandLocalTilde(const QString &p)
+{
+    if (isRemoteSsh(p) || isDaemon(p))
+        return p;
+    if (p == QLatin1String("~"))
+        return QDir::homePath();
+    if (p.startsWith(QLatin1String("~/")))
+        return QDir::homePath() + p.mid(1);
+    return p;
 }
 } // namespace
 
@@ -74,6 +90,6 @@ QStringList ArgvBuilder::build(const SyncJob &job, const RsyncCapabilities &caps
 
     args.append(job.extraArgs);
 
-    args << job.source << job.destination;
+    args << expandLocalTilde(job.source) << expandLocalTilde(job.destination);
     return args;
 }

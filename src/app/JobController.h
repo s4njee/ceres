@@ -2,6 +2,7 @@
 
 #include <QObject>
 #include <QString>
+#include <QTimer>
 #include <QVariantMap>
 
 #include "core/ProfileStore.h"
@@ -27,7 +28,7 @@ class JobController : public QObject {
     Q_PROPERTY(int percent READ percent NOTIFY progressChanged)
     Q_PROPERTY(QString status READ status NOTIFY statusChanged)
     Q_PROPERTY(QString hostName READ hostName CONSTANT)
-    Q_PROPERTY(QString hostAddress READ hostAddress CONSTANT)
+    Q_PROPERTY(QString hostAddress READ hostAddress NOTIFY hostAddressChanged)
     Q_PROPERTY(JobListModel *jobs READ jobs CONSTANT)
     Q_PROPERTY(QString currentId READ currentId NOTIFY currentChanged)
     Q_PROPERTY(PeerModel *peers READ peers CONSTANT)
@@ -72,6 +73,7 @@ signals:
     void statusChanged();
     void currentChanged();
     void discoverableChanged();
+    void hostAddressChanged();
     // Pushes a job's fields into the editor (new job -> all blank, archive on).
     void jobLoaded(const QVariantMap &job);
 
@@ -102,4 +104,5 @@ private:
     int m_percent = 0;
     bool m_running = false;
     bool m_activeDryRun = true;
+    QTimer m_addressTimer;  // re-checks the primary IP for network changes
 };

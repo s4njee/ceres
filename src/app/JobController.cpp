@@ -5,6 +5,7 @@
 #include <QHostInfo>
 #include <QNetworkInterface>
 #include <QSysInfo>
+#include <QUdpSocket>
 #include <QUuid>
 
 #include "core/Peer.h"
@@ -42,6 +43,22 @@ QString detectPrimaryAddress()
         }
     }
     return fallback;
+}
+
+// The address a peer on the network would actually reach us on: the default-route
+// egress IP. A UDP "connect" sends no packets — it just makes the OS pick the
+// source IP for the default route, which is more reliable than guessing by
+// interface name. Falls back to the interface scan when offline.
+QString primaryAddress()
+{
+    QUdpSocket sock;
+    sock.connectToHost(QHostAddress(QStringLiteral("198.51.100.1")), 9);  // TEST-NET-2, no traffic
+    const QHostAddress local = sock.localAddress();
+    sock.abort();
+    if (local.protocol() == QAbstractSocket::IPv4Protocol && !local.isNull() && !local.isLoopback()
+        && local.toString() != QLatin1String("0.0.0.0"))
+        return local.toString();
+    return detectPrimaryAddress();
 }
 
 // All non-loopback IPv4 addresses, physical interfaces first, virtual/overlay
@@ -93,7 +110,19 @@ JobController::JobController(QObject *parent)
     : QObject(parent), m_caps(BinaryLocator::locateRsync())
 {
     m_hostName = QHostInfo::localHostName();
-    m_hostAddress = detectPrimaryAddress();
+    m_hostAddress = primaryAddress();
+
+    // The primary IP can change (Wi-Fi switch, VPN up/down), so re-check it and
+    // update the corner pill live instead of freezing the launch-time value.
+    m_addressTimer.setInterval(10000);
+    connect(&m_addressTimer, &QTimer::timeout, this, [this] {
+        const QString addr = primaryAddress();
+        if (addr != m_hostAddress) {
+            m_hostAddress = addr;
+            emit hostAddressChanged();
+        }
+    });
+    m_addressTimer.start();
 
     const QList<SyncJob> loaded = m_store.loadAll();
     m_jobs.setJobs(loaded);
