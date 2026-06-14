@@ -3,9 +3,29 @@
 #include <QString>
 #include <QStringList>
 
-// A single sync job / profile. Milestone 1 carries only what local preview
-// needs; SSH targets, daemon auth, ordered filter *rules*, and scheduling
-// metadata get layered on in later milestones (see the plan).
+// How often a saved job runs automatically (registered with the OS scheduler).
+enum class ScheduleKind { Manual, Interval, Daily, Weekly };
+
+inline QString scheduleKindToString(ScheduleKind k)
+{
+    switch (k) {
+    case ScheduleKind::Interval: return QStringLiteral("interval");
+    case ScheduleKind::Daily:    return QStringLiteral("daily");
+    case ScheduleKind::Weekly:   return QStringLiteral("weekly");
+    case ScheduleKind::Manual:   break;
+    }
+    return QStringLiteral("manual");
+}
+
+inline ScheduleKind scheduleKindFromString(const QString &s)
+{
+    if (s == QLatin1String("interval")) return ScheduleKind::Interval;
+    if (s == QLatin1String("daily"))    return ScheduleKind::Daily;
+    if (s == QLatin1String("weekly"))   return ScheduleKind::Weekly;
+    return ScheduleKind::Manual;
+}
+
+// A single sync job / profile.
 struct SyncJob {
     QString id;    // stable profile id (empty = unsaved / ad-hoc)
     QString name;  // display name in the jobs sidebar
@@ -27,4 +47,11 @@ struct SyncJob {
     QString sshKeyPath;       // -e 'ssh -i <key>' (optional; agent/default key if empty)
     int sshPort = 0;          // -e 'ssh -p <port>' (0 = default 22)
     QString daemonPassword;   // transient: RSYNC_PASSWORD for rsync:// auth (never persisted)
+
+    // Scheduling (registered with the OS so it runs while the app is closed).
+    ScheduleKind schedule = ScheduleKind::Manual;
+    int intervalMinutes = 60;  // Interval
+    int atHour = 9;            // Daily/Weekly, 0-23
+    int atMinute = 0;          // Daily/Weekly, 0-59
+    int weekday = 0;           // Weekly, 0=Sun .. 6=Sat (launchd convention)
 };

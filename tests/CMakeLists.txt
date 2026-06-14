@@ -15,3 +15,7 @@ add_test(NAME ProfileStore COMMAND tst_profilestore)
 qt_add_executable(tst_beacon tst_beacon.cpp)
 target_link_libraries(tst_beacon PRIVATE ceres_core Qt6::Test)
 add_test(NAME Beacon COMMAND tst_beacon)
+
+qt_add_executable(tst_scheduler tst_scheduler.cpp)
+target_link_libraries(tst_scheduler PRIVATE ceres_core Qt6::Test)
+add_test(NAME Scheduler COMMAND tst_scheduler)

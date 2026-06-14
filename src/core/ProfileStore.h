@@ -18,7 +18,8 @@ public:
     QString directory() const { return m_dir; }
 
     QList<SyncJob> loadAll() const;
-    bool save(const SyncJob &job) const;   // atomic write of <id>.json
+    SyncJob load(const QString &id) const;  // single job, empty id if missing
+    bool save(const SyncJob &job) const;    // atomic write of <id>.json
     bool remove(const QString &id) const;
 
     static QJsonObject toJson(const SyncJob &job);

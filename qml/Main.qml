@@ -15,7 +15,10 @@ ApplicationWindow {
     property bool deleteOn: false
     property bool checksumOn: false
     property bool confirmOpen: false
+    property string scheduleKind: "manual"
+    property int weekday: 0
 
+    function pad(n) { return (n < 10 ? "0" : "") + n }
     function looksDaemon(p) { return p.indexOf("rsync://") === 0 || p.indexOf("::") >= 0 }
     function looksRemote(p) {
         if (!p) return false
@@ -38,7 +41,12 @@ ApplicationWindow {
             checksum: root.checksumOn,
             sshKey: sshKeyField.text,
             sshPort: parseInt(sshPortField.text) || 0,
-            daemonPassword: daemonPwField.text
+            daemonPassword: daemonPwField.text,
+            schedule: root.scheduleKind,
+            intervalMinutes: parseInt(intervalField.text) || 60,
+            atHour: parseInt(timeField.text.split(":")[0]) || 0,
+            atMinute: parseInt(timeField.text.split(":")[1]) || 0,
+            weekday: root.weekday
         }
     }
 
@@ -144,6 +152,10 @@ ApplicationWindow {
             sshKeyField.text = job.sshKey || ""
             sshPortField.text = job.sshPort ? String(job.sshPort) : ""
             daemonPwField.text = ""
+            root.scheduleKind = job.schedule || "manual"
+            intervalField.text = String(job.intervalMinutes || 60)
+            timeField.text = pad(job.atHour) + ":" + pad(job.atMinute)
+            root.weekday = job.weekday || 0
             controller.changes.clear()
         }
     }
@@ -466,6 +478,50 @@ ApplicationWindow {
                         text: "Over SSH · agent keys honored · host trusted on first use, changed keys rejected"
                         color: theme.textTertiary
                         font.pixelSize: 10
+                    }
+                }
+
+                // Schedule — registers an OS timer (launchd/systemd) unless Manual.
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 8
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 6
+                        Text { text: "SCHEDULE"; color: theme.textTertiary; font.pixelSize: 11; font.letterSpacing: 1; Layout.rightMargin: 4 }
+                        Chip { label: "manual"; active: root.scheduleKind === "manual"; onToggled: root.scheduleKind = "manual" }
+                        Chip { label: "interval"; active: root.scheduleKind === "interval"; onToggled: root.scheduleKind = "interval" }
+                        Chip { label: "daily"; active: root.scheduleKind === "daily"; onToggled: root.scheduleKind = "daily" }
+                        Chip { label: "weekly"; active: root.scheduleKind === "weekly"; onToggled: root.scheduleKind = "weekly" }
+                    }
+
+                    RowLayout {
+                        visible: root.scheduleKind === "interval"
+                        Layout.fillWidth: true
+                        spacing: 8
+                        Text { text: "every"; color: theme.textSecondary; font.pixelSize: 12 }
+                        Field { id: intervalField; Layout.preferredWidth: 70; text: "60"; inputMethodHints: Qt.ImhDigitsOnly }
+                        Text { text: "minutes"; color: theme.textSecondary; font.pixelSize: 12 }
+                    }
+
+                    RowLayout {
+                        visible: root.scheduleKind === "daily" || root.scheduleKind === "weekly"
+                        Layout.fillWidth: true
+                        spacing: 8
+                        Text { text: "at"; color: theme.textSecondary; font.pixelSize: 12 }
+                        Field { id: timeField; Layout.preferredWidth: 80; text: "09:00"; placeholderText: "HH:MM" }
+                    }
+
+                    RowLayout {
+                        visible: root.scheduleKind === "weekly"
+                        Layout.fillWidth: true
+                        spacing: 6
+                        Text { text: "on"; color: theme.textSecondary; font.pixelSize: 12 }
+                        Repeater {
+                            model: ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"]
+                            Chip { label: modelData; active: root.weekday === index; onToggled: root.weekday = index }
+                        }
                     }
                 }
 

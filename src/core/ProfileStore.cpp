@@ -41,6 +41,11 @@ QJsonObject ProfileStore::toJson(const SyncJob &job)
     o[QStringLiteral("extraArgs")] = QJsonArray::fromStringList(job.extraArgs);
     o[QStringLiteral("sshKeyPath")] = job.sshKeyPath;
     o[QStringLiteral("sshPort")] = job.sshPort;
+    o[QStringLiteral("schedule")] = scheduleKindToString(job.schedule);
+    o[QStringLiteral("intervalMinutes")] = job.intervalMinutes;
+    o[QStringLiteral("atHour")] = job.atHour;
+    o[QStringLiteral("atMinute")] = job.atMinute;
+    o[QStringLiteral("weekday")] = job.weekday;
     // daemonPassword is intentionally never persisted.
     return o;
 }
@@ -62,6 +67,11 @@ SyncJob ProfileStore::fromJson(const QJsonObject &o)
         j.extraArgs << v.toString();
     j.sshKeyPath = o.value(QStringLiteral("sshKeyPath")).toString();
     j.sshPort = o.value(QStringLiteral("sshPort")).toInt();
+    j.schedule = scheduleKindFromString(o.value(QStringLiteral("schedule")).toString());
+    j.intervalMinutes = o.value(QStringLiteral("intervalMinutes")).toInt(60);
+    j.atHour = o.value(QStringLiteral("atHour")).toInt(9);
+    j.atMinute = o.value(QStringLiteral("atMinute")).toInt(0);
+    j.weekday = o.value(QStringLiteral("weekday")).toInt(0);
     return j;
 }
 
@@ -84,6 +94,19 @@ QList<SyncJob> ProfileStore::loadAll() const
             jobs << job;
     }
     return jobs;
+}
+
+SyncJob ProfileStore::load(const QString &id) const
+{
+    if (id.isEmpty())
+        return {};
+    QFile file(m_dir + QStringLiteral("/") + id + QStringLiteral(".json"));
+    if (!file.open(QIODevice::ReadOnly))
+        return {};
+    const QJsonDocument doc = QJsonDocument::fromJson(file.readAll());
+    if (!doc.isObject())
+        return {};
+    return fromJson(doc.object());
 }
 
 bool ProfileStore::save(const SyncJob &job) const

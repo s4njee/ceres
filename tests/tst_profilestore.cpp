@@ -1,5 +1,6 @@
 #include <QtTest>
 
+#include <QJsonObject>
 #include <QTemporaryDir>
 
 #include "core/ProfileStore.h"
@@ -10,6 +11,7 @@ class ProfileStoreTest : public QObject {
 private slots:
     void jsonRoundTrip();
     void saveLoadDelete();
+    void scheduleRoundTrip();
 };
 
 void ProfileStoreTest::jsonRoundTrip()
@@ -70,6 +72,28 @@ void ProfileStoreTest::saveLoadDelete()
     all = store.loadAll();
     QCOMPARE(all.size(), 1);
     QCOMPARE(all.first().id, QStringLiteral("id-b"));
+}
+
+void ProfileStoreTest::scheduleRoundTrip()
+{
+    SyncJob j;
+    j.id = QStringLiteral("sched-1");
+    j.name = QStringLiteral("Nightly");
+    j.schedule = ScheduleKind::Weekly;
+    j.weekday = 3;
+    j.atHour = 14;
+    j.atMinute = 30;
+    j.intervalMinutes = 45;
+
+    const SyncJob r = ProfileStore::fromJson(ProfileStore::toJson(j));
+    QCOMPARE(r.schedule, ScheduleKind::Weekly);
+    QCOMPARE(r.weekday, 3);
+    QCOMPARE(r.atHour, 14);
+    QCOMPARE(r.atMinute, 30);
+    QCOMPARE(r.intervalMinutes, 45);
+
+    // Default (no schedule key) decodes as Manual.
+    QCOMPARE(ProfileStore::fromJson(QJsonObject{}).schedule, ScheduleKind::Manual);
 }
 
 QTEST_MAIN(ProfileStoreTest)

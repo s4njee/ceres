@@ -26,6 +26,7 @@ add_library(ceres_core STATIC
     src/engine/RsyncProcessEngine.h  src/engine/RsyncProcessEngine.cpp
     src/net/Beacon.h                 src/net/Beacon.cpp
     src/net/DiscoveryService.h       src/net/DiscoveryService.cpp
+    src/sched/Scheduler.h            src/sched/Scheduler.cpp
     src/models/ChangeListModel.h     src/models/ChangeListModel.cpp
     src/models/JobListModel.h        src/models/JobListModel.cpp
     src/models/PeerModel.h           src/models/PeerModel.cpp
@@ -49,6 +50,10 @@ target_link_libraries(ceres PRIVATE
     ceres_core
     Qt6::Gui Qt6::Qml Qt6::Quick Qt6::QuickControls2
 )
+
+# Headless runner invoked by the OS scheduler (and usable from a terminal).
+qt_add_executable(ceres-runner src/cli/runner_main.cpp)
+target_link_libraries(ceres-runner PRIVATE ceres_core Qt6::Core)
 
 # ---------------------------------------------------------------------------
 # Tests

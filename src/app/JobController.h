@@ -9,6 +9,7 @@
 #include "models/ChangeListModel.h"
 #include "models/JobListModel.h"
 #include "models/PeerModel.h"
+#include "sched/Scheduler.h"
 
 class RsyncProcessEngine;
 class DiscoveryService;
@@ -90,6 +91,7 @@ private:
     PeerModel m_peers;
     DiscoveryService *m_discovery = nullptr;
     bool m_discoverable = true;
+    Scheduler m_scheduler;
 
     QString m_log;
     QString m_status;

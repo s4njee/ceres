@@ -87,7 +87,16 @@ JobController::JobController(QObject *parent)
     m_hostName = QHostInfo::localHostName();
     m_hostAddress = detectPrimaryAddress();
 
-    m_jobs.setJobs(m_store.loadAll());
+    const QList<SyncJob> loaded = m_store.loadAll();
+    m_jobs.setJobs(loaded);
+    // Re-register only schedules whose OS unit went missing (e.g. deleted out of
+    // band). Re-applying an already-registered job would reload its launchd agent
+    // and reset a StartInterval countdown on every launch; saveJob() already
+    // re-applies when a schedule is edited.
+    for (const SyncJob &j : loaded) {
+        if (j.schedule != ScheduleKind::Manual && !m_scheduler.isRegistered(j.id))
+            m_scheduler.apply(j, Scheduler::runnerPath());
+    }
 
     Peer self;
     self.id = qEnvironmentVariable("CERES_NODE_ID");  // override lets two dev instances coexist
@@ -200,6 +209,11 @@ SyncJob JobController::jobFromMap(const QVariantMap &m) const
     j.sshKeyPath = m.value(QStringLiteral("sshKey")).toString().trimmed();
     j.sshPort = m.value(QStringLiteral("sshPort")).toInt();
     j.daemonPassword = m.value(QStringLiteral("daemonPassword")).toString();
+    j.schedule = scheduleKindFromString(m.value(QStringLiteral("schedule")).toString());
+    j.intervalMinutes = m.value(QStringLiteral("intervalMinutes"), 60).toInt();
+    j.atHour = m.value(QStringLiteral("atHour"), 9).toInt();
+    j.atMinute = m.value(QStringLiteral("atMinute"), 0).toInt();
+    j.weekday = m.value(QStringLiteral("weekday"), 0).toInt();
     return j;
 }
 
@@ -215,6 +229,11 @@ QVariantMap JobController::mapFromJob(const SyncJob &j) const
         {QStringLiteral("checksum"), j.checksum},
         {QStringLiteral("sshKey"), j.sshKeyPath},
         {QStringLiteral("sshPort"), j.sshPort},
+        {QStringLiteral("schedule"), scheduleKindToString(j.schedule)},
+        {QStringLiteral("intervalMinutes"), j.intervalMinutes},
+        {QStringLiteral("atHour"), j.atHour},
+        {QStringLiteral("atMinute"), j.atMinute},
+        {QStringLiteral("weekday"), j.weekday},
         // daemonPassword is session-only and never pushed back into the editor.
     };
 }
@@ -284,11 +303,28 @@ void JobController::saveJob(const QVariantMap &jobMap)
     m_jobs.upsert(job);
     m_currentId = job.id;
     emit currentChanged();
-    setStatus(QStringLiteral("Saved '%1'").arg(job.name));
+
+    m_scheduler.apply(job, Scheduler::runnerPath());  // registers or unregisters per schedule
+
+    if (job.schedule == ScheduleKind::Manual) {
+        setStatus(QStringLiteral("Saved '%1'").arg(job.name));
+    } else {
+        // The daemon password is session-only (never persisted), so a scheduled
+        // rsync:// run can't authenticate — warn rather than silently mislead.
+        const auto isDaemon = [](const QString &p) {
+            return p.startsWith(QStringLiteral("rsync://")) || p.contains(QStringLiteral("::"));
+        };
+        if (isDaemon(job.source) || isDaemon(job.destination))
+            setStatus(QStringLiteral("Saved '%1' · scheduled — note: daemon password isn't saved, "
+                                     "scheduled runs need an SSH target").arg(job.name));
+        else
+            setStatus(QStringLiteral("Saved '%1' · scheduled").arg(job.name));
+    }
 }
 
 void JobController::deleteJob(const QString &id)
 {
+    m_scheduler.remove(id);  // drop any OS schedule first
     m_store.remove(id);
     m_jobs.removeById(id);
     if (m_currentId == id)
