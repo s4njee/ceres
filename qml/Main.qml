@@ -277,11 +277,14 @@ ApplicationWindow {
 
                     Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: theme.border; Layout.topMargin: 4 }
 
+                    Text { text: "ON YOUR NETWORK"; color: theme.textTertiary; font.pixelSize: 11; font.letterSpacing: 1; Layout.fillWidth: true }
                     RowLayout {
                         Layout.fillWidth: true
-                        Text { text: "ON YOUR NETWORK"; color: theme.textTertiary; font.pixelSize: 11; font.letterSpacing: 1; Layout.fillWidth: true }
-                        Text { text: controller.discoverable ? "visible" : "hidden"; color: theme.textTertiary; font.pixelSize: 10 }
+                        spacing: 8
+                        Text { text: "Discoverable"; color: theme.textSecondary; font.pixelSize: 12; Layout.fillWidth: true }
+                        Text { text: controller.discoverable ? "visible" : "hidden"; color: theme.textTertiary; font.pixelSize: 10; Layout.alignment: Qt.AlignVCenter }
                         Rectangle {
+                            Layout.alignment: Qt.AlignVCenter
                             width: 30; height: 16; radius: 8
                             color: controller.discoverable ? theme.accent : theme.bgTertiary
                             border.width: controller.discoverable ? 0 : 1
