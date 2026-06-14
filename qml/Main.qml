@@ -14,6 +14,7 @@ ApplicationWindow {
     property bool compressOn: false
     property bool deleteOn: false
     property bool checksumOn: false
+    property bool confirmOpen: false
 
     // High-contrast dark theme (Claude Code / Electron dev-tool aesthetic).
     // Black main surface, dark-grey sidebar. Tokens kept here for now; promote
@@ -66,21 +67,22 @@ ApplicationWindow {
     component FlatButton: Rectangle {
         property string label
         property bool primary: false
+        property bool danger: false
         property bool active: true
         signal clicked()
         implicitHeight: 30
         implicitWidth: btnText.implicitWidth + 24
         radius: theme.radius
         opacity: active ? 1.0 : 0.45
-        color: primary ? theme.accent : "transparent"
-        border.width: primary ? 0 : 1
+        color: danger ? theme.danger : (primary ? theme.accent : "transparent")
+        border.width: (primary || danger) ? 0 : 1
         border.color: theme.borderStrong
         Text {
             id: btnText
             anchors.centerIn: parent
             text: label
             font.pixelSize: 12
-            color: primary ? "#1c100b" : theme.textPrimary
+            color: (primary || danger) ? "#160a06" : theme.textPrimary
         }
         MouseArea {
             anchors.fill: parent
@@ -189,7 +191,7 @@ ApplicationWindow {
                 Text { text: "Untitled sync"; color: theme.textPrimary; font.pixelSize: 16 }
 
                 GridLayout {
-                    columns: 3
+                    columns: 2
                     columnSpacing: 10
                     rowSpacing: 8
                     Layout.fillWidth: true
@@ -208,13 +210,6 @@ ApplicationWindow {
                             border.width: 1; border.color: fromField.activeFocus ? theme.accent : theme.border
                         }
                     }
-                    FlatButton {
-                        label: controller.running ? "Running…" : "Preview"
-                        primary: true
-                        active: !controller.running && fromField.text.length > 0 && toField.text.length > 0
-                        onClicked: controller.preview(fromField.text, toField.text,
-                                                      root.archiveOn, root.compressOn, root.deleteOn, root.checksumOn)
-                    }
 
                     Text { text: "To"; color: theme.textSecondary; font.pixelSize: 12 }
                     TextField {
@@ -230,7 +225,6 @@ ApplicationWindow {
                             border.width: 1; border.color: toField.activeFocus ? theme.accent : theme.border
                         }
                     }
-                    FlatButton { label: "Cancel"; active: controller.running; onClicked: controller.cancel() }
                 }
 
                 Flow {
@@ -245,8 +239,40 @@ ApplicationWindow {
                 RowLayout {
                     Layout.fillWidth: true
                     spacing: 8
+                    readonly property bool canStart: !controller.running && fromField.text.length > 0 && toField.text.length > 0
+                    FlatButton {
+                        label: "Preview"
+                        active: parent.canStart
+                        onClicked: controller.preview(fromField.text, toField.text,
+                                                      root.archiveOn, root.compressOn, root.deleteOn, root.checksumOn)
+                    }
+                    FlatButton {
+                        label: controller.running ? "Running…" : "Run sync"
+                        primary: true
+                        active: parent.canStart
+                        onClicked: {
+                            if (root.deleteOn)
+                                root.confirmOpen = true
+                            else
+                                controller.run(fromField.text, toField.text,
+                                               root.archiveOn, root.compressOn, root.deleteOn, root.checksumOn)
+                        }
+                    }
+                    Item { Layout.fillWidth: true }
+                    FlatButton { label: "Cancel"; active: controller.running; onClicked: controller.cancel() }
+                }
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 8
                     Text { text: "PREVIEW"; color: theme.textTertiary; font.pixelSize: 11; font.letterSpacing: 1 }
                     Text { text: controller.changes.count + " changes"; color: theme.textSecondary; font.pixelSize: 12 }
+                    Text {
+                        visible: controller.changes.deletions > 0
+                        text: "· " + controller.changes.deletions + " to delete"
+                        color: theme.danger
+                        font.pixelSize: 12
+                    }
                 }
 
                 Rectangle {
@@ -324,6 +350,71 @@ ApplicationWindow {
                             font.pixelSize: 11
                             wrapMode: TextEdit.NoWrap
                             background: Rectangle { color: "transparent" }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // ---------- delete confirmation gate ----------
+    Rectangle {
+        anchors.fill: parent
+        visible: root.confirmOpen
+        color: "#cc000000"
+        MouseArea { anchors.fill: parent }  // swallow clicks behind the modal
+
+        Rectangle {
+            anchors.centerIn: parent
+            width: 400
+            height: panelCol.implicitHeight + 36
+            radius: theme.radius
+            color: theme.bgSecondary
+            border.width: 1
+            border.color: theme.borderStrong
+
+            ColumnLayout {
+                id: panelCol
+                x: 18
+                y: 18
+                width: parent.width - 36
+                spacing: 12
+
+                RowLayout {
+                    spacing: 8
+                    Rectangle { width: 8; height: 8; radius: 4; color: theme.danger; Layout.alignment: Qt.AlignVCenter }
+                    Text { text: "Delete extras is on"; color: theme.textPrimary; font.pixelSize: 15 }
+                }
+                Text {
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    color: theme.textSecondary
+                    font.pixelSize: 12
+                    text: (controller.changes.deletions > 0
+                           ? controller.changes.deletions + " file(s) in the destination will be permanently deleted."
+                           : "Files in the destination that aren't in the source will be permanently deleted.")
+                          + " This cannot be undone — preview first to see exactly which."
+                }
+                Text {
+                    Layout.fillWidth: true
+                    color: theme.textTertiary
+                    font.family: theme.mono
+                    font.pixelSize: 11
+                    elide: Text.ElideMiddle
+                    text: fromField.text + "  →  " + toField.text
+                }
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 8
+                    Item { Layout.fillWidth: true }
+                    FlatButton { label: "Cancel"; onClicked: root.confirmOpen = false }
+                    FlatButton {
+                        label: "Sync and delete"
+                        danger: true
+                        onClicked: {
+                            root.confirmOpen = false
+                            controller.run(fromField.text, toField.text,
+                                           root.archiveOn, root.compressOn, root.deleteOn, root.checksumOn)
                         }
                     }
                 }

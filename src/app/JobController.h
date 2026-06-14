@@ -37,6 +37,9 @@ public:
     // Dry-run preview of source -> destination with the chosen flags.
     Q_INVOKABLE void preview(const QString &source, const QString &destination,
                              bool archive, bool compress, bool deleteExtras, bool checksum);
+    // Real (non-dry-run) sync. Callers gate destructive deletes in the UI first.
+    Q_INVOKABLE void run(const QString &source, const QString &destination,
+                         bool archive, bool compress, bool deleteExtras, bool checksum);
     Q_INVOKABLE void cancel();
 
 signals:
@@ -46,6 +49,8 @@ signals:
     void statusChanged();
 
 private:
+    void startJob(const QString &source, const QString &destination, bool archive,
+                  bool compress, bool deleteExtras, bool checksum, bool dryRun);
     void setRunning(bool running);
     void setStatus(const QString &status);
     void appendLog(const QString &line);
@@ -60,4 +65,5 @@ private:
     QString m_hostAddress;
     int m_percent = 0;
     bool m_running = false;
+    bool m_activeDryRun = true;
 };

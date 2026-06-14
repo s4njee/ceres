@@ -11,6 +11,7 @@
 class ChangeListModel : public QAbstractListModel {
     Q_OBJECT
     Q_PROPERTY(int count READ rowCount NOTIFY countChanged)
+    Q_PROPERTY(int deletions READ deletions NOTIFY countChanged)
 public:
     enum Roles {
         PathRole = Qt::UserRole + 1,
@@ -27,6 +28,8 @@ public:
     QVariant data(const QModelIndex &index, int role) const override;
     QHash<int, QByteArray> roleNames() const override;
 
+    int deletions() const { return m_deletions; }
+
 public slots:
     void append(const ChangeItem &item);
     void clear();
@@ -36,4 +39,5 @@ signals:
 
 private:
     QList<ChangeItem> m_items;
+    int m_deletions = 0;
 };

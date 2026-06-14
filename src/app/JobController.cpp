@@ -75,12 +75,19 @@ JobController::JobController(QObject *parent)
 
     connect(m_engine, &SyncEngine::finished, this, [this](int code, bool crashed) {
         setRunning(false);
-        if (crashed)
+        if (crashed) {
             setStatus(QStringLiteral("Cancelled / interrupted"));
-        else if (code == 0)
-            setStatus(QStringLiteral("Preview complete — %1 change(s)").arg(m_changes.rowCount()));
-        else
+        } else if (code == 0) {
+            if (m_activeDryRun) {
+                setStatus(QStringLiteral("Preview complete — %1 change(s)").arg(m_changes.rowCount()));
+            } else {
+                m_percent = 100;
+                emit progressChanged();
+                setStatus(QStringLiteral("Sync complete — %1 item(s)").arg(m_changes.rowCount()));
+            }
+        } else {
             setStatus(QStringLiteral("rsync exited with code %1").arg(code));
+        }
     });
 
     connect(m_engine, &SyncEngine::failedToStart, this, [this](const QString &reason) {
@@ -103,6 +110,18 @@ QString JobController::rsyncSummary() const
 void JobController::preview(const QString &source, const QString &destination,
                             bool archive, bool compress, bool deleteExtras, bool checksum)
 {
+    startJob(source, destination, archive, compress, deleteExtras, checksum, /*dryRun=*/true);
+}
+
+void JobController::run(const QString &source, const QString &destination,
+                        bool archive, bool compress, bool deleteExtras, bool checksum)
+{
+    startJob(source, destination, archive, compress, deleteExtras, checksum, /*dryRun=*/false);
+}
+
+void JobController::startJob(const QString &source, const QString &destination, bool archive,
+                             bool compress, bool deleteExtras, bool checksum, bool dryRun)
+{
     if (m_running)
         return;
     if (source.trimmed().isEmpty() || destination.trimmed().isEmpty()) {
@@ -114,6 +133,8 @@ void JobController::preview(const QString &source, const QString &destination,
         return;
     }
 
+    m_activeDryRun = dryRun;
+
     SyncJob job;
     job.source = source.trimmed();
     job.destination = destination.trimmed();
@@ -122,7 +143,7 @@ void JobController::preview(const QString &source, const QString &destination,
     job.deleteExtraneous = deleteExtras;
     job.checksum = checksum;
 
-    m_engine->start(job, /*dryRun=*/true);
+    m_engine->start(job, dryRun);
 }
 
 void JobController::cancel()

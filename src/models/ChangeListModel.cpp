@@ -49,6 +49,8 @@ void ChangeListModel::append(const ChangeItem &item)
     beginInsertRows(QModelIndex(), row, row);
     m_items.append(item);
     endInsertRows();
+    if (item.op == ChangeItem::Op::Deletion)
+        ++m_deletions;
     emit countChanged();
 }
 
@@ -58,6 +60,7 @@ void ChangeListModel::clear()
         return;
     beginResetModel();
     m_items.clear();
+    m_deletions = 0;
     endResetModel();
     emit countChanged();
 }
