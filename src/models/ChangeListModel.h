@@ -10,7 +10,7 @@
 // changing the role contract the QML delegate relies on.
 class ChangeListModel : public QAbstractListModel {
     Q_OBJECT
-    Q_PROPERTY(int count READ rowCount NOTIFY countChanged)
+    Q_PROPERTY(int count READ count NOTIFY countChanged)
     Q_PROPERTY(int deletions READ deletions NOTIFY countChanged)
 public:
     enum Roles {
@@ -28,6 +28,7 @@ public:
     QVariant data(const QModelIndex &index, int role) const override;
     QHash<int, QByteArray> roleNames() const override;
 
+    int count() const { return m_totalCount; }
     int deletions() const { return m_deletions; }
 
 public slots:
@@ -39,5 +40,7 @@ signals:
 
 private:
     QList<ChangeItem> m_items;
+    int m_totalCount = 0;
     int m_deletions = 0;
+    int m_maxItems = 20000;
 };

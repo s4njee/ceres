@@ -8,7 +8,7 @@ ApplicationWindow {
     height: 680
     visible: true
     title: qsTr("Ceres")
-    color: theme.bgPrimary
+    color: Theme.bgPrimary
 
     property bool archiveOn: true
     property bool compressOn: false
@@ -19,14 +19,14 @@ ApplicationWindow {
     property int weekday: 0
 
     function pad(n) { return (n < 10 ? "0" : "") + n }
-    function looksDaemon(p) { return p.indexOf("rsync://") === 0 || p.indexOf("::") >= 0 }
+    function endpointKind(p) { return controller.endpointKind(p || "") }
+    function looksDaemon(p) { return endpointKind(p) === "daemon" }
     function looksRemote(p) {
         if (!p) return false
-        if (p.indexOf("rsync://") === 0) return true
-        var s = p.indexOf("/"); var c = p.indexOf(":")
-        return c >= 0 && (s < 0 || c < s)
+        var kind = endpointKind(p)
+        return kind === "ssh" || kind === "daemon"
     }
-    function looksSsh(p) { return looksRemote(p) && !looksDaemon(p) }
+    function looksSsh(p) { return endpointKind(p) === "ssh" }
 
     // Tab-complete a path field: local paths complete synchronously; remote
     // (user@host:) targets complete over ssh and arrive via onRemoteCompleted.
@@ -62,95 +62,6 @@ ApplicationWindow {
             atHour: parseInt(timeField.text.split(":")[0]) || 0,
             atMinute: parseInt(timeField.text.split(":")[1]) || 0,
             weekday: root.weekday
-        }
-    }
-
-    // High-contrast dark theme (Claude Code / Electron dev-tool aesthetic).
-    // Black main surface, dark-grey sidebar. Tokens kept here for now; promote
-    // to a QML singleton once components are extracted.
-    QtObject {
-        id: theme
-        readonly property color bgPrimary: "#000000"
-        readonly property color bgSecondary: "#1a1a1a"
-        readonly property color bgTertiary: "#242424"
-        readonly property color textPrimary: "#ededed"
-        readonly property color textSecondary: "#9a9a9a"
-        readonly property color textTertiary: "#6a6a6a"
-        readonly property color border: "#2b2b2b"
-        readonly property color borderStrong: "#3a3a3a"
-        readonly property color accent: "#d97757"
-        readonly property color ok: "#3fb950"
-        readonly property color info: "#58a6ff"
-        readonly property color danger: "#f85149"
-        readonly property color warning: "#d29922"
-        readonly property int radius: 6
-        readonly property string mono: "Menlo"
-    }
-
-    component Chip: Rectangle {
-        property string label
-        property bool active: false
-        property bool warn: false
-        signal toggled()
-        implicitHeight: 26
-        implicitWidth: chipRow.implicitWidth + 18
-        radius: theme.radius
-        color: active ? theme.bgTertiary : "transparent"
-        border.width: 1
-        border.color: active ? theme.borderStrong : theme.border
-        Row {
-            id: chipRow
-            anchors.centerIn: parent
-            spacing: 5
-            Rectangle {
-                visible: warn
-                width: 6; height: 6; radius: 3
-                anchors.verticalCenter: parent.verticalCenter
-                color: theme.warning
-            }
-            Text { text: label; font.pixelSize: 12; color: active ? theme.textPrimary : theme.textSecondary }
-        }
-        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: parent.toggled() }
-    }
-
-    component FlatButton: Rectangle {
-        property string label
-        property bool primary: false
-        property bool danger: false
-        property bool active: true
-        signal clicked()
-        implicitHeight: 30
-        implicitWidth: btnText.implicitWidth + 24
-        radius: theme.radius
-        opacity: active ? 1.0 : 0.45
-        color: danger ? theme.danger : (primary ? theme.accent : "transparent")
-        border.width: (primary || danger) ? 0 : 1
-        border.color: theme.borderStrong
-        Text {
-            id: btnText
-            anchors.centerIn: parent
-            text: label
-            font.pixelSize: 12
-            color: (primary || danger) ? "#160a06" : theme.textPrimary
-        }
-        MouseArea {
-            anchors.fill: parent
-            enabled: parent.active
-            cursorShape: Qt.PointingHandCursor
-            onClicked: parent.clicked()
-        }
-    }
-
-    component Field: TextField {
-        color: theme.textPrimary
-        placeholderTextColor: theme.textTertiary
-        font.family: theme.mono
-        font.pixelSize: 13
-        background: Rectangle {
-            color: theme.bgTertiary
-            radius: theme.radius
-            border.width: 1
-            border.color: parent.activeFocus ? theme.accent : theme.border
         }
     }
 
@@ -193,37 +104,37 @@ ApplicationWindow {
         Rectangle {
             Layout.fillWidth: true
             implicitHeight: 40
-            color: theme.bgSecondary
+            color: Theme.bgSecondary
             RowLayout {
                 anchors.fill: parent
                 anchors.leftMargin: 14
                 anchors.rightMargin: 12
                 spacing: 8
-                Text { text: "ceres"; color: theme.textPrimary; font.family: theme.mono; font.pixelSize: 14; font.bold: true }
+                Text { text: "ceres"; color: Theme.textPrimary; font.family: Theme.mono; font.pixelSize: 14; font.bold: true }
                 Item { Layout.fillWidth: true }
                 Rectangle {
-                    radius: theme.radius
+                    radius: Theme.radius
                     color: "transparent"
                     border.width: 1
-                    border.color: theme.border
+                    border.color: Theme.border
                     implicitHeight: 24
                     implicitWidth: hostRow.implicitWidth + 18
                     RowLayout {
                         id: hostRow
                         anchors.centerIn: parent
                         spacing: 6
-                        Rectangle { width: 7; height: 7; radius: 4; color: theme.ok }
+                        Rectangle { width: 7; height: 7; radius: 4; color: Theme.ok }
                         Text {
                             text: controller.hostName + "  ·  " + controller.hostAddress
-                            color: theme.textSecondary
-                            font.family: theme.mono
+                            color: Theme.textSecondary
+                            font.family: Theme.mono
                             font.pixelSize: 12
                         }
                     }
                 }
             }
         }
-        Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: theme.border }
+        Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: Theme.border }
 
         // ---------- body ----------
         RowLayout {
@@ -235,13 +146,13 @@ ApplicationWindow {
             Rectangle {
                 Layout.preferredWidth: 210
                 Layout.fillHeight: true
-                color: theme.bgSecondary
+                color: Theme.bgSecondary
                 ColumnLayout {
                     anchors.fill: parent
                     anchors.margins: 10
                     spacing: 6
 
-                    Text { text: "JOBS"; color: theme.textTertiary; font.pixelSize: 11; font.letterSpacing: 1 }
+                    Text { text: "JOBS"; color: Theme.textTertiary; font.pixelSize: 11; font.letterSpacing: 1 }
 
                     ListView {
                         id: jobsList
@@ -256,17 +167,17 @@ ApplicationWindow {
                             anchors.centerIn: parent
                             visible: controller.jobs.count === 0
                             text: "No saved jobs yet"
-                            color: theme.textTertiary
+                            color: Theme.textTertiary
                             font.pixelSize: 12
                         }
 
                         delegate: Rectangle {
                             width: ListView.view.width
                             height: 42
-                            radius: theme.radius
-                            color: (id === controller.currentId) ? theme.bgTertiary : "transparent"
+                            radius: Theme.radius
+                            color: (id === controller.currentId) ? Theme.bgTertiary : "transparent"
                             border.width: (id === controller.currentId) ? 1 : 0
-                            border.color: theme.borderStrong
+                            border.color: Theme.borderStrong
 
                             MouseArea {
                                 anchors.fill: parent
@@ -278,18 +189,18 @@ ApplicationWindow {
                                 anchors.leftMargin: 8
                                 anchors.rightMargin: 4
                                 spacing: 8
-                                Rectangle { width: 7; height: 7; radius: 4; color: theme.ok; Layout.alignment: Qt.AlignVCenter }
+                                Rectangle { width: 7; height: 7; radius: 4; color: Theme.ok; Layout.alignment: Qt.AlignVCenter }
                                 ColumnLayout {
                                     Layout.fillWidth: true
                                     spacing: 0
-                                    Text { text: name; color: theme.textPrimary; font.pixelSize: 12; elide: Text.ElideRight; Layout.fillWidth: true }
-                                    Text { text: summary; color: theme.textTertiary; font.family: theme.mono; font.pixelSize: 10; elide: Text.ElideMiddle; Layout.fillWidth: true }
+                                    Text { text: name; color: Theme.textPrimary; font.pixelSize: 12; elide: Text.ElideRight; Layout.fillWidth: true }
+                                    Text { text: summary; color: Theme.textTertiary; font.family: Theme.mono; font.pixelSize: 10; elide: Text.ElideMiddle; Layout.fillWidth: true }
                                 }
                                 Item {
                                     implicitWidth: 20
                                     implicitHeight: 20
                                     Layout.alignment: Qt.AlignVCenter
-                                    Text { anchors.centerIn: parent; text: "×"; color: theme.textTertiary; font.pixelSize: 15 }
+                                    Text { anchors.centerIn: parent; text: "×"; color: Theme.textTertiary; font.pixelSize: 15 }
                                     MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: controller.deleteJob(id) }
                                 }
                             }
@@ -298,25 +209,25 @@ ApplicationWindow {
 
                     FlatButton { Layout.fillWidth: true; label: "+  New sync"; onClicked: controller.newJob() }
 
-                    Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: theme.border; Layout.topMargin: 4 }
+                    Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: Theme.border; Layout.topMargin: 4 }
 
-                    Text { text: "ON YOUR NETWORK"; color: theme.textTertiary; font.pixelSize: 11; font.letterSpacing: 1; Layout.fillWidth: true }
+                    Text { text: "ON YOUR NETWORK"; color: Theme.textTertiary; font.pixelSize: 11; font.letterSpacing: 1; Layout.fillWidth: true }
                     RowLayout {
                         Layout.fillWidth: true
                         spacing: 8
-                        Text { text: "Discoverable"; color: theme.textSecondary; font.pixelSize: 12; Layout.fillWidth: true }
-                        Text { text: controller.discoverable ? "visible" : "hidden"; color: theme.textTertiary; font.pixelSize: 10; Layout.alignment: Qt.AlignVCenter }
+                        Text { text: "Discoverable"; color: Theme.textSecondary; font.pixelSize: 12; Layout.fillWidth: true }
+                        Text { text: controller.discoverable ? "visible" : "hidden"; color: Theme.textTertiary; font.pixelSize: 10; Layout.alignment: Qt.AlignVCenter }
                         Rectangle {
                             Layout.alignment: Qt.AlignVCenter
                             width: 30; height: 16; radius: 8
-                            color: controller.discoverable ? theme.accent : theme.bgTertiary
+                            color: controller.discoverable ? Theme.accent : Theme.bgTertiary
                             border.width: controller.discoverable ? 0 : 1
-                            border.color: theme.border
+                            border.color: Theme.border
                             Rectangle {
                                 width: 12; height: 12; radius: 6
                                 anchors.verticalCenter: parent.verticalCenter
                                 x: controller.discoverable ? parent.width - 14 : 2
-                                color: controller.discoverable ? "#160a06" : theme.textTertiary
+                                color: controller.discoverable ? "#160a06" : Theme.textTertiary
                                 Behavior on x { NumberAnimation { duration: 120 } }
                             }
                             MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: controller.discoverable = !controller.discoverable }
@@ -337,14 +248,14 @@ ApplicationWindow {
                             y: 6
                             visible: controller.peers.count === 0
                             text: "No machines found"
-                            color: theme.textTertiary
+                            color: Theme.textTertiary
                             font.pixelSize: 12
                         }
 
                         delegate: Rectangle {
                             width: ListView.view.width
                             height: 40
-                            radius: theme.radius
+                            radius: Theme.radius
                             color: "transparent"
                             MouseArea {
                                 anchors.fill: parent
@@ -359,14 +270,14 @@ ApplicationWindow {
                                 anchors.leftMargin: 6
                                 anchors.rightMargin: 6
                                 spacing: 8
-                                Rectangle { width: 7; height: 7; radius: 4; color: theme.ok; Layout.alignment: Qt.AlignVCenter }
+                                Rectangle { width: 7; height: 7; radius: 4; color: Theme.ok; Layout.alignment: Qt.AlignVCenter }
                                 ColumnLayout {
                                     Layout.fillWidth: true
                                     spacing: 0
-                                    Text { text: name; color: theme.textPrimary; font.pixelSize: 12; elide: Text.ElideRight; Layout.fillWidth: true }
-                                    Text { text: address + " · " + os; color: theme.textTertiary; font.family: theme.mono; font.pixelSize: 10; elide: Text.ElideMiddle; Layout.fillWidth: true }
+                                    Text { text: name; color: Theme.textPrimary; font.pixelSize: 12; elide: Text.ElideRight; Layout.fillWidth: true }
+                                    Text { text: address + " · " + os; color: Theme.textTertiary; font.family: Theme.mono; font.pixelSize: 10; elide: Text.ElideMiddle; Layout.fillWidth: true }
                                 }
-                                Text { text: accepts; color: theme.textTertiary; font.pixelSize: 10 }
+                                Text { text: accepts; color: Theme.textTertiary; font.pixelSize: 10 }
                             }
                         }
                     }
@@ -389,7 +300,7 @@ ApplicationWindow {
                     }
                     Text {
                         text: controller.rsyncSummary
-                        color: controller.usingOpenRsync ? theme.warning : theme.textTertiary
+                        color: controller.usingOpenRsync ? Theme.warning : Theme.textTertiary
                         font.pixelSize: 10
                         wrapMode: Text.WordWrap
                         Layout.fillWidth: true
@@ -397,7 +308,7 @@ ApplicationWindow {
                     }
                 }
             }
-            Rectangle { Layout.fillHeight: true; implicitWidth: 1; color: theme.border }
+            Rectangle { Layout.fillHeight: true; implicitWidth: 1; color: Theme.border }
 
             // main panel (black)
             ColumnLayout {
@@ -414,8 +325,8 @@ ApplicationWindow {
                         Layout.fillWidth: true
                         text: "Untitled sync"
                         placeholderText: qsTr("Job name")
-                        color: theme.textPrimary
-                        placeholderTextColor: theme.textTertiary
+                        color: Theme.textPrimary
+                        placeholderTextColor: Theme.textTertiary
                         font.pixelSize: 16
                         background: Rectangle {
                             color: "transparent"
@@ -423,7 +334,7 @@ ApplicationWindow {
                                 anchors.bottom: parent.bottom
                                 width: parent.width
                                 height: 1
-                                color: nameField.activeFocus ? theme.accent : theme.border
+                                color: nameField.activeFocus ? Theme.accent : Theme.border
                             }
                         }
                     }
@@ -439,7 +350,7 @@ ApplicationWindow {
                     rowSpacing: 8
                     Layout.fillWidth: true
 
-                    Text { text: "From"; color: theme.textSecondary; font.pixelSize: 12 }
+                    Text { text: "From"; color: Theme.textSecondary; font.pixelSize: 12 }
                     Field {
                         id: fromField
                         Layout.fillWidth: true
@@ -449,7 +360,7 @@ ApplicationWindow {
                         }
                     }
 
-                    Text { text: "To"; color: theme.textSecondary; font.pixelSize: 12 }
+                    Text { text: "To"; color: Theme.textSecondary; font.pixelSize: 12 }
                     Field {
                         id: toField
                         Layout.fillWidth: true
@@ -473,9 +384,15 @@ ApplicationWindow {
                     visible: root.deleteOn
                     Layout.fillWidth: true
                     spacing: 8
-                    Text { text: "limit deletions to"; color: theme.textSecondary; font.pixelSize: 12 }
-                    Field { id: maxDeleteField; Layout.preferredWidth: 80; placeholderText: "0 = no limit"; inputMethodHints: Qt.ImhDigitsOnly }
-                    Text { text: "files — aborts if a sync would delete more"; color: theme.textTertiary; font.pixelSize: 11 }
+                    Text { text: "limit deletions to"; color: Theme.textSecondary; font.pixelSize: 12 }
+                    Field {
+                        id: maxDeleteField
+                        Layout.preferredWidth: 80
+                        placeholderText: "0 = no limit"
+                        inputMethodHints: Qt.ImhDigitsOnly
+                        validator: IntValidator { bottom: 0; top: 999999 }
+                    }
+                    Text { text: "files — aborts if a sync would delete more"; color: Theme.textTertiary; font.pixelSize: 11 }
                 }
 
                 // Connection options — appear only when an endpoint is remote.
@@ -488,25 +405,26 @@ ApplicationWindow {
                         visible: root.showSsh
                         Layout.fillWidth: true
                         spacing: 8
-                        Text { text: "SSH key"; color: theme.textSecondary; font.pixelSize: 12 }
+                        Text { text: "SSH key"; color: Theme.textSecondary; font.pixelSize: 12 }
                         Field {
                             id: sshKeyField
                             Layout.fillWidth: true
                             placeholderText: qsTr("~/.ssh/id_ed25519 — optional, uses agent/default if blank")
                         }
-                        Text { text: "Port"; color: theme.textSecondary; font.pixelSize: 12 }
+                        Text { text: "Port"; color: Theme.textSecondary; font.pixelSize: 12 }
                         Field {
                             id: sshPortField
                             Layout.preferredWidth: 64
                             placeholderText: "22"
                             inputMethodHints: Qt.ImhDigitsOnly
+                            validator: IntValidator { bottom: 1; top: 65535 }
                         }
                     }
                     RowLayout {
                         visible: root.showDaemon
                         Layout.fillWidth: true
                         spacing: 8
-                        Text { text: "Password"; color: theme.textSecondary; font.pixelSize: 12 }
+                        Text { text: "Password"; color: Theme.textSecondary; font.pixelSize: 12 }
                         Field {
                             id: daemonPwField
                             Layout.fillWidth: true
@@ -519,7 +437,7 @@ ApplicationWindow {
                         Layout.fillWidth: true
                         wrapMode: Text.WordWrap
                         text: "Over SSH · agent keys honored · host trusted on first use, changed keys rejected"
-                        color: theme.textTertiary
+                        color: Theme.textTertiary
                         font.pixelSize: 10
                     }
                 }
@@ -532,7 +450,7 @@ ApplicationWindow {
                     RowLayout {
                         Layout.fillWidth: true
                         spacing: 6
-                        Text { text: "SCHEDULE"; color: theme.textTertiary; font.pixelSize: 11; font.letterSpacing: 1; Layout.rightMargin: 4 }
+                        Text { text: "SCHEDULE"; color: Theme.textTertiary; font.pixelSize: 11; font.letterSpacing: 1; Layout.rightMargin: 4 }
                         Chip { label: "manual"; active: root.scheduleKind === "manual"; onToggled: root.scheduleKind = "manual" }
                         Chip { label: "interval"; active: root.scheduleKind === "interval"; onToggled: root.scheduleKind = "interval" }
                         Chip { label: "daily"; active: root.scheduleKind === "daily"; onToggled: root.scheduleKind = "daily" }
@@ -543,24 +461,38 @@ ApplicationWindow {
                         visible: root.scheduleKind === "interval"
                         Layout.fillWidth: true
                         spacing: 8
-                        Text { text: "every"; color: theme.textSecondary; font.pixelSize: 12 }
-                        Field { id: intervalField; Layout.preferredWidth: 70; text: "60"; inputMethodHints: Qt.ImhDigitsOnly }
-                        Text { text: "minutes"; color: theme.textSecondary; font.pixelSize: 12 }
+                        Text { text: "every"; color: Theme.textSecondary; font.pixelSize: 12 }
+                        Field {
+                            id: intervalField
+                            Layout.preferredWidth: 70
+                            text: "60"
+                            inputMethodHints: Qt.ImhDigitsOnly
+                            validator: IntValidator { bottom: 1; top: 525600 }
+                        }
+                        Text { text: "minutes"; color: Theme.textSecondary; font.pixelSize: 12 }
                     }
 
                     RowLayout {
                         visible: root.scheduleKind === "daily" || root.scheduleKind === "weekly"
                         Layout.fillWidth: true
                         spacing: 8
-                        Text { text: "at"; color: theme.textSecondary; font.pixelSize: 12 }
-                        Field { id: timeField; Layout.preferredWidth: 80; text: "09:00"; placeholderText: "HH:MM" }
+                        Text { text: "at"; color: Theme.textSecondary; font.pixelSize: 12 }
+                        Field {
+                            id: timeField
+                            Layout.preferredWidth: 80
+                            text: "09:00"
+                            placeholderText: "HH:MM"
+                            validator: RegularExpressionValidator {
+                                regularExpression: /^([01][0-9]|2[0-3]):[0-5][0-9]$/
+                            }
+                        }
                     }
 
                     RowLayout {
                         visible: root.scheduleKind === "weekly"
                         Layout.fillWidth: true
                         spacing: 6
-                        Text { text: "on"; color: theme.textSecondary; font.pixelSize: 12 }
+                        Text { text: "on"; color: Theme.textSecondary; font.pixelSize: 12 }
                         Repeater {
                             model: ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"]
                             Chip { label: modelData; active: root.weekday === index; onToggled: root.weekday = index }
@@ -595,12 +527,12 @@ ApplicationWindow {
                 RowLayout {
                     Layout.fillWidth: true
                     spacing: 8
-                    Text { text: "PREVIEW"; color: theme.textTertiary; font.pixelSize: 11; font.letterSpacing: 1 }
-                    Text { text: controller.changes.count + " changes"; color: theme.textSecondary; font.pixelSize: 12 }
+                    Text { text: "PREVIEW"; color: Theme.textTertiary; font.pixelSize: 11; font.letterSpacing: 1 }
+                    Text { text: controller.changes.count + " changes"; color: Theme.textSecondary; font.pixelSize: 12 }
                     Text {
                         visible: controller.changes.deletions > 0
                         text: "· " + controller.changes.deletions + " to delete"
-                        color: theme.danger
+                        color: Theme.danger
                         font.pixelSize: 12
                     }
                 }
@@ -619,8 +551,8 @@ ApplicationWindow {
                             width: 40
                             height: 3
                             radius: 1.5
-                            color: SplitHandle.pressed ? theme.accent
-                                                       : (SplitHandle.hovered ? theme.textTertiary : theme.border)
+                            color: SplitHandle.pressed ? Theme.accent
+                                                       : (SplitHandle.hovered ? Theme.textTertiary : Theme.border)
                         }
                     }
 
@@ -628,10 +560,10 @@ ApplicationWindow {
                     Rectangle {
                         SplitView.fillHeight: true
                         SplitView.minimumHeight: 80
-                        radius: theme.radius
+                        radius: Theme.radius
                         color: "transparent"
                         border.width: 1
-                        border.color: theme.border
+                        border.color: Theme.border
                         ListView {
                             id: list
                             anchors.fill: parent
@@ -649,15 +581,15 @@ ApplicationWindow {
                                     spacing: 10
                                     Text {
                                         text: code
-                                        color: isDelete ? theme.danger : (isNew ? theme.ok : theme.info)
-                                        font.family: theme.mono
+                                        color: isDelete ? Theme.danger : (isNew ? Theme.ok : Theme.info)
+                                        font.family: Theme.mono
                                         font.pixelSize: 12
                                         Layout.preferredWidth: 96
                                     }
                                     Text {
                                         text: path
-                                        color: theme.textPrimary
-                                        font.family: theme.mono
+                                        color: Theme.textPrimary
+                                        font.family: Theme.mono
                                         font.pixelSize: 12
                                         elide: Text.ElideMiddle
                                         Layout.fillWidth: true
@@ -671,15 +603,15 @@ ApplicationWindow {
                     Rectangle {
                         SplitView.minimumHeight: 56
                         SplitView.preferredHeight: 180
-                        radius: theme.radius
+                        radius: Theme.radius
                         color: "transparent"
                         border.width: 1
-                        border.color: theme.border
+                        border.color: Theme.border
                         ColumnLayout {
                             anchors.fill: parent
                             anchors.margins: 4
                             spacing: 2
-                            Text { text: "LOG"; color: theme.textTertiary; font.pixelSize: 10; font.letterSpacing: 1; Layout.leftMargin: 4 }
+                            Text { text: "LOG"; color: Theme.textTertiary; font.pixelSize: 10; font.letterSpacing: 1; Layout.leftMargin: 4 }
                             ScrollView {
                                 Layout.fillWidth: true
                                 Layout.fillHeight: true
@@ -687,8 +619,8 @@ ApplicationWindow {
                                 TextArea {
                                     readOnly: true
                                     text: controller.log
-                                    color: theme.textTertiary
-                                    font.family: theme.mono
+                                    color: Theme.textTertiary
+                                    font.family: Theme.mono
                                     font.pixelSize: 11
                                     wrapMode: TextEdit.NoWrap
                                     background: Rectangle { color: "transparent" }
@@ -699,7 +631,7 @@ ApplicationWindow {
                 }
 
                 // Progress / status footer
-                Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: theme.border }
+                Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: Theme.border }
                 RowLayout {
                     Layout.fillWidth: true
                     spacing: 10
@@ -707,81 +639,29 @@ ApplicationWindow {
                         Layout.fillWidth: true
                         implicitHeight: 5
                         radius: 3
-                        color: theme.bgTertiary
+                        color: Theme.bgTertiary
                         Rectangle {
                             height: parent.height
                             radius: 3
                             width: parent.width * Math.max(0, Math.min(100, controller.percent)) / 100
-                            color: theme.accent
+                            color: Theme.accent
                         }
                     }
-                    Text { text: controller.status; color: theme.textSecondary; font.pixelSize: 12 }
+                    Text { text: controller.status; color: Theme.textSecondary; font.pixelSize: 12 }
                 }
             }
         }
     }
 
-    // ---------- delete confirmation gate ----------
-    Rectangle {
-        anchors.fill: parent
-        visible: root.confirmOpen
-        color: "#cc000000"
-        MouseArea { anchors.fill: parent }  // swallow clicks behind the modal
-
-        Rectangle {
-            anchors.centerIn: parent
-            width: 400
-            height: panelCol.implicitHeight + 36
-            radius: theme.radius
-            color: theme.bgSecondary
-            border.width: 1
-            border.color: theme.borderStrong
-
-            ColumnLayout {
-                id: panelCol
-                x: 18
-                y: 18
-                width: parent.width - 36
-                spacing: 12
-
-                RowLayout {
-                    spacing: 8
-                    Rectangle { width: 8; height: 8; radius: 4; color: theme.danger; Layout.alignment: Qt.AlignVCenter }
-                    Text { text: "Delete extras is on"; color: theme.textPrimary; font.pixelSize: 15 }
-                }
-                Text {
-                    Layout.fillWidth: true
-                    wrapMode: Text.WordWrap
-                    color: theme.textSecondary
-                    font.pixelSize: 12
-                    text: (controller.changes.deletions > 0
-                           ? controller.changes.deletions + " file(s) in the destination will be permanently deleted."
-                           : "Files in the destination that aren't in the source will be permanently deleted.")
-                          + " This cannot be undone — preview first to see exactly which."
-                }
-                Text {
-                    Layout.fillWidth: true
-                    color: theme.textTertiary
-                    font.family: theme.mono
-                    font.pixelSize: 11
-                    elide: Text.ElideMiddle
-                    text: fromField.text + "  →  " + toField.text
-                }
-                RowLayout {
-                    Layout.fillWidth: true
-                    spacing: 8
-                    Item { Layout.fillWidth: true }
-                    FlatButton { label: "Cancel"; onClicked: root.confirmOpen = false }
-                    FlatButton {
-                        label: "Sync and delete"
-                        danger: true
-                        onClicked: {
-                            root.confirmOpen = false
-                            controller.run(root.jobMap())
-                        }
-                    }
-                }
-            }
+    DeleteConfirmDialog {
+        open: root.confirmOpen
+        deletions: controller.changes.deletions
+        fromText: fromField.text
+        toText: toField.text
+        onCanceled: root.confirmOpen = false
+        onConfirmed: {
+            root.confirmOpen = false
+            controller.run(root.jobMap())
         }
     }
 }

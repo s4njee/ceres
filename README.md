@@ -7,16 +7,18 @@ protocol — local, SSH (`user@host:`), and daemon (`rsync://`) targets all work
 is a calm, opinionated front-end with a real **before-you-sync preview**, first-class live
 progress, and safe defaults — over an advanced tier for full flag control later.
 
-> **Status: Milestone 1 (engine spike).** Boots a QML window, runs a local `--dry-run`
-> through `QProcess`, and streams parsed `--itemize-changes` output into the UI. This
-> proves the process + parser core before the rest of the UX is built.
+> **Status: prototype.** Boots a QML window, previews and runs rsync jobs through
+> `QProcess`, stores JSON profiles, can register launchd/systemd schedules, and streams
+> parsed `--itemize-changes` output into the UI.
 
 ## Architecture
 
 ```
-QML (Qt Quick Controls 2, Material)        — UI shell
+QML (Qt Quick Controls 2, Basic)           — UI shell
   └─ JobController (QObject)               — exposed to QML
        ├─ ChangeListModel (QAbstractListModel)
+       ├─ ProfileStore / SecretStore       — JSON profiles + OS keychain/libsecret
+       ├─ Scheduler / DiscoveryService     — launchd/systemd + LAN beacons
        └─ SyncEngine (abstract)            — the portability seam
             └─ RsyncProcessEngine          — QProcess + the real rsync binary
                  ├─ ArgvBuilder            — SyncJob -> argv (capability-aware)
@@ -24,9 +26,10 @@ QML (Qt Quick Controls 2, Material)        — UI shell
                  └─ BinaryLocator          — finds rsync, detects its capabilities
 ```
 
-`ceres_core` (everything below the QML layer) is a Qt-Core-only static library with no
-GUI/QML dependency, so the parser and arg builder are unit-tested headless and a future
-Windows engine (cwRsync / WSL) can reuse it behind `SyncEngine`.
+`ceres_core` (everything below the QML layer) is a non-GUI Qt Core/Network static
+library with no Quick/QML dependency, so parser, arg builder, profile, scheduler,
+and controller behavior are unit-tested headless. A future Windows engine
+(cwRsync / WSL) can reuse it behind `SyncEngine`.
 
 ## Prerequisites
 
@@ -55,12 +58,14 @@ cmake --build build
 ctest --test-dir build --output-on-failure
 ```
 
-The tests cover the two pure pieces that are easy to get subtly wrong: `OutputParser`
-(itemize parsing, `\r`/`\n` chunk-boundary handling, progress2 with/without `to-chk`) and
-`ArgvBuilder` (capability gating, filter ordering, delete/dry-run, SRC/DEST placement).
+The tests cover the pieces that are easy to get subtly wrong: `OutputParser`
+(itemize parsing, `\r`/`\n` chunk-boundary handling, progress2 with/without `to-chk`),
+`ArgvBuilder`/`EndpointParser` (capability gating, SSH/daemon detection, quoting,
+delete/dry-run, SRC/DEST placement), storage/scheduler safety, binary probing,
+path completion, discovery beacons, and the controller's destructive-run gate.
 
 ## Roadmap
 
-See the design doc for the full plan. Next milestones: local sync MVP (real runs, JSON
-profiles) → SSH + daemon → Advanced tier (KDDockWidgets) → scheduling → packaging
-(signed macOS DMG, Linux AppImage) → Windows (cwRsync / WSL engines).
+See the design doc for the full plan. Next milestones: harden SSH/daemon flows,
+polish the preview UX, expand the advanced options tier, package signed macOS/Linux
+builds, and add Windows support through cwRsync or WSL engines.

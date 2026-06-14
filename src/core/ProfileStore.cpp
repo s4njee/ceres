@@ -10,6 +10,8 @@
 #include <QSaveFile>
 #include <QStandardPaths>
 
+#include "core/JobId.h"
+
 namespace {
 constexpr int kSchema = 1;
 }
@@ -92,7 +94,7 @@ QList<SyncJob> ProfileStore::loadAll() const
         if (!doc.isObject())
             continue;
         SyncJob job = fromJson(doc.object());
-        if (!job.id.isEmpty())
+        if (isSafeJobId(job.id))
             jobs << job;
     }
     return jobs;
@@ -106,7 +108,7 @@ QStringList ProfileStore::presentJobIds() const
         return ids;
     for (QString f : dir.entryList({QStringLiteral("*.json")}, QDir::Files, QDir::Name)) {
         f.chop(5);  // ".json"
-        if (!f.isEmpty())
+        if (isSafeJobId(f))
             ids << f;
     }
     return ids;
@@ -114,7 +116,7 @@ QStringList ProfileStore::presentJobIds() const
 
 SyncJob ProfileStore::load(const QString &id) const
 {
-    if (id.isEmpty())
+    if (!isSafeJobId(id))
         return {};
     QFile file(m_dir + QStringLiteral("/") + id + QStringLiteral(".json"));
     if (!file.open(QIODevice::ReadOnly))
@@ -127,9 +129,10 @@ SyncJob ProfileStore::load(const QString &id) const
 
 bool ProfileStore::save(const SyncJob &job) const
 {
-    if (job.id.isEmpty())
+    if (!isSafeJobId(job.id))
         return false;
-    QDir().mkpath(m_dir);
+    if (!QDir().mkpath(m_dir))
+        return false;
     QSaveFile file(m_dir + QStringLiteral("/") + job.id + QStringLiteral(".json"));
     if (!file.open(QIODevice::WriteOnly))
         return false;
@@ -139,7 +142,7 @@ bool ProfileStore::save(const SyncJob &job) const
 
 bool ProfileStore::remove(const QString &id) const
 {
-    if (id.isEmpty())
+    if (!isSafeJobId(id))
         return false;
     return QFile::remove(m_dir + QStringLiteral("/") + id + QStringLiteral(".json"));
 }

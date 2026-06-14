@@ -18,21 +18,26 @@ RsyncCapabilities BinaryLocator::probe(const QString &path)
     proc.start(path, {QStringLiteral("--version")});
     if (!proc.waitForStarted(2000))
         return caps;
-    proc.waitForFinished(3000);
+    if (!proc.waitForFinished(3000)) {
+        proc.kill();
+        proc.waitForFinished(1000);
+        return caps;
+    }
+    if (proc.exitStatus() != QProcess::NormalExit || proc.exitCode() != 0)
+        return caps;
 
     const QString out = QString::fromUtf8(proc.readAll());
-
-    caps.path = path;
-    caps.found = true;
     caps.isOpenRsync = out.contains(QStringLiteral("openrsync"), Qt::CaseInsensitive);
 
     static const QRegularExpression versionRe(QStringLiteral(R"(version\s+(\d+)\.(\d+))"));
     const auto m = versionRe.match(out);
-    if (m.hasMatch()) {
-        caps.major = m.captured(1).toInt();
-        caps.minor = m.captured(2).toInt();
-    }
+    if (!m.hasMatch())
+        return {};
 
+    caps.path = path;
+    caps.found = true;
+    caps.major = m.captured(1).toInt();
+    caps.minor = m.captured(2).toInt();
     caps.versionString = caps.isOpenRsync
         ? QStringLiteral("openrsync (%1.%2-compatible)").arg(caps.major).arg(caps.minor)
         : QStringLiteral("%1.%2").arg(caps.major).arg(caps.minor);

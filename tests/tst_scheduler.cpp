@@ -14,6 +14,7 @@ private slots:
     void systemdSanitizesName();
     void systemdQuotesRunnerPath();
     void launchdClampsOutOfRangeTime();
+    void rejectsUnsafeIds();
 };
 
 void SchedulerTest::intervalPlist()
@@ -128,6 +129,9 @@ void SchedulerTest::systemdQuotesRunnerPath()
     j.schedule = ScheduleKind::Daily;
     const QString svc = Scheduler::systemdService(j, QStringLiteral("/opt/My Apps/ceres-runner"));
     QVERIFY(svc.contains(QStringLiteral("ExecStart=\"/opt/My Apps/ceres-runner\" --job job7")));
+
+    const QString quoted = Scheduler::systemdService(j, QStringLiteral("/opt/My \"Apps\"/ceres-runner"));
+    QVERIFY(quoted.contains(QStringLiteral("ExecStart=\"/opt/My \\\"Apps\\\"/ceres-runner\" --job job7")));
 }
 
 void SchedulerTest::launchdClampsOutOfRangeTime()
@@ -141,6 +145,18 @@ void SchedulerTest::launchdClampsOutOfRangeTime()
     const QString p = Scheduler::launchdPlist(j, QStringLiteral("/r"), Scheduler::labelFor(j.id));
     QVERIFY(p.contains(QStringLiteral("<key>Hour</key><integer>23</integer>")));
     QVERIFY(p.contains(QStringLiteral("<key>Minute</key><integer>59</integer>")));
+}
+
+void SchedulerTest::rejectsUnsafeIds()
+{
+    QVERIFY(Scheduler::labelFor(QStringLiteral("../bad")).isEmpty());
+    QVERIFY(!Scheduler().isRegistered(QStringLiteral("../bad")));
+    QVERIFY(!Scheduler().remove(QStringLiteral("../bad")));
+
+    SyncJob j;
+    j.id = QStringLiteral("../bad");
+    j.schedule = ScheduleKind::Daily;
+    QVERIFY(!Scheduler().apply(j, QStringLiteral("/r")));
 }
 
 QTEST_MAIN(SchedulerTest)

@@ -8,15 +8,22 @@ set(CMAKE_AUTOMOC ON)
 # Qt 6.5+ (loadFromModule / objectCreationFailed). Install via: brew install qt
 find_package(Qt6 6.5 REQUIRED COMPONENTS Core Gui Qml Quick QuickControls2 Network Test)
 qt_standard_project_setup(REQUIRES 6.5)
+if(COMMAND qt_policy)
+    qt_policy(SET QTP0004 NEW)
+endif()
+
+set_source_files_properties(qml/Theme.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
 
 # ---------------------------------------------------------------------------
-# ceres_core: Qt-Core-only engine + models + controller.
-# Deliberately free of Quick/QML deps so the parser and arg builder can be
-# unit-tested headless (and so a future Windows/WSL engine can reuse it).
+# ceres_core: non-GUI engine, app services, models, and controller.
+# Deliberately free of Quick/QML deps so the parser, scheduling, storage, and
+# controller behavior can be unit-tested headless.
 # ---------------------------------------------------------------------------
 add_library(ceres_core STATIC
     src/core/SyncJob.h
     src/core/Peer.h
+    src/core/Endpoint.h            src/core/Endpoint.cpp
+    src/core/JobId.h
     src/core/ProfileStore.h          src/core/ProfileStore.cpp
     src/core/SecretStore.h           src/core/SecretStore.cpp
     src/engine/RsyncEvents.h
@@ -36,6 +43,9 @@ add_library(ceres_core STATIC
 )
 target_include_directories(ceres_core PUBLIC src)
 target_link_libraries(ceres_core PUBLIC Qt6::Core Qt6::Network)
+if(APPLE)
+    target_link_libraries(ceres_core PUBLIC "-framework Security" "-framework CoreFoundation")
+endif()
 
 # ---------------------------------------------------------------------------
 # ceres: the GUI app (QML/Quick shell over ceres_core).
@@ -46,7 +56,13 @@ qt_add_executable(ceres src/main.cpp)
 qt_add_qml_module(ceres
     URI CeresUi
     VERSION 1.0
-    QML_FILES qml/Main.qml
+    QML_FILES
+        qml/Main.qml
+        qml/Theme.qml
+        qml/Chip.qml
+        qml/FlatButton.qml
+        qml/Field.qml
+        qml/DeleteConfirmDialog.qml
 )
 target_link_libraries(ceres PRIVATE
     ceres_core

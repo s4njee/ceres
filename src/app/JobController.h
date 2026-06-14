@@ -1,6 +1,8 @@
 #pragma once
 
 #include <QObject>
+#include <QByteArray>
+#include <QStringList>
 #include <QString>
 #include <QTimer>
 #include <QVariantMap>
@@ -13,8 +15,8 @@
 #include "models/PeerModel.h"
 #include "sched/Scheduler.h"
 
-class RsyncProcessEngine;
 class DiscoveryService;
+class SyncEngine;
 
 // The single object QML talks to. Owns the engine + change model, exposes a
 // dry-run preview, and surfaces progress / log / status as bindable properties.
@@ -35,6 +37,9 @@ class JobController : public QObject {
     Q_PROPERTY(bool discoverable READ discoverable WRITE setDiscoverable NOTIFY discoverableChanged)
 public:
     explicit JobController(QObject *parent = nullptr);
+    JobController(RsyncCapabilities caps, SyncEngine *engine, ProfileStore store,
+                  SecretStore secrets, Scheduler scheduler, bool startNetworkServices,
+                  QObject *parent = nullptr);
 
     ChangeListModel *changes() { return &m_changes; }
     JobListModel *jobs() { return &m_jobs; }
@@ -45,7 +50,8 @@ public:
     bool running() const { return m_running; }
     bool usingOpenRsync() const { return m_caps.isOpenRsync; }
     QString rsyncSummary() const;
-    QString log() const { return m_log; }
+    Q_INVOKABLE QString endpointKind(const QString &text) const;
+    QString log() const { return m_logLines.join(QLatin1Char('\n')); }
     int percent() const { return m_percent; }
     QString status() const { return m_status; }
     QString hostName() const { return m_hostName; }
@@ -81,12 +87,13 @@ private:
     void startJob(const SyncJob &job, bool dryRun);
     SyncJob jobFromMap(const QVariantMap &map) const;
     QVariantMap mapFromJob(const SyncJob &job) const;
+    QByteArray syncFingerprint(const SyncJob &job) const;
     void setRunning(bool running);
     void setStatus(const QString &status);
     void appendLog(const QString &line);
 
     RsyncCapabilities m_caps;
-    RsyncProcessEngine *m_engine = nullptr;
+    SyncEngine *m_engine = nullptr;
     ChangeListModel m_changes;
     ProfileStore m_store;
     SecretStore m_secrets;
@@ -97,12 +104,14 @@ private:
     bool m_discoverable = true;
     Scheduler m_scheduler;
 
-    QString m_log;
+    QStringList m_logLines;
     QString m_status;
     QString m_hostName;
     QString m_hostAddress;
     int m_percent = 0;
     bool m_running = false;
     bool m_activeDryRun = true;
+    QByteArray m_activeFingerprint;
+    QByteArray m_lastPreviewFingerprint;
     QTimer m_addressTimer;  // re-checks the primary IP for network changes
 };

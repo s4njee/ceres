@@ -25,6 +25,10 @@ struct RsyncCapabilities {
     {
         return found && !isOpenRsync && major >= 3;
     }
+    bool supportsProtectArgs() const
+    {
+        return found && !isOpenRsync && major >= 3;
+    }
 };
 
 class BinaryLocator {

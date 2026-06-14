@@ -6,6 +6,8 @@
 #include <QProcessEnvironment>
 #include <QStringList>
 
+#include "core/Endpoint.h"
+
 namespace {
 // Longest common string prefix of a list (empty list -> empty).
 QString longestCommonPrefix(const QStringList &items)
@@ -65,11 +67,9 @@ QString PathCompleter::completeLocal(const QString &input) const
 
 void PathCompleter::completeRemote(const QString &input, const QString &sshKey, int port)
 {
-    const int colon = input.indexOf(QLatin1Char(':'));
-    if (colon <= 0)
+    const Endpoint endpoint = EndpointParser::parse(input);
+    if (endpoint.kind != EndpointKind::Ssh || endpoint.sshTarget.isEmpty())
         return;
-    const QString target = input.left(colon);  // user@host
-    const QString remotePath = input.mid(colon + 1);
 
     QStringList args{QStringLiteral("-o"), QStringLiteral("BatchMode=yes"),
                      QStringLiteral("-o"), QStringLiteral("StrictHostKeyChecking=accept-new"),
@@ -78,17 +78,17 @@ void PathCompleter::completeRemote(const QString &input, const QString &sshKey, 
         args << QStringLiteral("-i") << sshKey;
     if (port > 0)
         args << QStringLiteral("-p") << QString::number(port);
-    args << target;
+    args << endpoint.sshTarget;
 
     // Single-quote the partial path (so spaces are safe and it can't inject), but
     // leave the * outside the quotes so the remote shell still globs it.
-    QString quoted = remotePath;
+    QString quoted = endpoint.sshPath;
     quoted.replace(QLatin1Char('\''), QLatin1String("'\\''"));
     args << QStringLiteral("ls -dp -- '%1'* 2>/dev/null").arg(quoted);
 
     auto *proc = new QProcess(this);
     proc->setProcessEnvironment(QProcessEnvironment::systemEnvironment());  // ssh-agent
-    connect(proc, &QProcess::finished, this, [this, proc, input, target](int, QProcess::ExitStatus) {
+    connect(proc, &QProcess::finished, this, [this, proc, input, target = endpoint.sshTarget](int, QProcess::ExitStatus) {
         const QStringList lines =
             QString::fromUtf8(proc->readAllStandardOutput()).split(QLatin1Char('\n'), Qt::SkipEmptyParts);
         proc->deleteLater();

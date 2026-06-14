@@ -14,6 +14,7 @@ private slots:
     void saveLoadDelete();
     void scheduleRoundTrip();
     void presentJobIdsSeesUnparseableFiles();
+    void rejectsUnsafeIds();
 };
 
 void ProfileStoreTest::jsonRoundTrip()
@@ -123,6 +124,33 @@ void ProfileStoreTest::presentJobIdsSeesUnparseableFiles()
     QCOMPARE(present.size(), 2);
     QVERIFY(present.contains(QStringLiteral("good-1")));
     QVERIFY(present.contains(QStringLiteral("corrupt-2")));
+}
+
+void ProfileStoreTest::rejectsUnsafeIds()
+{
+    QTemporaryDir tmp;
+    QVERIFY(tmp.isValid());
+    const ProfileStore store(tmp.path());
+
+    SyncJob bad;
+    bad.id = QStringLiteral("../bad");
+    bad.name = QStringLiteral("Bad");
+    QVERIFY(!store.save(bad));
+    QVERIFY(store.load(QStringLiteral("../bad")).id.isEmpty());
+    QVERIFY(!store.remove(QStringLiteral("../bad")));
+
+    QFile injected(tmp.path() + QStringLiteral("/unsafe.json"));
+    QVERIFY(injected.open(QIODevice::WriteOnly));
+    injected.write("{\"id\":\"../bad\",\"name\":\"Bad\"}");
+    injected.close();
+
+    QFile oddName(tmp.path() + QStringLiteral("/bad\nid.json"));
+    QVERIFY(oddName.open(QIODevice::WriteOnly));
+    oddName.write("{\"id\":\"bad\\nid\",\"name\":\"Bad\"}");
+    oddName.close();
+
+    QVERIFY(store.loadAll().isEmpty());
+    QVERIFY(!store.presentJobIds().contains(QStringLiteral("bad\nid")));
 }
 
 QTEST_MAIN(ProfileStoreTest)

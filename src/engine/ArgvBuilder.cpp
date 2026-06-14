@@ -2,28 +2,15 @@
 
 #include <QDir>
 
-namespace {
-// rsync:// or host::module — the daemon protocol, which does not use ssh.
-bool isDaemon(const QString &p)
-{
-    return p.startsWith(QStringLiteral("rsync://")) || p.contains(QStringLiteral("::"));
-}
-// user@host:path / host:path — a colon before any slash, and not a daemon spec.
-bool isRemoteSsh(const QString &p)
-{
-    if (isDaemon(p))
-        return false;
-    const int slash = p.indexOf(QLatin1Char('/'));
-    const int colon = p.indexOf(QLatin1Char(':'));
-    return colon >= 0 && (slash < 0 || colon < slash);
-}
+#include "core/Endpoint.h"
 
+namespace {
 // Expand a leading ~ to the home dir for LOCAL paths only. We invoke rsync via
 // QProcess (no shell), so nothing expands ~ for us; remote (ssh/daemon) tildes
 // are left for the remote shell to expand.
 QString expandLocalTilde(const QString &p)
 {
-    if (isRemoteSsh(p) || isDaemon(p))
+    if (EndpointParser::kind(p) != EndpointKind::Local)
         return p;
     if (p == QLatin1String("~"))
         return QDir::homePath();
@@ -31,11 +18,35 @@ QString expandLocalTilde(const QString &p)
         return QDir::homePath() + p.mid(1);
     return p;
 }
+
+QString shellQuoteIfNeeded(QString s)
+{
+    if (s.isEmpty())
+        return QStringLiteral("''");
+    bool safe = true;
+    for (const QChar ch : s) {
+        const ushort c = ch.unicode();
+        const bool alphaNum = (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')
+            || (c >= '0' && c <= '9');
+        const bool punctuation = ch == QLatin1Char('/') || ch == QLatin1Char('.')
+            || ch == QLatin1Char('_') || ch == QLatin1Char('-') || ch == QLatin1Char('=')
+            || ch == QLatin1Char(':') || ch == QLatin1Char('@') || ch == QLatin1Char('+')
+            || ch == QLatin1Char(',');
+        if (!alphaNum && !punctuation) {
+            safe = false;
+            break;
+        }
+    }
+    if (safe)
+        return s;
+    s.replace(QLatin1Char('\''), QLatin1String("'\\''"));
+    return QStringLiteral("'") + s + QStringLiteral("'");
+}
 } // namespace
 
 bool ArgvBuilder::usesSsh(const SyncJob &job)
 {
-    return isRemoteSsh(job.source) || isRemoteSsh(job.destination);
+    return EndpointParser::usesSsh(job);
 }
 
 QStringList ArgvBuilder::build(const SyncJob &job, const RsyncCapabilities &caps, bool dryRun)
@@ -64,6 +75,8 @@ QStringList ArgvBuilder::build(const SyncJob &job, const RsyncCapabilities &caps
         args << QStringLiteral("--outbuf=L");  // line-buffer so progress streams live
     if (caps.supportsNoIncRecursive())
         args << QStringLiteral("--no-inc-recursive");  // stable to-chk denominator
+    if (usesSsh(job) && caps.supportsProtectArgs())
+        args << QStringLiteral("--protect-args");  // remote paths with spaces stay intact
 
     // SSH transport: force non-interactive options. QProcess can't answer ssh's
     // /dev/tty password/host-key prompts, so BatchMode=yes fails cleanly instead
@@ -78,7 +91,12 @@ QStringList ArgvBuilder::build(const SyncJob &job, const RsyncCapabilities &caps
             ssh << QStringLiteral("-i") << job.sshKeyPath;
         if (job.sshPort > 0)
             ssh << QStringLiteral("-p") << QString::number(job.sshPort);
-        args << QStringLiteral("-e") << ssh.join(QLatin1Char(' '));
+
+        QStringList quoted;
+        quoted.reserve(ssh.size());
+        for (const QString &part : ssh)
+            quoted << shellQuoteIfNeeded(part);
+        args << QStringLiteral("-e") << quoted.join(QLatin1Char(' '));
     }
 
     if (dryRun)

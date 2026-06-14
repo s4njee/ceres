@@ -39,6 +39,8 @@ private slots:
     void localTargetHasNoSsh();
     void sshTargetGetsSafeOptions();
     void sshKeyAndPort();
+    void sshKeyWithSpacesIsQuoted();
+    void sshTargetsUseProtectedArgs();
     void daemonTargetHasNoSsh();
     void maxDeleteCap();
     void expandsLocalTilde();
@@ -162,6 +164,31 @@ void ArgvBuilderTest::sshKeyAndPort()
     const QString ssh = args.at(args.indexOf(QStringLiteral("-e")) + 1);
     QVERIFY(ssh.contains(QStringLiteral("-i /home/me/.ssh/id_ed25519")));
     QVERIFY(ssh.contains(QStringLiteral("-p 2222")));
+}
+
+void ArgvBuilderTest::sshKeyWithSpacesIsQuoted()
+{
+    SyncJob job;
+    job.source = QStringLiteral("server:/data/");
+    job.destination = QStringLiteral("/tmp/b/");
+    job.sshKeyPath = QStringLiteral("/home/me/ssh keys/id_ed25519");
+
+    const QStringList args = ArgvBuilder::build(job, modern(), false);
+    const QString ssh = args.at(args.indexOf(QStringLiteral("-e")) + 1);
+    QVERIFY(ssh.contains(QStringLiteral("-i '/home/me/ssh keys/id_ed25519'")));
+}
+
+void ArgvBuilderTest::sshTargetsUseProtectedArgs()
+{
+    SyncJob job;
+    job.source = QStringLiteral("/tmp/source with spaces/");
+    job.destination = QStringLiteral("server:/backup with spaces/");
+
+    const QStringList modernArgs = ArgvBuilder::build(job, modern(), false);
+    QVERIFY(modernArgs.contains(QStringLiteral("--protect-args")));
+
+    const QStringList openArgs = ArgvBuilder::build(job, openrsync(), false);
+    QVERIFY(!openArgs.contains(QStringLiteral("--protect-args")));
 }
 
 void ArgvBuilderTest::daemonTargetHasNoSsh()

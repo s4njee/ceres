@@ -2,9 +2,20 @@
 
 #include <QProcess>
 
+#if defined(Q_OS_MACOS)
+#  include <Security/Security.h>
+#endif
+
 namespace {
 // Keychain service / libsecret schema name.
 const QString kService = QStringLiteral("Ceres daemon password");
+
+#if defined(Q_OS_MACOS)
+QByteArray utf8(const QString &s)
+{
+    return s.toUtf8();
+}
+#endif
 }
 
 bool SecretStore::set(const QString &id, const QString &secret) const
@@ -12,14 +23,24 @@ bool SecretStore::set(const QString &id, const QString &secret) const
     if (id.isEmpty())
         return false;
 #if defined(Q_OS_MACOS)
-    // -U: update if present. -A: no per-app ACL, so ceres-runner can read what
-    // the GUI wrote without a prompt. (Password is briefly visible in `ps` via
-    // -w; acceptable for v1, tightened by signing + an access group in M6.)
-    return QProcess::execute(
-               QStringLiteral("/usr/bin/security"),
-               {QStringLiteral("add-generic-password"), QStringLiteral("-U"), QStringLiteral("-A"),
-                QStringLiteral("-s"), kService, QStringLiteral("-a"), id, QStringLiteral("-w"), secret})
-        == 0;
+    const QByteArray service = utf8(kService);
+    const QByteArray account = utf8(id);
+    const QByteArray password = utf8(secret);
+
+    SecKeychainItemRef item = nullptr;
+    OSStatus status = SecKeychainFindGenericPassword(
+        nullptr, service.size(), service.constData(), account.size(), account.constData(),
+        nullptr, nullptr, &item);
+    if (status == errSecSuccess && item) {
+        status = SecKeychainItemModifyContent(item, nullptr, password.size(), password.constData());
+        CFRelease(item);
+        return status == errSecSuccess;
+    }
+
+    status = SecKeychainAddGenericPassword(
+        nullptr, service.size(), service.constData(), account.size(), account.constData(),
+        password.size(), password.constData(), nullptr);
+    return status == errSecSuccess;
 #elif defined(Q_OS_LINUX)
     QProcess p;
     p.start(QStringLiteral("secret-tool"),
@@ -50,16 +71,18 @@ QString SecretStore::get(const QString &id) const
         return QString::fromUtf8(out);
     };
 #if defined(Q_OS_MACOS)
-    QProcess p;
-    p.start(QStringLiteral("/usr/bin/security"),
-            {QStringLiteral("find-generic-password"), QStringLiteral("-s"), kService,
-             QStringLiteral("-a"), id, QStringLiteral("-w")});
-    if (!p.waitForStarted(2000))
+    const QByteArray service = utf8(kService);
+    const QByteArray account = utf8(id);
+    UInt32 length = 0;
+    void *data = nullptr;
+    const OSStatus status = SecKeychainFindGenericPassword(
+        nullptr, service.size(), service.constData(), account.size(), account.constData(),
+        &length, &data, nullptr);
+    if (status != errSecSuccess || !data)
         return {};
-    p.waitForFinished(3000);
-    if (p.exitStatus() != QProcess::NormalExit || p.exitCode() != 0)
-        return {};
-    return chompOne(p.readAllStandardOutput());
+    const QString secret = QString::fromUtf8(static_cast<const char *>(data), length);
+    SecKeychainItemFreeContent(nullptr, data);
+    return secret;
 #elif defined(Q_OS_LINUX)
     QProcess p;
     p.start(QStringLiteral("secret-tool"),
@@ -81,10 +104,19 @@ bool SecretStore::remove(const QString &id) const
     if (id.isEmpty())
         return false;
 #if defined(Q_OS_MACOS)
-    return QProcess::execute(QStringLiteral("/usr/bin/security"),
-                             {QStringLiteral("delete-generic-password"), QStringLiteral("-s"), kService,
-                              QStringLiteral("-a"), id})
-        == 0;
+    const QByteArray service = utf8(kService);
+    const QByteArray account = utf8(id);
+    SecKeychainItemRef item = nullptr;
+    const OSStatus findStatus = SecKeychainFindGenericPassword(
+        nullptr, service.size(), service.constData(), account.size(), account.constData(),
+        nullptr, nullptr, &item);
+    if (findStatus == errSecItemNotFound)
+        return true;
+    if (findStatus != errSecSuccess || !item)
+        return false;
+    const OSStatus deleteStatus = SecKeychainItemDelete(item);
+    CFRelease(item);
+    return deleteStatus == errSecSuccess;
 #elif defined(Q_OS_LINUX)
     return QProcess::execute(QStringLiteral("secret-tool"),
                              {QStringLiteral("clear"), QStringLiteral("service"), kService,

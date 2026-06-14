@@ -4,19 +4,10 @@
 #include "core/ProfileStore.h"
 #include "core/SecretStore.h"
 #include "core/SyncJob.h"
+#include "core/Endpoint.h"
 #include "engine/BinaryLocator.h"
 #include "engine/RsyncProcessEngine.h"
 #include "sched/Scheduler.h"
-
-namespace {
-bool isDaemonTarget(const SyncJob &j)
-{
-    const auto daemon = [](const QString &p) {
-        return p.startsWith(QLatin1String("rsync://")) || p.contains(QLatin1String("::"));
-    };
-    return daemon(j.source) || daemon(j.destination);
-}
-}
 
 // Headless runner for a saved job — the entry point the OS scheduler invokes:
 //   ceres-runner --job <id>
@@ -58,7 +49,7 @@ int main(int argc, char *argv[])
     }
 
     SyncJob runJob = job;
-    if (isDaemonTarget(runJob))  // daemon password lives in the keychain, not the profile
+    if (EndpointParser::usesDaemon(runJob))  // daemon password lives in the keychain, not the profile
         runJob.daemonPassword = SecretStore().get(runJob.id);
 
     out << "ceres-runner: '" << job.name << "'  " << job.source << " -> " << job.destination << "\n";

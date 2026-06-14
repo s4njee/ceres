@@ -7,6 +7,8 @@
 #include <QSaveFile>
 #include <QStandardPaths>
 
+#include "core/JobId.h"
+
 #ifdef Q_OS_MACOS
 #  include <unistd.h>
 #endif
@@ -28,6 +30,14 @@ QString unitSafe(QString s)
     s.replace(QLatin1Char('\r'), QLatin1Char(' '));
     s.replace(QLatin1Char('%'), QLatin1String("%%"));
     return s;
+}
+
+QString unitExecArg(QString s)
+{
+    s = unitSafe(s);
+    s.replace(QLatin1Char('\\'), QLatin1String("\\\\"));
+    s.replace(QLatin1Char('"'), QLatin1String("\\\""));
+    return QStringLiteral("\"") + s + QStringLiteral("\"");
 }
 
 QString logDir()
@@ -58,6 +68,8 @@ QString Scheduler::runnerPath()
 
 QString Scheduler::labelFor(const QString &id)
 {
+    if (!isSafeJobId(id))
+        return {};
     return QStringLiteral("com.ceres.job.") + id;
 }
 
@@ -117,8 +129,8 @@ QString Scheduler::systemdService(const SyncJob &job, const QString &runnerPath)
     // Quote the runner path so an install dir with spaces (e.g. AppImage mounts)
     // is treated as a single argument by systemd.
     return QStringLiteral("[Unit]\nDescription=Ceres sync %1\n\n"
-                          "[Service]\nType=oneshot\nExecStart=\"%2\" --job %3\n")
-        .arg(unitSafe(job.name), runnerPath, job.id);
+                          "[Service]\nType=oneshot\nExecStart=%2 --job %3\n")
+        .arg(unitSafe(job.name), unitExecArg(runnerPath), unitSafe(job.id));
 }
 
 QString Scheduler::systemdTimer(const SyncJob &job)
@@ -151,6 +163,8 @@ QString Scheduler::systemdTimer(const SyncJob &job)
 
 bool Scheduler::apply(const SyncJob &job, const QString &runnerPath) const
 {
+    if (!isSafeJobId(job.id))
+        return false;
     if (job.schedule == ScheduleKind::Manual)
         return remove(job.id);
 
@@ -188,6 +202,8 @@ bool Scheduler::apply(const SyncJob &job, const QString &runnerPath) const
 
 bool Scheduler::remove(const QString &id) const
 {
+    if (!isSafeJobId(id))
+        return false;
 #if defined(Q_OS_MACOS)
     const QString label = labelFor(id);
     const QString domain = QStringLiteral("gui/%1").arg(getuid());
@@ -223,8 +239,11 @@ QStringList Scheduler::installedJobIds() const
                            .entryList({prefix + QStringLiteral("*.plist")}, QDir::Files);
     for (QString f : files) {
         f.chop(6);  // ".plist"
-        if (f.startsWith(prefix))
-            ids << f.mid(prefix.size());
+        if (f.startsWith(prefix)) {
+            const QString id = f.mid(prefix.size());
+            if (isSafeJobId(id))
+                ids << id;
+        }
     }
 #elif defined(Q_OS_LINUX)
     const QString unitDir = QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation)
@@ -233,8 +252,11 @@ QStringList Scheduler::installedJobIds() const
     const QString prefix = QStringLiteral("ceres-");
     for (QString f : files) {
         f.chop(6);  // ".timer"
-        if (f.startsWith(prefix))
-            ids << f.mid(prefix.size());
+        if (f.startsWith(prefix)) {
+            const QString id = f.mid(prefix.size());
+            if (isSafeJobId(id))
+                ids << id;
+        }
     }
 #endif
     return ids;
@@ -242,6 +264,8 @@ QStringList Scheduler::installedJobIds() const
 
 bool Scheduler::isRegistered(const QString &id) const
 {
+    if (!isSafeJobId(id))
+        return false;
 #if defined(Q_OS_MACOS)
     return QFile::exists(launchAgentsDir() + QStringLiteral("/") + labelFor(id) + QStringLiteral(".plist"));
 #elif defined(Q_OS_LINUX)

@@ -1,13 +1,19 @@
 #include "app/JobController.h"
 
 #include <QAbstractSocket>
+#include <QCryptographicHash>
 #include <QHostAddress>
 #include <QHostInfo>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QNetworkInterface>
 #include <QSysInfo>
 #include <QUdpSocket>
 #include <QUuid>
+#include <utility>
 
+#include "core/Endpoint.h"
 #include "core/Peer.h"
 #include "core/SyncJob.h"
 #include "engine/RsyncProcessEngine.h"
@@ -97,32 +103,51 @@ QString osName()
 #endif
 }
 
-bool isDaemonTarget(const SyncJob &j)
+QStringList stringListFromVariant(const QVariant &value)
 {
-    const auto daemon = [](const QString &p) {
-        return p.startsWith(QLatin1String("rsync://")) || p.contains(QLatin1String("::"));
-    };
-    return daemon(j.source) || daemon(j.destination);
+    if (value.canConvert<QStringList>())
+        return value.toStringList();
+
+    QStringList result;
+    const QVariantList list = value.toList();
+    for (const QVariant &item : list)
+        result << item.toString();
+    return result;
 }
+
 } // namespace
 
 JobController::JobController(QObject *parent)
-    : QObject(parent), m_caps(BinaryLocator::locateRsync())
+    : JobController(BinaryLocator::locateRsync(), nullptr, ProfileStore{}, SecretStore{},
+                    Scheduler{}, true, parent)
+{
+}
+
+JobController::JobController(RsyncCapabilities caps, SyncEngine *engine, ProfileStore store,
+                             SecretStore secrets, Scheduler scheduler, bool startNetworkServices,
+                             QObject *parent)
+    : QObject(parent),
+      m_caps(std::move(caps)),
+      m_store(std::move(store)),
+      m_secrets(std::move(secrets)),
+      m_scheduler(std::move(scheduler))
 {
     m_hostName = QHostInfo::localHostName();
     m_hostAddress = primaryAddress();
 
-    // The primary IP can change (Wi-Fi switch, VPN up/down), so re-check it and
-    // update the corner pill live instead of freezing the launch-time value.
-    m_addressTimer.setInterval(10000);
-    connect(&m_addressTimer, &QTimer::timeout, this, [this] {
-        const QString addr = primaryAddress();
-        if (addr != m_hostAddress) {
-            m_hostAddress = addr;
-            emit hostAddressChanged();
-        }
-    });
-    m_addressTimer.start();
+    if (startNetworkServices) {
+        // The primary IP can change (Wi-Fi switch, VPN up/down), so re-check it and
+        // update the corner pill live instead of freezing the launch-time value.
+        m_addressTimer.setInterval(10000);
+        connect(&m_addressTimer, &QTimer::timeout, this, [this] {
+            const QString addr = primaryAddress();
+            if (addr != m_hostAddress) {
+                m_hostAddress = addr;
+                emit hostAddressChanged();
+            }
+        });
+        m_addressTimer.start();
+    }
 
     const QList<SyncJob> loaded = m_store.loadAll();
     m_jobs.setJobs(loaded);
@@ -152,21 +177,23 @@ JobController::JobController(QObject *parent)
             m_scheduler.remove(id);
     }
 
-    Peer self;
-    self.id = qEnvironmentVariable("CERES_NODE_ID");  // override lets two dev instances coexist
-    if (self.id.isEmpty())
-        self.id = QString::fromLatin1(QSysInfo::machineUniqueId());
-    if (self.id.isEmpty())
-        self.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
-    self.name = m_hostName;
-    self.addresses = gatherAddresses();
-    self.os = osName();
-    self.version = QStringLiteral("0.1");
-    self.accepts = {QStringLiteral("ssh")};
-    m_discovery = new DiscoveryService(&m_peers, self, this);
-    m_discovery->start();
+    if (startNetworkServices) {
+        Peer self;
+        self.id = qEnvironmentVariable("CERES_NODE_ID");  // override lets two dev instances coexist
+        if (self.id.isEmpty())
+            self.id = QString::fromLatin1(QSysInfo::machineUniqueId());
+        if (self.id.isEmpty())
+            self.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
+        self.name = m_hostName;
+        self.addresses = gatherAddresses();
+        self.os = osName();
+        self.version = QStringLiteral("0.1");
+        self.accepts = {QStringLiteral("ssh")};
+        m_discovery = new DiscoveryService(&m_peers, self, this);
+        m_discovery->start();
+    }
 
-    m_engine = new RsyncProcessEngine(m_caps, this);
+    m_engine = engine ? engine : new RsyncProcessEngine(m_caps, this);
 
     connect(m_engine, &SyncEngine::change, &m_changes, &ChangeListModel::append);
 
@@ -184,7 +211,7 @@ JobController::JobController(QObject *parent)
 
     connect(m_engine, &SyncEngine::started, this, [this] {
         m_changes.clear();
-        m_log.clear();
+        m_logLines.clear();
         emit logChanged();
         m_percent = 0;
         emit progressChanged();
@@ -195,16 +222,22 @@ JobController::JobController(QObject *parent)
     connect(m_engine, &SyncEngine::finished, this, [this](int code, bool crashed) {
         setRunning(false);
         if (crashed) {
+            if (!m_activeDryRun)
+                m_lastPreviewFingerprint.clear();
             setStatus(QStringLiteral("Cancelled / interrupted"));
         } else if (code == 0) {
             if (m_activeDryRun) {
-                setStatus(QStringLiteral("Preview complete — %1 change(s)").arg(m_changes.rowCount()));
+                m_lastPreviewFingerprint = m_activeFingerprint;
+                setStatus(QStringLiteral("Preview complete — %1 change(s)").arg(m_changes.count()));
             } else {
+                m_lastPreviewFingerprint.clear();
                 m_percent = 100;
                 emit progressChanged();
-                setStatus(QStringLiteral("Sync complete — %1 item(s)").arg(m_changes.rowCount()));
+                setStatus(QStringLiteral("Sync complete — %1 item(s)").arg(m_changes.count()));
             }
         } else {
+            if (!m_activeDryRun)
+                m_lastPreviewFingerprint.clear();
             switch (code) {
             case 5:
                 setStatus(QStringLiteral("Authentication failed (rsync daemon)"));
@@ -231,10 +264,12 @@ JobController::JobController(QObject *parent)
                 setStatus(QStringLiteral("rsync exited with code %1").arg(code));
             }
         }
+        m_activeFingerprint.clear();
     });
 
     connect(m_engine, &SyncEngine::failedToStart, this, [this](const QString &reason) {
         setRunning(false);
+        m_activeFingerprint.clear();
         appendLog(QStringLiteral("[error] ") + reason);
         setStatus(QStringLiteral("Failed to start: %1").arg(reason));
     });
@@ -250,6 +285,11 @@ QString JobController::rsyncSummary() const
     return s;
 }
 
+QString JobController::endpointKind(const QString &text) const
+{
+    return EndpointParser::kindName(text);
+}
+
 SyncJob JobController::jobFromMap(const QVariantMap &m) const
 {
     SyncJob j;
@@ -260,15 +300,17 @@ SyncJob JobController::jobFromMap(const QVariantMap &m) const
     j.compress = m.value(QStringLiteral("compress"), false).toBool();
     j.deleteExtraneous = m.value(QStringLiteral("deleteExtras"), false).toBool();
     j.checksum = m.value(QStringLiteral("checksum"), false).toBool();
-    j.maxDelete = m.value(QStringLiteral("maxDelete"), 0).toInt();
+    j.maxDelete = qMax(0, m.value(QStringLiteral("maxDelete"), 0).toInt());
+    j.excludes = stringListFromVariant(m.value(QStringLiteral("excludes")));
+    j.extraArgs = stringListFromVariant(m.value(QStringLiteral("extraArgs")));
     j.sshKeyPath = m.value(QStringLiteral("sshKey")).toString().trimmed();
-    j.sshPort = m.value(QStringLiteral("sshPort")).toInt();
+    j.sshPort = qBound(0, m.value(QStringLiteral("sshPort")).toInt(), 65535);
     j.daemonPassword = m.value(QStringLiteral("daemonPassword")).toString();
     j.schedule = scheduleKindFromString(m.value(QStringLiteral("schedule")).toString());
-    j.intervalMinutes = m.value(QStringLiteral("intervalMinutes"), 60).toInt();
-    j.atHour = m.value(QStringLiteral("atHour"), 9).toInt();
-    j.atMinute = m.value(QStringLiteral("atMinute"), 0).toInt();
-    j.weekday = m.value(QStringLiteral("weekday"), 0).toInt();
+    j.intervalMinutes = qMax(1, m.value(QStringLiteral("intervalMinutes"), 60).toInt());
+    j.atHour = qBound(0, m.value(QStringLiteral("atHour"), 9).toInt(), 23);
+    j.atMinute = qBound(0, m.value(QStringLiteral("atMinute"), 0).toInt(), 59);
+    j.weekday = qBound(0, m.value(QStringLiteral("weekday"), 0).toInt(), 6);
     return j;
 }
 
@@ -283,6 +325,8 @@ QVariantMap JobController::mapFromJob(const SyncJob &j) const
         {QStringLiteral("deleteExtras"), j.deleteExtraneous},
         {QStringLiteral("checksum"), j.checksum},
         {QStringLiteral("maxDelete"), j.maxDelete},
+        {QStringLiteral("excludes"), j.excludes},
+        {QStringLiteral("extraArgs"), j.extraArgs},
         {QStringLiteral("sshKey"), j.sshKeyPath},
         {QStringLiteral("sshPort"), j.sshPort},
         {QStringLiteral("schedule"), scheduleKindToString(j.schedule)},
@@ -323,11 +367,19 @@ void JobController::startJob(const SyncJob &job, bool dryRun)
     // For a daemon target with no password typed this session, pull the stored one
     // from the keychain — but only if the edited endpoint still matches the saved
     // job, so we never send one server's password to a newly-typed host.
-    if (j.daemonPassword.isEmpty() && isDaemonTarget(j) && !m_currentId.isEmpty()) {
+    if (j.daemonPassword.isEmpty() && EndpointParser::usesDaemon(j) && !m_currentId.isEmpty()) {
         const SyncJob saved = m_jobs.jobById(m_currentId);
         if (saved.source == j.source && saved.destination == j.destination)
             j.daemonPassword = m_secrets.get(m_currentId);
     }
+
+    const QByteArray fingerprint = syncFingerprint(j);
+    if (!dryRun && j.deleteExtraneous && fingerprint != m_lastPreviewFingerprint) {
+        setStatus(QStringLiteral("Preview this exact delete sync before running"));
+        return;
+    }
+
+    m_activeFingerprint = fingerprint;
     m_engine->start(j, dryRun);
 }
 
@@ -369,7 +421,7 @@ void JobController::saveJob(const QVariantMap &jobMap)
     m_jobs.upsert(job);
     if (!job.daemonPassword.isEmpty())
         m_secrets.set(job.id, job.daemonPassword);  // keychain, never the profile JSON
-    else if (!isDaemonTarget(job))
+    else if (!EndpointParser::usesDaemon(job))
         m_secrets.remove(job.id);  // target no longer a daemon -> drop any stale secret
     m_currentId = job.id;
     emit currentChanged();
@@ -378,7 +430,7 @@ void JobController::saveJob(const QVariantMap &jobMap)
 
     if (job.schedule == ScheduleKind::Manual) {
         setStatus(QStringLiteral("Saved '%1'").arg(job.name));
-    } else if (isDaemonTarget(job) && m_secrets.get(job.id).isEmpty()) {
+    } else if (EndpointParser::usesDaemon(job) && m_secrets.get(job.id).isEmpty()) {
         // A scheduled daemon sync with no stored password can't authenticate.
         setStatus(QStringLiteral("Saved '%1' · scheduled — set a daemon password so "
                                  "scheduled runs can authenticate").arg(job.name));
@@ -431,8 +483,35 @@ void JobController::setStatus(const QString &status)
 
 void JobController::appendLog(const QString &line)
 {
-    if (!m_log.isEmpty())
-        m_log += QLatin1Char('\n');
-    m_log += line;
+    constexpr int kMaxLogLines = 1000;
+    m_logLines << line;
+    while (m_logLines.size() > kMaxLogLines)
+        m_logLines.removeFirst();
     emit logChanged();
+}
+
+QByteArray JobController::syncFingerprint(const SyncJob &job) const
+{
+    const auto stringArray = [](const QStringList &values) {
+        QJsonArray a;
+        for (const QString &value : values)
+            a.append(value);
+        return a;
+    };
+
+    QJsonObject o;
+    o[QStringLiteral("source")] = job.source;
+    o[QStringLiteral("destination")] = job.destination;
+    o[QStringLiteral("archive")] = job.archive;
+    o[QStringLiteral("compress")] = job.compress;
+    o[QStringLiteral("checksum")] = job.checksum;
+    o[QStringLiteral("deleteExtraneous")] = job.deleteExtraneous;
+    o[QStringLiteral("maxDelete")] = job.maxDelete;
+    o[QStringLiteral("excludes")] = stringArray(job.excludes);
+    o[QStringLiteral("extraArgs")] = stringArray(job.extraArgs);
+    o[QStringLiteral("sshKeyPath")] = job.sshKeyPath;
+    o[QStringLiteral("sshPort")] = job.sshPort;
+
+    const QByteArray json = QJsonDocument(o).toJson(QJsonDocument::Compact);
+    return QCryptographicHash::hash(json, QCryptographicHash::Sha256);
 }

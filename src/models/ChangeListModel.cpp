@@ -45,21 +45,30 @@ QHash<int, QByteArray> ChangeListModel::roleNames() const
 
 void ChangeListModel::append(const ChangeItem &item)
 {
+    ++m_totalCount;
+    if (item.op == ChangeItem::Op::Deletion)
+        ++m_deletions;
+
+    if (m_items.size() >= m_maxItems) {
+        beginRemoveRows(QModelIndex(), 0, 0);
+        m_items.removeFirst();
+        endRemoveRows();
+    }
+
     const int row = static_cast<int>(m_items.size());
     beginInsertRows(QModelIndex(), row, row);
     m_items.append(item);
     endInsertRows();
-    if (item.op == ChangeItem::Op::Deletion)
-        ++m_deletions;
     emit countChanged();
 }
 
 void ChangeListModel::clear()
 {
-    if (m_items.isEmpty())
+    if (m_items.isEmpty() && m_totalCount == 0 && m_deletions == 0)
         return;
     beginResetModel();
     m_items.clear();
+    m_totalCount = 0;
     m_deletions = 0;
     endResetModel();
     emit countChanged();
