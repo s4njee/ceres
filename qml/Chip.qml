@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Controls.Basic
 
 Rectangle {
     id: root
@@ -6,6 +7,7 @@ Rectangle {
     property string label
     property bool active: false
     property bool warn: false
+    property string tooltip: ""
     signal toggled()
 
     implicitHeight: 26
@@ -37,8 +39,18 @@ Rectangle {
     }
 
     MouseArea {
+        id: chipMouse
         anchors.fill: parent
+        hoverEnabled: true
         cursorShape: Qt.PointingHandCursor
         onClicked: root.toggled()
     }
+
+    ToolTip.visible: chipMouse.containsMouse && root.tooltip.length > 0
+    ToolTip.text: root.tooltip
+    ToolTip.delay: 400
+
+    Accessible.role: Accessible.Button
+    Accessible.name: root.label + (root.active ? " (active)" : "")
+    Accessible.description: root.tooltip
 }

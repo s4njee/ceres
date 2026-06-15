@@ -6,9 +6,18 @@
 #include "engine/OutputParser.h"
 #include "engine/SyncEngine.h"
 
-// Drives the real rsync binary via QProcess, fully async (never blocks the GUI
-// thread). On Unix the child is placed in its own process group so cancel()
-// can signal the whole group — otherwise an `-e ssh` child would be orphaned.
+/// Concrete SyncEngine that drives the real rsync binary via QProcess.
+///
+/// Fully asynchronous — never blocks the GUI thread. The data pipeline is:
+///   QProcess stdout → OutputParser::feed() → parsed signals → SyncEngine signals
+///   QProcess stderr → errorOutput() signal (shown in the log pane)
+///
+/// On Unix the child process is placed in its own process group via
+/// setChildProcessModifier + setpgid(). This is important because rsync with
+/// `-e ssh` spawns ssh as a grandchild — a plain QProcess::terminate() would
+/// only signal rsync, orphaning the ssh process. By signaling the whole group
+/// with `kill(-pid, SIGTERM)`, both rsync and its ssh child are cleaned up.
+/// @ingroup engine
 class RsyncProcessEngine : public SyncEngine {
     Q_OBJECT
 public:

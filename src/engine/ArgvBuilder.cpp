@@ -42,11 +42,43 @@ QString shellQuoteIfNeeded(QString s)
     s.replace(QLatin1Char('\''), QLatin1String("'\\''"));
     return QStringLiteral("'") + s + QStringLiteral("'");
 }
+
+// Tilde-expand and (on Windows runtimes) rewrite a LOCAL endpoint to the form the
+// rsync runtime expects. Remote (ssh/daemon) specs pass through untouched.
+QString preparedEndpoint(const QString &raw, RsyncCapabilities::PathStyle style)
+{
+    const QString expanded = expandLocalTilde(raw);
+    if (EndpointParser::kind(raw) != EndpointKind::Local)
+        return expanded;
+    return ArgvBuilder::toRsyncLocalPath(expanded, style);
+}
 } // namespace
 
 bool ArgvBuilder::usesSsh(const SyncJob &job)
 {
     return EndpointParser::usesSsh(job);
+}
+
+QString ArgvBuilder::toRsyncLocalPath(const QString &path, RsyncCapabilities::PathStyle style)
+{
+    if (style == RsyncCapabilities::PathStyle::Native || path.isEmpty())
+        return path;
+
+    QString p = path;
+    p.replace(QLatin1Char('\\'), QLatin1Char('/'));  // rsync wants forward slashes
+
+    // Map a drive path ("X:/rest" or bare "X:") onto the runtime's mount root.
+    if (p.size() >= 2 && p.at(0).isLetter() && p.at(1) == QLatin1Char(':')) {
+        const QChar drive = p.at(0).toLower();
+        QString rest = p.mid(2);  // after "X:"
+        if (!rest.isEmpty() && !rest.startsWith(QLatin1Char('/')))
+            rest.prepend(QLatin1Char('/'));  // "X:foo" is drive-relative
+        const QString root = (style == RsyncCapabilities::PathStyle::Cygwin)
+            ? QStringLiteral("/cygdrive/")
+            : QStringLiteral("/");
+        return root + drive + rest;
+    }
+    return p;  // already-POSIX, relative, or UNC (//server/share) — slashes normalised
 }
 
 QStringList ArgvBuilder::build(const SyncJob &job, const RsyncCapabilities &caps, bool dryRun)
@@ -88,7 +120,7 @@ QStringList ArgvBuilder::build(const SyncJob &job, const RsyncCapabilities &caps
                         QStringLiteral("-o"), QStringLiteral("StrictHostKeyChecking=accept-new"),
                         QStringLiteral("-o"), QStringLiteral("ConnectTimeout=10")};
         if (!job.sshKeyPath.isEmpty())
-            ssh << QStringLiteral("-i") << job.sshKeyPath;
+            ssh << QStringLiteral("-i") << toRsyncLocalPath(job.sshKeyPath, caps.pathStyle);
         if (job.sshPort > 0)
             ssh << QStringLiteral("-p") << QString::number(job.sshPort);
 
@@ -108,6 +140,7 @@ QStringList ArgvBuilder::build(const SyncJob &job, const RsyncCapabilities &caps
 
     args.append(job.extraArgs);
 
-    args << expandLocalTilde(job.source) << expandLocalTilde(job.destination);
+    args << preparedEndpoint(job.source, caps.pathStyle)
+         << preparedEndpoint(job.destination, caps.pathStyle);
     return args;
 }

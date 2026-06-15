@@ -1,3 +1,19 @@
+/// @file main.cpp
+/// GUI entry point for Ceres.
+///
+/// Bootstraps the Qt Quick application by:
+///   1. Setting the "Basic" style (no Material/Fusion) so we get a blank canvas
+///      that our custom Theme.qml controls entirely.
+///   2. Registering C++ model types as uncreatable QML types — they're owned by
+///      JobController and handed to QML via Q_PROPERTY, but QML needs to know
+///      their type to bind to roles and properties.
+///   3. Creating the two context-property singletons (controller + completer)
+///      and injecting them into the QML engine's root context.
+///
+/// The controller and completer live on the stack here (parent = nullptr) so
+/// they outlive the QML engine — QML pointers to them remain valid during
+/// teardown.
+
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>

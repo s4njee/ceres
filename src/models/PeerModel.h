@@ -5,7 +5,13 @@
 
 #include "core/Peer.h"
 
-// Backs the sidebar "On your network" list of discovered/manual peers.
+/// Backs the sidebar "On your network" list of discovered and manually-added peers.
+///
+/// DiscoveryService feeds peers into this model via `upsert()`. Stale peers
+/// (no beacon received within the timeout) are pruned by `removeStale()`,
+/// which is called on a periodic timer. Manually-added peers are exempt from
+/// expiry so they persist across app restarts.
+/// @ingroup models
 class PeerModel : public QAbstractListModel {
     Q_OBJECT
     Q_PROPERTY(int count READ rowCount NOTIFY countChanged)

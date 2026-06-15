@@ -1,0 +1,72 @@
+/// @defgroup core Core data & storage
+/// @brief Plain value types and persistence — the vocabulary the rest of the app speaks.
+///
+/// This module is the foundation of @c ceres_core: the data structures that
+/// describe *what* to sync and the stores that persist them. None of it depends
+/// on the GUI, the engine, or the network, which is what keeps the upper layers
+/// testable in isolation.
+///
+/// - SyncJob — the central value object: one sync job / profile.
+/// - Endpoint / EndpointParser — classify a path as Local, SSH, or daemon.
+/// - Peer — one machine seen on the LAN (discovered or manually added).
+/// - ProfileStore — read/write @c \<id\>.json job profiles.
+/// - SecretStore — daemon passwords in the OS keychain (never on disk/argv).
+
+/// @defgroup engine rsync engine
+/// @brief Turning a SyncJob into a running rsync process and parsing what comes back.
+///
+/// The engine is the portability seam. SyncEngine is an abstract base so the GUI
+/// and controller never touch @c QProcess directly; RsyncProcessEngine is the
+/// only concrete implementation today, and a future Windows engine (cwRsync /
+/// WSL) can slot in behind the same interface.
+///
+/// - SyncEngine — abstract transport-agnostic interface.
+/// - RsyncProcessEngine — drives the real @c rsync binary via @c QProcess.
+/// - ArgvBuilder — pure SyncJob → argv translation, capability-aware.
+/// - OutputParser — bytes → ChangeItem / ProgressInfo events.
+/// - BinaryLocator / RsyncCapabilities — find rsync and detect what it supports.
+/// - ChangeItem / ProgressInfo — the value types the parser emits.
+
+/// @defgroup models QML list models
+/// @brief @c QAbstractListModel adapters that feed the Qt Quick UI.
+///
+/// These are the only classes that know about Qt's model/view roles. Each wraps
+/// engine or core data and exposes it to QML. Display buffers are deliberately
+/// capped while logical totals are retained, so a million-file sync can't grow
+/// the UI's memory without bound.
+///
+/// - ChangeListModel — the live itemized change preview.
+/// - JobListModel — the saved-jobs sidebar.
+/// - PeerModel — machines discovered on the network.
+
+/// @defgroup net LAN discovery
+/// @brief Finding other Ceres machines on the local network and announcing yourself.
+///
+/// A small zero-config discovery layer over UDP multicast. Each running instance
+/// periodically multicasts a compact JSON beacon; listeners build a live, TTL'd
+/// peer list. None of it is required for syncing — it just pre-fills remote
+/// targets when you click a discovered machine.
+///
+/// - DiscoveryService — the multicast send/listen loop and peer bookkeeping.
+/// - Beacon — the on-the-wire JSON encode/decode (pure, unit-tested).
+/// - NetworkUtils — best-effort local-IP / hostname / OS detection.
+
+/// @defgroup sched Scheduling
+/// @brief Registering jobs with the OS so they run while the GUI is closed.
+///
+/// Bridges a SyncJob's schedule (interval / daily / weekly) to a native OS timer
+/// — launchd on macOS, systemd user timers on Linux — that invokes the headless
+/// @c ceres-runner binary. Unit names embed the (validated) job id, and orphaned
+/// units are pruned when a job is deleted.
+///
+/// - Scheduler — install / remove / reconcile OS scheduler units.
+
+/// @defgroup app Application layer
+/// @brief The QObject that QML talks to, plus UI-facing helpers.
+///
+/// The coordination layer. JobController is the single @c context property the
+/// QML root sees; it owns the stores, the engine, the scheduler and the models,
+/// and is built with dependency injection so tests can substitute fakes.
+///
+/// - JobController — orchestrates everything; the QML-facing API.
+/// - PathCompleter — Tab-completion of local and remote (ssh) paths.

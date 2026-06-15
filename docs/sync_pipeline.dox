@@ -1,0 +1,64 @@
+/// @page sync_pipeline The sync pipeline
+/// @tableofcontents
+///
+/// This page follows one sync from the moment the user fills in the form to the
+/// final exit code, naming the class responsible at each hop.
+///
+/// @section pipe_compose 1. Form → SyncJob
+///
+/// The QML form is a view over a SyncJob. When the user previews, saves, or runs,
+/// JobController turns the QML variant map into a SyncJob struct (and back again
+/// when loading a saved profile). Advanced options — @c excludes and @c extraArgs
+/// — round-trip through this conversion so a saved profile runs exactly as
+/// previewed. See @ref core.
+///
+/// @section pipe_argv 2. SyncJob → argv
+///
+/// ArgvBuilder translates the SyncJob into an rsync argument vector. It is pure
+/// (no side effects) and **capability-aware**: flags such as @c --info=progress2,
+/// @c --outbuf=L and @c --no-inc-recursive are only emitted when the located
+/// rsync actually supports them (see @ref portability). Endpoint classification
+/// (local / SSH / daemon) decides transport flags, SSH command quoting, and
+/// @c --protect-args. See @ref engine.
+///
+/// @section pipe_preview 3. The preview (dry run)
+///
+/// A preview is a real rsync invocation with @c --dry-run @c --itemize-changes.
+/// Its output flows through the same parsing path as a real run, populating the
+/// ChangeListModel so the user sees exactly which files would be added, updated,
+/// or deleted *before* committing. For @c --delete jobs this preview is also a
+/// safety precondition — see @ref safety.
+///
+/// @section pipe_run 4. The real run
+///
+/// On a real run, JobController computes a fingerprint of the sync-relevant fields
+/// and, for destructive (@c --delete) jobs, refuses to start unless it matches the
+/// fingerprint of the last successful preview. RsyncProcessEngine then starts the
+/// @c rsync process via @c QProcess.
+///
+/// @section pipe_parse 5. Process output → events
+///
+/// rsync emits two interleaved streams that OutputParser untangles from arbitrary
+/// byte chunks:
+///
+/// - `\n`-terminated lines — itemized changes, stats, and log messages, parsed
+///   into ChangeItem values.
+/// - `\r`-terminated lines — @c progress2 redraws, parsed into ProgressInfo
+///   (percent, rate, ETA, files remaining).
+///
+/// Because @c QProcess delivers bytes without respecting line boundaries, the
+/// parser buffers and scans for `\r` / `\n` terminators, treating `\r\n` as a
+/// single terminator (Windows compatibility). These value types are registered
+/// with @c Q_DECLARE_METATYPE so they cross queued signal/slot connections safely.
+///
+/// @section pipe_models 6. Events → models → UI
+///
+/// SyncEngine relays parsed events as signals. JobController forwards them into
+/// the ChangeListModel (capped display, logical totals retained) and progress
+/// state, which QML renders live. When a real sync finishes, the stored preview
+/// fingerprint is cleared so the next destructive run must be previewed afresh.
+///
+/// @section pipe_seealso See also
+///
+/// - @ref architecture — the static structure these steps move through.
+/// - @ref safety — the fingerprint gate and the other destructive-run guards.

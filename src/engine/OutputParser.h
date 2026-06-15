@@ -5,10 +5,21 @@
 
 #include "engine/RsyncEvents.h"
 
-// Incremental parser for rsync stdout. rsync mixes \r-redrawn progress lines
-// and \n-terminated itemize/stats lines on ONE stream, and QProcess delivers
-// arbitrary byte chunks, so feed() buffers and only emits on a real
-// terminator. Splits on both \r and \n; handles \r\n as a line terminator.
+/// Incremental parser for rsync stdout. This is trickier than it looks because
+/// rsync multiplexes two kinds of output on a single stdout stream:
+///
+///   1. `\n`-terminated lines: itemize changes, stats, and log messages
+///   2. `\r`-terminated lines: progress2 redraws (carriage return, no newline)
+///
+/// QProcess delivers data in arbitrary byte chunks (not line-aligned), so the
+/// parser buffers incoming bytes and scans for `\r` and `\n` terminators. A `\r\n`
+/// pair is treated as a single line terminator (Windows compat). A lone `\r`
+/// followed by a non-`\n` byte is a progress redraw.
+///
+/// Data flow: QProcess → feed() → handleLine()/handleProgress() → signals
+/// The signals mirror SyncEngine's contract (change/progress/stats/log) and
+/// are forwarded by RsyncProcessEngine.
+/// @ingroup engine
 class OutputParser : public QObject {
     Q_OBJECT
 public:

@@ -30,12 +30,22 @@ public:
         running = false;
         emit finished(code, crashed);
     }
+
+    void sendProgress(int percent, const QString &rate)
+    {
+        ProgressInfo info;
+        info.percent = percent;
+        info.rate = rate;
+        emit progress(info);
+    }
 };
 
 class JobControllerTest : public QObject {
     Q_OBJECT
 private slots:
     void deleteRunRequiresMatchingSuccessfulPreview();
+    void progressSpeedIsExposedAndReset();
+    void realSyncProgressSetsTransferringStatus();
 };
 
 static RsyncCapabilities fakeCaps()
@@ -95,6 +105,56 @@ void JobControllerTest::deleteRunRequiresMatchingSuccessfulPreview()
     controller.run(job);
     QCOMPARE(engine.starts, 2);
     QVERIFY(controller.status().contains(QStringLiteral("Preview this exact delete sync")));
+}
+
+void JobControllerTest::progressSpeedIsExposedAndReset()
+{
+    QTemporaryDir tmp;
+    QVERIFY(tmp.isValid());
+
+    FakeEngine engine;
+    JobController controller(fakeCaps(), &engine, ProfileStore(tmp.path()), SecretStore{},
+                             Scheduler{}, false);
+
+    QVariantMap job = {
+        {QStringLiteral("source"), QStringLiteral("/tmp/source/")},
+        {QStringLiteral("destination"), QStringLiteral("/tmp/dest/")},
+    };
+
+    QVERIFY(controller.speed().isEmpty());
+    controller.preview(job);
+    QCOMPARE(controller.percent(), 0);
+    QVERIFY(controller.speed().isEmpty());
+
+    engine.sendProgress(42, QStringLiteral("512.00kB/s"));
+    QCOMPARE(controller.percent(), 42);
+    QCOMPARE(controller.speed(), QStringLiteral("512.00kB/s"));
+
+    engine.finish();
+    controller.preview(job);
+    QCOMPARE(controller.percent(), 0);
+    QVERIFY(controller.speed().isEmpty());
+}
+
+void JobControllerTest::realSyncProgressSetsTransferringStatus()
+{
+    QTemporaryDir tmp;
+    QVERIFY(tmp.isValid());
+
+    FakeEngine engine;
+    JobController controller(fakeCaps(), &engine, ProfileStore(tmp.path()), SecretStore{},
+                             Scheduler{}, false);
+
+    QVariantMap job = {
+        {QStringLiteral("source"), QStringLiteral("/tmp/source/")},
+        {QStringLiteral("destination"), QStringLiteral("/tmp/dest/")},
+    };
+
+    controller.run(job);
+    QCOMPARE(controller.status(), QStringLiteral("Scanning…"));
+
+    engine.sendProgress(7, QStringLiteral("1.25MB/s"));
+    QCOMPARE(controller.status(), QStringLiteral("Transferring…"));
 }
 
 QTEST_MAIN(JobControllerTest)

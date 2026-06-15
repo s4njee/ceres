@@ -18,8 +18,28 @@
 class DiscoveryService;
 class SyncEngine;
 
-// The single object QML talks to. Owns the engine + change model, exposes a
-// dry-run preview, and surfaces progress / log / status as bindable properties.
+/// The central coordinator between the QML UI and the C++ backend.
+///
+/// This is the single QObject that QML talks to — it's injected as a context
+/// property named "controller" in main.cpp. It owns:
+///   - The SyncEngine (runs rsync via QProcess)
+///   - The ChangeListModel (preview / itemized changes list)
+///   - The ProfileStore + SecretStore (persistence layer)
+///   - The JobListModel (sidebar job list)
+///   - The PeerModel + DiscoveryService (LAN peer discovery)
+///   - The Scheduler (OS-level timers for background syncs)
+///
+/// **Dependency injection**: The two-argument constructor accepts all
+/// dependencies (engine, stores, scheduler, capabilities) so unit tests can
+/// inject mocks/stubs without needing a real rsync binary or filesystem.
+/// The default constructor is used by the real app and auto-locates rsync.
+///
+/// **Destructive-run safety gate**: When `deleteExtraneous` is enabled,
+/// the controller requires a matching preview (dry-run) fingerprint before
+/// allowing a real sync. This prevents accidental mass-deletions if the user
+/// changes source/destination after previewing. The fingerprint is a SHA-256
+/// hash of the job's sync-relevant fields (see `syncFingerprint()`).
+/// @ingroup app
 class JobController : public QObject {
     Q_OBJECT
     Q_PROPERTY(ChangeListModel *changes READ changes CONSTANT)
@@ -28,6 +48,7 @@ class JobController : public QObject {
     Q_PROPERTY(bool usingOpenRsync READ usingOpenRsync CONSTANT)
     Q_PROPERTY(QString log READ log NOTIFY logChanged)
     Q_PROPERTY(int percent READ percent NOTIFY progressChanged)
+    Q_PROPERTY(QString speed READ speed NOTIFY progressChanged)
     Q_PROPERTY(QString status READ status NOTIFY statusChanged)
     Q_PROPERTY(QString hostName READ hostName CONSTANT)
     Q_PROPERTY(QString hostAddress READ hostAddress NOTIFY hostAddressChanged)
@@ -36,7 +57,13 @@ class JobController : public QObject {
     Q_PROPERTY(PeerModel *peers READ peers CONSTANT)
     Q_PROPERTY(bool discoverable READ discoverable WRITE setDiscoverable NOTIFY discoverableChanged)
 public:
+    /// Default constructor: auto-locates rsync and starts network services.
+    /// Used by the real GUI application.
     explicit JobController(QObject *parent = nullptr);
+
+    /// Test-friendly constructor: accepts all dependencies so tests can inject
+    /// a mock SyncEngine, in-memory stores, etc. Set startNetworkServices=false
+    /// to skip UDP beacon setup in headless test environments.
     JobController(RsyncCapabilities caps, SyncEngine *engine, ProfileStore store,
                   SecretStore secrets, Scheduler scheduler, bool startNetworkServices,
                   QObject *parent = nullptr);
@@ -50,17 +77,24 @@ public:
     bool running() const { return m_running; }
     bool usingOpenRsync() const { return m_caps.isOpenRsync; }
     QString rsyncSummary() const;
+
+    /// Called from QML to classify a typed path as "local", "ssh", or "daemon".
+    /// Drives conditional visibility of SSH key / daemon password fields.
     Q_INVOKABLE QString endpointKind(const QString &text) const;
     QString log() const { return m_logLines.join(QLatin1Char('\n')); }
     int percent() const { return m_percent; }
+    QString speed() const { return m_speed; }
     QString status() const { return m_status; }
     QString hostName() const { return m_hostName; }
     QString hostAddress() const { return m_hostAddress; }
 
-    // The job map carries: name, source, destination, archive, compress,
-    // deleteExtras, checksum, sshKey, sshPort, daemonPassword.
-    Q_INVOKABLE void preview(const QVariantMap &job);  // dry-run
-    Q_INVOKABLE void run(const QVariantMap &job);      // real sync (UI gates deletes)
+    /// Runs a dry-run (--dry-run) to populate the preview change list.
+    /// The job map is a QVariantMap built by QML's jobMap() function.
+    Q_INVOKABLE void preview(const QVariantMap &job);
+
+    /// Runs a real sync. For delete-enabled jobs, a matching preview fingerprint
+    /// is required first (the destructive-run safety gate).
+    Q_INVOKABLE void run(const QVariantMap &job);
     Q_INVOKABLE void cancel();
 
     // Profile management (sidebar jobs).
@@ -80,14 +114,15 @@ signals:
     void currentChanged();
     void discoverableChanged();
     void hostAddressChanged();
-    // Pushes a job's fields into the editor (new job -> all blank, archive on).
+    /// Pushes a job's fields into the QML editor. Emitted on loadJob() (with
+    /// the saved job's fields) and newJob() (with blank defaults, archive=on).
     void jobLoaded(const QVariantMap &job);
 
 private:
     void startJob(const SyncJob &job, bool dryRun);
-    SyncJob jobFromMap(const QVariantMap &map) const;
-    QVariantMap mapFromJob(const SyncJob &job) const;
-    QByteArray syncFingerprint(const SyncJob &job) const;
+    SyncJob jobFromMap(const QVariantMap &map) const;  ///< QML variant map → SyncJob struct
+    QVariantMap mapFromJob(const SyncJob &job) const;  ///< SyncJob struct → QML variant map
+    QByteArray syncFingerprint(const SyncJob &job) const; ///< SHA-256 of sync-relevant fields
     void setRunning(bool running);
     void setStatus(const QString &status);
     void appendLog(const QString &line);
@@ -106,6 +141,7 @@ private:
 
     QStringList m_logLines;
     QString m_status;
+    QString m_speed;
     QString m_hostName;
     QString m_hostAddress;
     int m_percent = 0;

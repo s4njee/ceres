@@ -1,11 +1,36 @@
+// Main.qml — The top-level application window and primary UI for Ceres.
+//
+// Layout structure (from outer to inner):
+//   ┌─────────────────────────────────────────────┐
+//   │ Top strip: app name + host IP pill           │
+//   ├──────────┬──────────────────────────────────┤
+//   │ Sidebar  │ Main editor panel                │
+//   │ (210px)  │  - Job name + Save button        │
+//   │          │  - From/To path fields + Browse  │
+//   │ JOBS     │  - Option chips (archive, etc.)  │
+//   │ list     │  - Schedule selector             │
+//   │          │  - Preview / Run / Cancel buttons │
+//   │ NETWORK  │  - SplitView: preview + log      │
+//   │ peers    │  - Progress bar + status          │
+//   └──────────┴──────────────────────────────────┘
+//
+// Data flows through the `controller` context property (a C++ JobController).
+// The QML `jobMap()` function gathers the editor's current state into a
+// QVariantMap and passes it to controller.preview() / controller.run() /
+// controller.saveJob(). Controller signals (onJobLoaded, onRemoteCompleted)
+// push state back into the editor.
+
 import QtQuick
 import QtQuick.Controls.Basic
 import QtQuick.Layouts
+import QtQuick.Dialogs
 
 ApplicationWindow {
     id: root
     width: 1000
     height: 680
+    minimumWidth: 820
+    minimumHeight: 520
     visible: true
     title: qsTr("Ceres")
     color: Theme.bgPrimary
@@ -18,6 +43,14 @@ ApplicationWindow {
     property string scheduleKind: "manual"
     property int weekday: 0
 
+    // Advanced options (supported in backend/argv/fingerprint/storage but not yet
+    // exposed in the form UI; round-tripped here so loads/previews/runs/saves
+    // and the --delete safety gate preserve them for jobs that have them).
+    property var excludes: []
+    property var extraArgs: []
+    readonly property int completionChoiceLimit: 12
+    readonly property int remoteBrowseLimit: 200
+
     function pad(n) { return (n < 10 ? "0" : "") + n }
     function endpointKind(p) { return controller.endpointKind(p || "") }
     function looksDaemon(p) { return endpointKind(p) === "daemon" }
@@ -28,16 +61,73 @@ ApplicationWindow {
     }
     function looksSsh(p) { return endpointKind(p) === "ssh" }
 
+    function setPathField(field, path) {
+        field.text = path
+        field.cursorPosition = path.length
+    }
+
+    function showCompletionChoices(field, choices) {
+        if (choices && choices.length > 1)
+            completionPopup.showFor(field, choices)
+        else if (completionPopup.targetField === field)
+            completionPopup.close()
+    }
+
+    function browsePath(field) {
+        if (looksSsh(field.text)) {
+            remoteBrowser.showFor(field)
+        } else if (!looksDaemon(field.text)) {
+            if (field === fromField)
+                fromFolderDialog.open()
+            else
+                toFolderDialog.open()
+        }
+    }
+
+    function handleCompletionKey(field, event) {
+        if (completionPopup.visible && completionPopup.targetField === field) {
+            if (event.key === Qt.Key_Down) {
+                completionPopup.moveSelection(1)
+                event.accepted = true
+                return
+            }
+            if (event.key === Qt.Key_Up) {
+                completionPopup.moveSelection(-1)
+                event.accepted = true
+                return
+            }
+            if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter || event.key === Qt.Key_Tab) {
+                completionPopup.acceptSelection()
+                event.accepted = true
+                return
+            }
+            if (event.key === Qt.Key_Escape) {
+                completionPopup.close()
+                event.accepted = true
+                return
+            }
+        }
+
+        if (event.key === Qt.Key_Tab) {
+            root.completePath(field)
+            event.accepted = true
+        }
+    }
+
     // Tab-complete a path field: local paths complete synchronously; remote
     // (user@host:) targets complete over ssh and arrive via onRemoteCompleted.
     function completePath(field) {
         var t = field.text
         if (t.length === 0 || looksDaemon(t)) return
         if (looksSsh(t)) {
-            completer.completeRemote(t, sshKeyField.text, parseInt(sshPortField.text) || 0)
+            completer.completeRemote(t, sshKeyField.text, parseInt(sshPortField.text) || 0,
+                                     root.completionChoiceLimit)
         } else {
+            var choices = completer.localChoices(t, root.completionChoiceLimit)
             var c = completer.completeLocal(t)
-            if (c.length > 0 && c !== t) { field.text = c; field.cursorPosition = c.length }
+            if (c.length > 0 && c !== t)
+                root.setPathField(field, c)
+            root.showCompletionChoices(field, choices)
         }
     }
 
@@ -54,6 +144,8 @@ ApplicationWindow {
             deleteExtras: root.deleteOn,
             checksum: root.checksumOn,
             maxDelete: parseInt(maxDeleteField.text) || 0,
+            excludes: root.excludes,
+            extraArgs: root.extraArgs,
             sshKey: sshKeyField.text,
             sshPort: parseInt(sshPortField.text) || 0,
             daemonPassword: daemonPwField.text,
@@ -62,6 +154,30 @@ ApplicationWindow {
             atHour: parseInt(timeField.text.split(":")[0]) || 0,
             atMinute: parseInt(timeField.text.split(":")[1]) || 0,
             weekday: root.weekday
+        }
+    }
+
+    // Basic keyboard shortcuts (Ctrl maps to Cmd on macOS).
+    Shortcut {
+        sequence: "Ctrl+S"
+        onActivated: controller.saveJob(root.jobMap())
+    }
+    Shortcut {
+        sequence: "Ctrl+Return"
+        onActivated: {
+            if (!controller.running && fromField.text.length > 0 && toField.text.length > 0)
+                controller.preview(root.jobMap())
+        }
+    }
+    Shortcut {
+        sequence: "Ctrl+Shift+Return"
+        onActivated: {
+            if (!controller.running && fromField.text.length > 0 && toField.text.length > 0) {
+                if (root.deleteOn)
+                    root.confirmOpen = true
+                else
+                    controller.run(root.jobMap())
+            }
         }
     }
 
@@ -83,16 +199,380 @@ ApplicationWindow {
             intervalField.text = String(job.intervalMinutes || 60)
             timeField.text = pad(job.atHour) + ":" + pad(job.atMinute)
             root.weekday = job.weekday || 0
+            root.excludes = job.excludes || []
+            root.extraArgs = job.extraArgs || []
             controller.changes.clear()
         }
     }
 
     Connections {
         target: completer
-        function onRemoteCompleted(input, completion) {
-            if (completion.length === 0) return
-            if (fromField.text === input) { fromField.text = completion; fromField.cursorPosition = completion.length }
-            else if (toField.text === input) { toField.text = completion; toField.cursorPosition = completion.length }
+        function onRemoteCompleted(input, completion, choices) {
+            var field = null
+            if (fromField.text === input)
+                field = fromField
+            else if (toField.text === input)
+                field = toField
+            if (!field)
+                return
+
+            if (completion.length > 0 && completion !== input)
+                root.setPathField(field, completion)
+            root.showCompletionChoices(field, choices || [])
+        }
+
+        function onRemoteBrowseCompleted(input, current, directories, error) {
+            remoteBrowser.complete(input, current, directories || [], error || "")
+        }
+    }
+
+    FolderDialog {
+        id: fromFolderDialog
+        title: "Select Source Folder"
+        onAccepted: {
+            var p = selectedFolder.toString();
+            if (p.startsWith("file://")) p = p.substring(7);
+            fromField.text = p;
+            fromField.cursorPosition = fromField.text.length;
+        }
+    }
+
+    FolderDialog {
+        id: toFolderDialog
+        title: "Select Destination Folder"
+        onAccepted: {
+            var p = selectedFolder.toString();
+            if (p.startsWith("file://")) p = p.substring(7);
+            toField.text = p;
+            toField.cursorPosition = toField.text.length;
+        }
+    }
+
+    Popup {
+        id: completionPopup
+
+        property var targetField: null
+        property int selectedIndex: 0
+
+        function showFor(field, choices) {
+            targetField = field
+            selectedIndex = 0
+            completionModel.clear()
+            for (var i = 0; i < choices.length; ++i)
+                completionModel.append({ value: choices[i] })
+
+            width = Math.max(220, field.width)
+            var p = field.mapToItem(root.contentItem, 0, field.height + 2)
+            x = Math.max(0, Math.min(root.width - width, p.x))
+            y = Math.max(0, Math.min(root.height - implicitHeight - 8, p.y))
+            open()
+        }
+
+        function moveSelection(delta) {
+            if (completionModel.count === 0)
+                return
+            selectedIndex = Math.max(0, Math.min(completionModel.count - 1, selectedIndex + delta))
+            completionList.positionViewAtIndex(selectedIndex, ListView.Contain)
+        }
+
+        function acceptSelection() {
+            if (!targetField || completionModel.count === 0)
+                return
+            var value = completionModel.get(selectedIndex).value
+            root.setPathField(targetField, value)
+            close()
+            targetField.forceActiveFocus()
+        }
+
+        padding: 0
+        modal: false
+        focus: false
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutsideParent
+        implicitHeight: Math.min(completionList.contentHeight, 180)
+        background: Rectangle {
+            color: Theme.bgSecondary
+            border.width: 1
+            border.color: Theme.borderStrong
+            radius: Theme.radius
+        }
+
+        ListModel { id: completionModel }
+
+        contentItem: ListView {
+            id: completionList
+            width: completionPopup.width
+            implicitHeight: Math.min(contentHeight, 180)
+            clip: true
+            model: completionModel
+            currentIndex: completionPopup.selectedIndex
+
+            delegate: Rectangle {
+                required property string value
+                required property int index
+
+                width: completionList.width
+                height: 28
+                color: index === completionPopup.selectedIndex ? Theme.bgTertiary : "transparent"
+
+                Text {
+                    anchors.fill: parent
+                    anchors.leftMargin: 8
+                    anchors.rightMargin: 8
+                    verticalAlignment: Text.AlignVCenter
+                    text: value
+                    color: Theme.textPrimary
+                    font.family: Theme.mono
+                    font.pixelSize: 12
+                    elide: Text.ElideMiddle
+                }
+
+                MouseArea {
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onEntered: completionPopup.selectedIndex = index
+                    onClicked: completionPopup.acceptSelection()
+                }
+            }
+        }
+    }
+
+    Popup {
+        id: remoteBrowser
+
+        property var targetField: null
+        property string requestInput: ""
+        property string currentPath: ""
+        property string message: ""
+        property bool loading: false
+        property int selectedIndex: -1
+
+        function showFor(field) {
+            targetField = field
+            open()
+            load(field.text)
+        }
+
+        function load(path) {
+            requestInput = path
+            currentPath = path
+            message = "Loading..."
+            loading = true
+            selectedIndex = -1
+            remoteDirModel.clear()
+            completer.browseRemote(path, sshKeyField.text, parseInt(sshPortField.text) || 0,
+                                   root.remoteBrowseLimit)
+        }
+
+        function complete(input, current, directories, error) {
+            if (!visible || input !== requestInput)
+                return
+            loading = false
+            currentPath = current.length > 0 ? current : input
+            remoteDirModel.clear()
+            for (var i = 0; i < directories.length; ++i)
+                remoteDirModel.append({ value: directories[i], label: displayName(directories[i]) })
+            selectedIndex = remoteDirModel.count > 0 ? 0 : -1
+            message = error.length > 0 ? error : (remoteDirModel.count === 0 ? "No folders" : "")
+            remoteDirList.forceActiveFocus()
+        }
+
+        function displayName(path) {
+            var s = path
+            if (s.endsWith("/"))
+                s = s.substring(0, s.length - 1)
+            var slash = s.lastIndexOf("/")
+            return (slash >= 0 ? s.substring(slash + 1) : s) + "/"
+        }
+
+        function selectedPath() {
+            if (selectedIndex < 0 || selectedIndex >= remoteDirModel.count)
+                return currentPath
+            return remoteDirModel.get(selectedIndex).value
+        }
+
+        function chooseSelectedOrCurrent() {
+            if (!targetField)
+                return
+            root.setPathField(targetField, selectedPath())
+            close()
+            targetField.forceActiveFocus()
+        }
+
+        function openSelected() {
+            if (selectedIndex < 0 || selectedIndex >= remoteDirModel.count)
+                return
+            load(remoteDirModel.get(selectedIndex).value)
+        }
+
+        function parentPath(path) {
+            var colon = path.indexOf(":")
+            if (colon < 0)
+                return path
+            var target = path.substring(0, colon + 1)
+            var p = path.substring(colon + 1)
+            if (p.length === 0 || p === "/")
+                return path
+            if (p.endsWith("/") && p.length > 1)
+                p = p.substring(0, p.length - 1)
+            var slash = p.lastIndexOf("/")
+            if (slash <= 0)
+                return target + "/"
+            return target + p.substring(0, slash + 1)
+        }
+
+        function moveSelection(delta) {
+            if (remoteDirModel.count === 0)
+                return
+            selectedIndex = Math.max(0, Math.min(remoteDirModel.count - 1, selectedIndex + delta))
+            remoteDirList.positionViewAtIndex(selectedIndex, ListView.Contain)
+        }
+
+        width: Math.min(root.width - 48, 560)
+        height: Math.min(root.height - 64, 430)
+        x: Math.max(24, (root.width - width) / 2)
+        y: Math.max(24, (root.height - height) / 2)
+        modal: true
+        focus: true
+        closePolicy: Popup.CloseOnEscape
+        padding: 0
+        background: Rectangle {
+            color: Theme.bgSecondary
+            border.width: 1
+            border.color: Theme.borderStrong
+            radius: Theme.radius
+        }
+
+        ListModel { id: remoteDirModel }
+
+        contentItem: ColumnLayout {
+            spacing: 10
+
+            Text {
+                Layout.fillWidth: true
+                Layout.leftMargin: 14
+                Layout.rightMargin: 14
+                Layout.topMargin: 12
+                text: "Remote folder"
+                color: Theme.textPrimary
+                font.pixelSize: 15
+            }
+
+            Text {
+                Layout.fillWidth: true
+                Layout.leftMargin: 14
+                Layout.rightMargin: 14
+                text: remoteBrowser.currentPath
+                color: Theme.textTertiary
+                font.family: Theme.mono
+                font.pixelSize: 11
+                elide: Text.ElideMiddle
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                Layout.leftMargin: 14
+                Layout.rightMargin: 14
+                spacing: 8
+
+                FlatButton {
+                    label: "Up"
+                    active: !remoteBrowser.loading
+                    onClicked: remoteBrowser.load(remoteBrowser.parentPath(remoteBrowser.currentPath))
+                }
+                Text {
+                    Layout.fillWidth: true
+                    text: remoteBrowser.message
+                    color: Theme.textTertiary
+                    font.pixelSize: 11
+                    elide: Text.ElideRight
+                }
+            }
+
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                Layout.leftMargin: 14
+                Layout.rightMargin: 14
+                color: Theme.bgPrimary
+                radius: Theme.radius
+                border.width: 1
+                border.color: Theme.border
+
+                ListView {
+                    id: remoteDirList
+                    anchors.fill: parent
+                    anchors.margins: 4
+                    clip: true
+                    model: remoteDirModel
+                    currentIndex: remoteBrowser.selectedIndex
+                    Keys.onPressed: function(event) {
+                        if (event.key === Qt.Key_Down) {
+                            remoteBrowser.moveSelection(1)
+                            event.accepted = true
+                        } else if (event.key === Qt.Key_Up) {
+                            remoteBrowser.moveSelection(-1)
+                            event.accepted = true
+                        } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+                            remoteBrowser.openSelected()
+                            event.accepted = true
+                        }
+                    }
+
+                    delegate: Rectangle {
+                        required property string value
+                        required property string label
+                        required property int index
+
+                        width: remoteDirList.width
+                        height: 28
+                        color: index === remoteBrowser.selectedIndex ? Theme.bgTertiary : "transparent"
+
+                        Text {
+                            anchors.fill: parent
+                            anchors.leftMargin: 8
+                            anchors.rightMargin: 8
+                            verticalAlignment: Text.AlignVCenter
+                            text: label
+                            color: Theme.textPrimary
+                            font.family: Theme.mono
+                            font.pixelSize: 12
+                            elide: Text.ElideMiddle
+                        }
+
+                        MouseArea {
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onEntered: remoteBrowser.selectedIndex = index
+                            onClicked: remoteBrowser.selectedIndex = index
+                            onDoubleClicked: remoteBrowser.openSelected()
+                        }
+                    }
+                }
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                Layout.leftMargin: 14
+                Layout.rightMargin: 14
+                Layout.bottomMargin: 12
+                spacing: 8
+
+                Item { Layout.fillWidth: true }
+                FlatButton { label: "Cancel"; onClicked: remoteBrowser.close() }
+                FlatButton {
+                    label: "Open"
+                    active: remoteBrowser.selectedIndex >= 0 && !remoteBrowser.loading
+                    onClicked: remoteBrowser.openSelected()
+                }
+                FlatButton {
+                    label: "Choose"
+                    primary: true
+                    active: !remoteBrowser.loading
+                    onClicked: remoteBrowser.chooseSelectedOrCurrent()
+                }
+            }
         }
     }
 
@@ -166,7 +646,7 @@ ApplicationWindow {
                         Text {
                             anchors.centerIn: parent
                             visible: controller.jobs.count === 0
-                            text: "No saved jobs yet"
+                            text: "Ø  No saved jobs yet"
                             color: Theme.textTertiary
                             font.pixelSize: 12
                         }
@@ -178,6 +658,14 @@ ApplicationWindow {
                             color: (id === controller.currentId) ? Theme.bgTertiary : "transparent"
                             border.width: (id === controller.currentId) ? 1 : 0
                             border.color: Theme.borderStrong
+
+                            Rectangle {
+                                width: 3
+                                height: parent.height
+                                radius: 1.5
+                                color: Theme.accent
+                                visible: id === controller.currentId
+                            }
 
                             MouseArea {
                                 anchors.fill: parent
@@ -200,6 +688,8 @@ ApplicationWindow {
                                     implicitWidth: 20
                                     implicitHeight: 20
                                     Layout.alignment: Qt.AlignVCenter
+                                    Accessible.role: Accessible.Button
+                                    Accessible.name: "Delete job"
                                     Text { anchors.centerIn: parent; text: "×"; color: Theme.textTertiary; font.pixelSize: 15 }
                                     MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: controller.deleteJob(id) }
                                 }
@@ -247,7 +737,7 @@ ApplicationWindow {
                             anchors.horizontalCenter: parent.horizontalCenter
                             y: 6
                             visible: controller.peers.count === 0
-                            text: "No machines found"
+                            text: "Ø  No machines found"
                             color: Theme.textTertiary
                             font.pixelSize: 12
                         }
@@ -351,22 +841,42 @@ ApplicationWindow {
                     Layout.fillWidth: true
 
                     Text { text: "From"; color: Theme.textSecondary; font.pixelSize: 12 }
-                    Field {
-                        id: fromField
+                    RowLayout {
                         Layout.fillWidth: true
-                        placeholderText: qsTr("local path, user@host:/path, or rsync://host/module")
-                        Keys.onPressed: function(event) {
-                            if (event.key === Qt.Key_Tab) { root.completePath(fromField); event.accepted = true }
+                        spacing: 8
+                        Field {
+                            id: fromField
+                            Layout.fillWidth: true
+                            placeholderText: qsTr("local path, user@host:/path, or rsync://host/module")
+                            Keys.onPressed: function(event) {
+                                root.handleCompletionKey(fromField, event)
+                            }
+                            onTextEdited: completionPopup.close()
+                        }
+                        FlatButton {
+                            label: "Browse"
+                            visible: !looksDaemon(fromField.text)
+                            onClicked: root.browsePath(fromField)
                         }
                     }
 
                     Text { text: "To"; color: Theme.textSecondary; font.pixelSize: 12 }
-                    Field {
-                        id: toField
+                    RowLayout {
                         Layout.fillWidth: true
-                        placeholderText: qsTr("local path, user@host:/path, or rsync://host/module")
-                        Keys.onPressed: function(event) {
-                            if (event.key === Qt.Key_Tab) { root.completePath(toField); event.accepted = true }
+                        spacing: 8
+                        Field {
+                            id: toField
+                            Layout.fillWidth: true
+                            placeholderText: qsTr("local path, user@host:/path, or rsync://host/module")
+                            Keys.onPressed: function(event) {
+                                root.handleCompletionKey(toField, event)
+                            }
+                            onTextEdited: completionPopup.close()
+                        }
+                        FlatButton {
+                            label: "Browse"
+                            visible: !looksDaemon(toField.text)
+                            onClicked: root.browsePath(toField)
                         }
                     }
                 }
@@ -374,10 +884,10 @@ ApplicationWindow {
                 Flow {
                     Layout.fillWidth: true
                     spacing: 6
-                    Chip { label: "archive"; active: root.archiveOn; onToggled: root.archiveOn = !root.archiveOn }
-                    Chip { label: "compress"; active: root.compressOn; onToggled: root.compressOn = !root.compressOn }
-                    Chip { label: "delete extras"; warn: true; active: root.deleteOn; onToggled: root.deleteOn = !root.deleteOn }
-                    Chip { label: "checksum"; active: root.checksumOn; onToggled: root.checksumOn = !root.checksumOn }
+                    Chip { label: "archive"; active: root.archiveOn; onToggled: root.archiveOn = !root.archiveOn; tooltip: "Preserves permissions, times, and symbolic links (-a)" }
+                    Chip { label: "compress"; active: root.compressOn; onToggled: root.compressOn = !root.compressOn; tooltip: "Compresses file data during the transfer (-z)" }
+                    Chip { label: "delete extras"; warn: true; active: root.deleteOn; onToggled: root.deleteOn = !root.deleteOn; tooltip: "Deletes files in destination not present in source (--delete)" }
+                    Chip { label: "checksum"; active: root.checksumOn; onToggled: root.checksumOn = !root.checksumOn; tooltip: "Skips files based on strict checksums rather than mod-time (-c)" }
                 }
 
                 RowLayout {
@@ -417,7 +927,7 @@ ApplicationWindow {
                             Layout.preferredWidth: 64
                             placeholderText: "22"
                             inputMethodHints: Qt.ImhDigitsOnly
-                            validator: IntValidator { bottom: 1; top: 65535 }
+                            validator: IntValidator { bottom: 0; top: 65535 }
                         }
                     }
                     RowLayout {
@@ -646,6 +1156,13 @@ ApplicationWindow {
                             width: parent.width * Math.max(0, Math.min(100, controller.percent)) / 100
                             color: Theme.accent
                         }
+                    }
+                    Text {
+                        visible: controller.running && controller.speed.length > 0
+                        text: controller.speed
+                        color: Theme.textSecondary
+                        font.family: Theme.mono
+                        font.pixelSize: 12
                     }
                     Text { text: controller.status; color: Theme.textSecondary; font.pixelSize: 12 }
                 }

@@ -1,3 +1,18 @@
+/// @file runner_main.cpp
+/// Headless CLI runner for scheduled sync jobs.
+///
+/// This is the binary that the OS scheduler (launchd/systemd) invokes:
+///   `ceres-runner --job <id>`
+///
+/// It reads the same JSON profile files the GUI writes (via ProfileStore),
+/// locates rsync, and runs a real (non-dry-run) sync. If the job has been
+/// deleted since the schedule was registered, it self-heals by unregistering
+/// its own OS scheduler unit so the orphaned timer stops firing.
+///
+/// Daemon passwords are never stored in profile JSON — they're retrieved from
+/// the OS keychain (SecretStore) at runtime only if the destination is a
+/// daemon-style endpoint.
+
 #include <QCoreApplication>
 #include <QTextStream>
 
@@ -8,10 +23,6 @@
 #include "engine/BinaryLocator.h"
 #include "engine/RsyncProcessEngine.h"
 #include "sched/Scheduler.h"
-
-// Headless runner for a saved job — the entry point the OS scheduler invokes:
-//   ceres-runner --job <id>
-// Reads the same profiles the GUI writes and runs a real (non-dry-run) sync.
 int main(int argc, char *argv[])
 {
     QCoreApplication app(argc, argv);

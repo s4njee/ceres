@@ -29,6 +29,12 @@ private:
         c.isOpenRsync = true;
         return c;
     }
+    RsyncCapabilities cygwin() const  // a modern Windows (Cygwin) rsync
+    {
+        RsyncCapabilities c = modern();
+        c.pathStyle = RsyncCapabilities::PathStyle::Cygwin;
+        return c;
+    }
 
 private slots:
     void modernRsyncGetsFullFlagSet();
@@ -44,6 +50,9 @@ private slots:
     void daemonTargetHasNoSsh();
     void maxDeleteCap();
     void expandsLocalTilde();
+    void convertsWindowsLocalPaths();
+    void windowsBuildConvertsLocalEndpoints();
+    void windowsConvertsSshKeyPath();
 };
 
 void ArgvBuilderTest::modernRsyncGetsFullFlagSet()
@@ -247,6 +256,60 @@ void ArgvBuilderTest::expandsLocalTilde()
     remote.source = QStringLiteral("/tmp/s/");
     remote.destination = QStringLiteral("host:~/backup/");
     QCOMPARE(ArgvBuilder::build(remote, modern(), false).last(), QStringLiteral("host:~/backup/"));
+}
+
+void ArgvBuilderTest::convertsWindowsLocalPaths()
+{
+    using PS = RsyncCapabilities::PathStyle;
+
+    // Native passes through untouched (mac/Linux paths are never rewritten).
+    QCOMPARE(ArgvBuilder::toRsyncLocalPath(QStringLiteral("/tmp/x"), PS::Native),
+             QStringLiteral("/tmp/x"));
+    QCOMPARE(ArgvBuilder::toRsyncLocalPath(QStringLiteral("C:\\Users\\me"), PS::Native),
+             QStringLiteral("C:\\Users\\me"));
+
+    // Cygwin: drive maps to /cygdrive/<letter>/, both slash styles, drive lowercased.
+    QCOMPARE(ArgvBuilder::toRsyncLocalPath(QStringLiteral("C:\\Users\\me"), PS::Cygwin),
+             QStringLiteral("/cygdrive/c/Users/me"));
+    QCOMPARE(ArgvBuilder::toRsyncLocalPath(QStringLiteral("C:/Users/me"), PS::Cygwin),
+             QStringLiteral("/cygdrive/c/Users/me"));
+    QCOMPARE(ArgvBuilder::toRsyncLocalPath(QStringLiteral("D:\\data"), PS::Cygwin),
+             QStringLiteral("/cygdrive/d/data"));
+    QCOMPARE(ArgvBuilder::toRsyncLocalPath(QStringLiteral("C:"), PS::Cygwin),
+             QStringLiteral("/cygdrive/c"));
+
+    // MSYS2: drive maps to /<letter>/.
+    QCOMPARE(ArgvBuilder::toRsyncLocalPath(QStringLiteral("C:\\Users\\me"), PS::Msys),
+             QStringLiteral("/c/Users/me"));
+
+    // Non-drive paths only get their slashes normalised.
+    QCOMPARE(ArgvBuilder::toRsyncLocalPath(QStringLiteral("/already/posix"), PS::Cygwin),
+             QStringLiteral("/already/posix"));
+    QCOMPARE(ArgvBuilder::toRsyncLocalPath(QStringLiteral("\\\\server\\share"), PS::Cygwin),
+             QStringLiteral("//server/share"));
+}
+
+void ArgvBuilderTest::windowsBuildConvertsLocalEndpoints()
+{
+    SyncJob job;
+    job.source = QStringLiteral("C:\\src");
+    job.destination = QStringLiteral("user@host:/backup");  // remote: must stay raw
+
+    const QStringList args = ArgvBuilder::build(job, cygwin(), false);
+    QCOMPARE(args.at(args.size() - 2), QStringLiteral("/cygdrive/c/src"));
+    QCOMPARE(args.last(), QStringLiteral("user@host:/backup"));
+}
+
+void ArgvBuilderTest::windowsConvertsSshKeyPath()
+{
+    SyncJob job;
+    job.source = QStringLiteral("C:\\src");
+    job.destination = QStringLiteral("user@host:/backup");
+    job.sshKeyPath = QStringLiteral("C:\\Users\\me\\.ssh\\id_ed25519");
+
+    const QStringList args = ArgvBuilder::build(job, cygwin(), false);
+    const QString ssh = args.at(args.indexOf(QStringLiteral("-e")) + 1);
+    QVERIFY(ssh.contains(QStringLiteral("-i /cygdrive/c/Users/me/.ssh/id_ed25519")));
 }
 
 QTEST_MAIN(ArgvBuilderTest)

@@ -2,11 +2,18 @@
 
 #include <QString>
 
-// Stores per-job rsync daemon passwords in the OS keychain instead of the
-// profile JSON. macOS: the login keychain via `security` (added with `-A` so
-// both the GUI and the separate ceres-runner binary can read it on an unsigned
-// build — M6 signing will scope this to a keychain access group). Linux:
-// libsecret via `secret-tool`. Other platforms: no-op.
+/// Stores per-job rsync daemon passwords in the OS keychain instead of the
+/// profile JSON, so secrets never appear in plaintext on disk.
+///
+/// Platform implementations:
+///   macOS  — direct Security.framework Keychain API calls (not `security`
+///            CLI, so the password never appears in argv / `ps` output).
+///   Linux  — libsecret via `secret-tool` (a follow-up can use the C API).
+///   Other  — no-op; daemon passwords are session-only for that run.
+///
+/// The key for each secret is the job's stable UUID, making cleanup on
+/// job deletion straightforward via `remove(id)`.
+/// @ingroup core
 class SecretStore {
 public:
     bool set(const QString &id, const QString &secret) const;

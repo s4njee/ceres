@@ -1,0 +1,55 @@
+/// @page portability Portability & platform seams
+/// @tableofcontents
+///
+/// Ceres targets macOS and Linux from one codebase today, with a deliberate seam
+/// for a future Windows engine. The platform differences are concentrated behind a
+/// few abstractions rather than sprinkled through the code with @c \#ifdef.
+///
+/// @section port_engine The SyncEngine seam
+///
+/// SyncEngine is an abstract @c QObject interface for "run a sync and emit
+/// progress/change/finished signals". RsyncProcessEngine implements it with
+/// @c QProcess and the real rsync binary. Nothing above the engine (controller,
+/// models, QML) knows how a sync is executed, so a Windows engine backed by
+/// cwRsync or WSL can be added as a second implementation without touching the
+/// upper layers. See @ref engine.
+///
+/// @section port_caps rsync capability detection
+///
+/// The biggest real-world portability hazard is rsync itself. macOS now ships
+/// **openrsync** (2.6.9-compatible), which lacks @c --info=progress2, @c --outbuf
+/// and @c --no-inc-recursive. Rather than assume a GNU rsync, BinaryLocator probes
+/// the located binary and records a RsyncCapabilities struct; ArgvBuilder consults
+/// it and emits only supported flags. The result degrades gracefully — on
+/// openrsync you still get the itemized preview, just no live progress bar — and a
+/// user can install GNU rsync (@c "brew install rsync") to light the full
+/// experience back up. See @ref engine and @ref safety.
+///
+/// @section port_secrets Keychain vs libsecret
+///
+/// Secret storage is abstracted by SecretStore, which uses the macOS Keychain
+/// Services API on Apple platforms and @c secret-tool (libsecret) on Linux. Both
+/// back ends keep the secret off the process command line. See @ref core and the
+/// @ref safety page.
+///
+/// @section port_sched launchd vs systemd
+///
+/// Scheduler registers OS-level timers so jobs run while the GUI is closed: launchd
+/// agents on macOS, systemd user timers on Linux. Both invoke the same headless
+/// @c ceres-runner binary, which reads the same JSON profile the GUI writes. Unit
+/// names embed the validated job id, and orphaned units are reconciled away when a
+/// job is deleted. See @ref sched.
+///
+/// @section port_net Network identity
+///
+/// NetworkUtils determines the machine's primary address with a connectionless UDP
+/// trick — asking the OS which source IP it would use for the default route, which
+/// is more reliable than guessing by interface name — and falls back to scanning
+/// interfaces when offline. This feeds both the host indicator in the UI and the
+/// DiscoveryService beacon. See @ref net.
+///
+/// @section port_ui UI portability
+///
+/// The QML layer uses the Qt Quick Controls 2 **Basic** style for consistent
+/// rendering across platforms, sets a minimum window size, and prefers a monospace
+/// font stack chosen to resolve sensibly on macOS, Linux, and Windows.

@@ -3,6 +3,9 @@
 /build-*/
 cmake-build-*/
 
+# Generated API docs (keep the Doxyfile, ignore the output)
+/docs/doxygen/
+
 # CMake
 CMakeCache.txt
 CMakeFiles/

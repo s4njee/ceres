@@ -1,0 +1,104 @@
+# Doxygen configuration for Ceres.
+# Generate docs with:  doxygen Doxyfile
+# Output lands in:     docs/doxygen/html/index.html
+# Only non-default tags are set here; Doxygen fills in the rest.
+
+#---------------------------------------------------------------------------
+# Project
+#---------------------------------------------------------------------------
+PROJECT_NAME           = "Ceres"
+PROJECT_NUMBER         = "prototype"
+PROJECT_BRIEF          = "Cross-platform rsync GUI (Qt/QML)"
+OUTPUT_DIRECTORY       = docs/doxygen
+
+#---------------------------------------------------------------------------
+# Input
+#---------------------------------------------------------------------------
+# Sources + hand-written narrative pages (docs/*.dox). QML is omitted: Doxygen
+# has no QML parser, so those inline docs are read in-editor. README.md is the
+# landing page. docs/doxygen (the generated output) is excluded from input.
+INPUT                  = README.md docs src
+FILE_PATTERNS          = *.h *.cpp *.dox *.md
+RECURSIVE              = YES
+EXCLUDE                = docs/doxygen
+USE_MDFILE_AS_MAINPAGE = README.md
+
+#---------------------------------------------------------------------------
+# Extraction — surface a faithful, public-facing map of the codebase
+#---------------------------------------------------------------------------
+EXTRACT_ALL            = YES
+EXTRACT_STATIC         = YES
+EXTRACT_PRIVATE        = NO
+EXTRACT_ANON_NSPACES   = YES
+INLINE_INHERITED_MEMB  = YES
+HIDE_UNDOC_MEMBERS     = NO
+SORT_MEMBERS_CTORS_1ST = YES
+
+# Treat /// and /** */ blocks the Qt/Javadoc way: first sentence is the brief.
+JAVADOC_AUTOBRIEF      = YES
+QT_AUTOBRIEF           = YES
+MARKDOWN_SUPPORT       = YES
+AUTOLINK_SUPPORT       = YES
+
+#---------------------------------------------------------------------------
+# Preprocessing — neutralise Qt macros so they don't confuse the parser
+#---------------------------------------------------------------------------
+MACRO_EXPANSION        = YES
+EXPAND_ONLY_PREDEF     = YES
+PREDEFINED             = "Q_OBJECT=" \
+                         "Q_GADGET=" \
+                         "Q_INVOKABLE=" \
+                         "Q_PROPERTY(x)=" \
+                         "Q_DECLARE_METATYPE(x)=" \
+                         "Q_DISABLE_COPY(x)="
+
+#---------------------------------------------------------------------------
+# Source browser — cross-linked, comment-preserving
+#---------------------------------------------------------------------------
+SOURCE_BROWSER         = YES
+STRIP_CODE_COMMENTS    = NO
+REFERENCED_BY_RELATION = YES
+REFERENCES_RELATION    = YES
+REFERENCES_LINK_SOURCE = YES
+VERBATIM_HEADERS       = YES
+
+#---------------------------------------------------------------------------
+# HTML output — navigation tree, search, light/dark toggle
+#---------------------------------------------------------------------------
+GENERATE_HTML          = YES
+GENERATE_TREEVIEW      = YES
+FULL_SIDEBAR           = NO
+DISABLE_INDEX          = NO
+HTML_COLORSTYLE        = TOGGLE
+HTML_DYNAMIC_SECTIONS  = YES
+SEARCHENGINE           = YES
+GENERATE_LATEX         = NO
+
+#---------------------------------------------------------------------------
+# Diagrams — Graphviz (dot) powered
+#---------------------------------------------------------------------------
+HAVE_DOT               = YES
+DOT_PATH               = /opt/homebrew/bin
+DOT_IMAGE_FORMAT       = svg
+INTERACTIVE_SVG        = YES
+DOT_MULTI_TARGETS      = YES
+CLASS_GRAPH            = YES
+COLLABORATION_GRAPH    = YES
+GROUP_GRAPHS           = YES
+UML_LOOK               = YES
+UML_LIMIT_NUM_FIELDS   = 50
+TEMPLATE_RELATIONS     = YES
+INCLUDE_GRAPH          = YES
+INCLUDED_BY_GRAPH      = YES
+CALL_GRAPH             = YES
+CALLER_GRAPH           = YES
+GRAPHICAL_HIERARCHY    = YES
+DIRECTORY_GRAPH        = YES
+DOT_GRAPH_MAX_NODES    = 100
+
+#---------------------------------------------------------------------------
+# Warnings — quiet run, but still flag documentation gaps to the log
+#---------------------------------------------------------------------------
+QUIET                  = YES
+WARN_IF_UNDOCUMENTED   = YES
+WARN_LOGFILE           = docs/doxygen/doxygen-warnings.log

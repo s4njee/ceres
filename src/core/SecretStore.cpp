@@ -3,6 +3,7 @@
 #include <QProcess>
 
 #if defined(Q_OS_MACOS)
+#  include <CoreFoundation/CoreFoundation.h>
 #  include <Security/Security.h>
 #endif
 
@@ -11,9 +12,54 @@ namespace {
 const QString kService = QStringLiteral("Ceres daemon password");
 
 #if defined(Q_OS_MACOS)
-QByteArray utf8(const QString &s)
+template <typename T>
+class ScopedCF {
+public:
+    explicit ScopedCF(T value = nullptr) : m_value(value) {}
+    ~ScopedCF()
+    {
+        if (m_value)
+            CFRelease(m_value);
+    }
+
+    ScopedCF(const ScopedCF &) = delete;
+    ScopedCF &operator=(const ScopedCF &) = delete;
+
+    T get() const { return m_value; }
+
+private:
+    T m_value = nullptr;
+};
+
+ScopedCF<CFStringRef> cfString(const QString &s)
 {
-    return s.toUtf8();
+    return ScopedCF<CFStringRef>(CFStringCreateWithCharacters(
+        kCFAllocatorDefault, reinterpret_cast<const UniChar *>(s.utf16()), s.size()));
+}
+
+ScopedCF<CFDataRef> cfData(const QByteArray &bytes)
+{
+    return ScopedCF<CFDataRef>(CFDataCreate(kCFAllocatorDefault,
+                                            reinterpret_cast<const UInt8 *>(bytes.constData()),
+                                            bytes.size()));
+}
+
+CFMutableDictionaryRef passwordQuery(const QString &id)
+{
+    ScopedCF<CFStringRef> service = cfString(kService);
+    ScopedCF<CFStringRef> account = cfString(id);
+    if (!service.get() || !account.get())
+        return nullptr;
+
+    CFMutableDictionaryRef query = CFDictionaryCreateMutable(
+        kCFAllocatorDefault, 0, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    if (!query)
+        return nullptr;
+
+    CFDictionarySetValue(query, kSecClass, kSecClassGenericPassword);
+    CFDictionarySetValue(query, kSecAttrService, service.get());
+    CFDictionarySetValue(query, kSecAttrAccount, account.get());
+    return query;
 }
 #endif
 }
@@ -23,23 +69,22 @@ bool SecretStore::set(const QString &id, const QString &secret) const
     if (id.isEmpty())
         return false;
 #if defined(Q_OS_MACOS)
-    const QByteArray service = utf8(kService);
-    const QByteArray account = utf8(id);
-    const QByteArray password = utf8(secret);
+    ScopedCF<CFMutableDictionaryRef> query(passwordQuery(id));
+    ScopedCF<CFDataRef> password = cfData(secret.toUtf8());
+    if (!query.get() || !password.get())
+        return false;
 
-    SecKeychainItemRef item = nullptr;
-    OSStatus status = SecKeychainFindGenericPassword(
-        nullptr, service.size(), service.constData(), account.size(), account.constData(),
-        nullptr, nullptr, &item);
-    if (status == errSecSuccess && item) {
-        status = SecKeychainItemModifyContent(item, nullptr, password.size(), password.constData());
-        CFRelease(item);
-        return status == errSecSuccess;
+    CFDictionarySetValue(query.get(), kSecValueData, password.get());
+    OSStatus status = SecItemAdd(query.get(), nullptr);
+    if (status == errSecDuplicateItem) {
+        ScopedCF<CFMutableDictionaryRef> updateQuery(passwordQuery(id));
+        ScopedCF<CFMutableDictionaryRef> attributes(CFDictionaryCreateMutable(
+            kCFAllocatorDefault, 0, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks));
+        if (!updateQuery.get() || !attributes.get())
+            return false;
+        CFDictionarySetValue(attributes.get(), kSecValueData, password.get());
+        status = SecItemUpdate(updateQuery.get(), attributes.get());
     }
-
-    status = SecKeychainAddGenericPassword(
-        nullptr, service.size(), service.constData(), account.size(), account.constData(),
-        password.size(), password.constData(), nullptr);
     return status == errSecSuccess;
 #elif defined(Q_OS_LINUX)
     QProcess p;
@@ -71,18 +116,22 @@ QString SecretStore::get(const QString &id) const
         return QString::fromUtf8(out);
     };
 #if defined(Q_OS_MACOS)
-    const QByteArray service = utf8(kService);
-    const QByteArray account = utf8(id);
-    UInt32 length = 0;
-    void *data = nullptr;
-    const OSStatus status = SecKeychainFindGenericPassword(
-        nullptr, service.size(), service.constData(), account.size(), account.constData(),
-        &length, &data, nullptr);
-    if (status != errSecSuccess || !data)
+    ScopedCF<CFMutableDictionaryRef> query(passwordQuery(id));
+    if (!query.get())
         return {};
-    const QString secret = QString::fromUtf8(static_cast<const char *>(data), length);
-    SecKeychainItemFreeContent(nullptr, data);
-    return secret;
+    CFDictionarySetValue(query.get(), kSecReturnData, kCFBooleanTrue);
+    CFDictionarySetValue(query.get(), kSecMatchLimit, kSecMatchLimitOne);
+
+    CFTypeRef result = nullptr;
+    const OSStatus status = SecItemCopyMatching(query.get(), &result);
+    if (status != errSecSuccess || !result)
+        return {};
+    ScopedCF<CFTypeRef> data(result);
+    if (CFGetTypeID(data.get()) != CFDataGetTypeID())
+        return {};
+    const auto *bytes = reinterpret_cast<const char *>(CFDataGetBytePtr(static_cast<CFDataRef>(data.get())));
+    const int length = static_cast<int>(CFDataGetLength(static_cast<CFDataRef>(data.get())));
+    return QString::fromUtf8(bytes, length);
 #elif defined(Q_OS_LINUX)
     QProcess p;
     p.start(QStringLiteral("secret-tool"),
@@ -104,19 +153,11 @@ bool SecretStore::remove(const QString &id) const
     if (id.isEmpty())
         return false;
 #if defined(Q_OS_MACOS)
-    const QByteArray service = utf8(kService);
-    const QByteArray account = utf8(id);
-    SecKeychainItemRef item = nullptr;
-    const OSStatus findStatus = SecKeychainFindGenericPassword(
-        nullptr, service.size(), service.constData(), account.size(), account.constData(),
-        nullptr, nullptr, &item);
-    if (findStatus == errSecItemNotFound)
-        return true;
-    if (findStatus != errSecSuccess || !item)
+    ScopedCF<CFMutableDictionaryRef> query(passwordQuery(id));
+    if (!query.get())
         return false;
-    const OSStatus deleteStatus = SecKeychainItemDelete(item);
-    CFRelease(item);
-    return deleteStatus == errSecSuccess;
+    const OSStatus status = SecItemDelete(query.get());
+    return status == errSecSuccess || status == errSecItemNotFound;
 #elif defined(Q_OS_LINUX)
     return QProcess::execute(QStringLiteral("secret-tool"),
                              {QStringLiteral("clear"), QStringLiteral("service"), kService,

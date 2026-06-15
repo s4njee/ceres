@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+- Comprehensive documentation pass across all headers, entry points, and QML: added `///` doc-comments to every class/struct explaining its role in the architecture, design rationale (dependency injection, portability seams, safety gates), platform-specific behaviour, and how components connect to each other.
+- Added a Doxygen documentation site (`Doxyfile` + `docs/*.dox`): per-directory module grouping, four narrative pages (architecture, sync pipeline, safety model, portability), and Graphviz class/collaboration/include/call diagrams. Builds clean (0 warnings) into `docs/doxygen/html/`.
+- Fixed round-tripping of `excludes` and `extraArgs` through the QML job form (jobMap/onJobLoaded) so that UI previews, real runs (including the `--delete` safety fingerprint gate), saves, and loads correctly preserve advanced options from saved profiles.
+- Strengthened `EndpointParser` heuristic (now requires `@`, a dot in the host part, or remote-style path prefix for bare `host:...` forms) and added negative test cases so local paths/filenames containing `:` before `/` (e.g. `project:v2/data`) are no longer misclassified as SSH. Windows drive paths (`C:/...`, `C:\...`) now classify as Local rather than an SSH host named after the drive letter.
+- Windows groundwork: `BinaryLocator` now prefers an rsync bundled alongside the app (flat or in a `rsync/bin/` subdir, `rsync.exe` on Windows) before falling back to `PATH` and the known Unix install locations.
+- Windows groundwork: `ArgvBuilder` rewrites local drive paths into the runtime's POSIX form (Cygwin `/cygdrive/c/…` or MSYS2 `/c/…`, auto-detected from the bundled `cygwin1.dll`/`msys-2.0.dll`), applied to the source, destination, and SSH key path but never to remote endpoints.
+- Windows groundwork: `Scheduler` gained a unit-tested Task Scheduler 2.0 XML generator (`windowsTaskXml`) for interval/daily/weekly jobs plus a `schtasks`-based register/remove/query/reconcile path mirroring the launchd/systemd backends (`ceres-runner.exe` on Windows).
+- Updated stale `SecretStore.h` documentation to reflect the native Keychain (macOS) / stdin `secret-tool` (Linux) implementation.
+- Added `FolderDialog` "Browse" buttons for the "From"/"To" fields, hidden when the field holds a remote (SSH or daemon) endpoint so the local picker can't clobber a remote target.
+- Fixed `sshPortField` IntValidator to accept 0 (the documented sentinel for "use default port 22").
+- Added `minimumWidth`/`minimumHeight` to the main window and improved the `Theme.mono` font stack for better Linux/Windows portability.
+- Added keyboard shortcuts (Ctrl+S = save, Ctrl+Return = preview, Ctrl+Shift+Return = run) and `Accessible` roles/names to `Chip`, `FlatButton`, and the per-job delete affordance.
+- Delete confirmation dialog now respects Escape to cancel and uses a proper arrow + em-dash for consistency.
+- Documented the rationale for capped display buffers in `ChangeListModel` (logical totals are retained).
+- Extracted network IP discovery logic out of `JobController` into a dedicated `NetworkUtils` utility.
+- Modernized QML UI with deeper tinted backgrounds and brighter accents in `Theme.qml`.
+- Added micro-animations and hover state feedback to `FlatButton`.
+- Added explanatory tooltips to option chips (archive, compress, etc.).
+- Improved visual hierarchy in the sidebar with accent borders for selected jobs and designed empty states.
 - Added a C++ destructive-run gate: `--delete` jobs must match the last successful preview before a real run starts, and the preview is cleared after real syncs.
 - Centralized endpoint parsing in `EndpointParser` and routed C++, QML, runner, argv building, and remote completion through the same local/SSH/daemon classification.
 - Hardened rsync SSH execution by shell-quoting unsafe `-e ssh` command parts and enabling `--protect-args` for modern SSH-backed rsync targets.

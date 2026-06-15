@@ -4,10 +4,11 @@
 
 #include "core/Peer.h"
 
-// Wire format for discovery beacons (compact JSON). Pure and unit-tested.
+/// Wire format for discovery beacons (compact JSON). Pure and unit-tested.
+/// @ingroup net
 class Beacon {
 public:
     static QByteArray encode(const Peer &peer);
-    // Returns false if the payload isn't a valid Ceres beacon.
+    /// Returns false if the payload isn't a valid Ceres beacon.
     static bool decode(const QByteArray &data, Peer &out);
 };

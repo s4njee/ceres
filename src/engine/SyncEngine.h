@@ -5,9 +5,21 @@
 #include "core/SyncJob.h"
 #include "engine/RsyncEvents.h"
 
-// Abstract transport-agnostic sync engine. The GUI and models only ever talk
-// to this interface, so a future CwRsyncEngine / WslEngine can be dropped in
-// for the Windows port without touching anything above this seam.
+/// Abstract transport-agnostic sync engine — the **portability seam** in Ceres.
+///
+/// The GUI, models, and controller only ever talk to this interface, never to
+/// QProcess or rsync directly. This means a future Windows engine (cwRsync or
+/// WSL-backed) can implement `start()`/`cancel()`/`isRunning()` behind the same
+/// contract without touching anything above this layer.
+///
+/// **Signal contract**: every engine must emit `started()` when a run begins,
+/// stream `change()`/`progress()`/`stats()`/`log()` during the run, and always
+/// emit exactly one `finished(exitCode, crashed)` when it ends. The controller
+/// relies on this lifecycle to manage its UI state machine.
+///
+/// Currently the only concrete implementation is RsyncProcessEngine, which
+/// drives the real rsync binary via QProcess.
+/// @ingroup engine
 class SyncEngine : public QObject {
     Q_OBJECT
 public:

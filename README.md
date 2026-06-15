@@ -68,4 +68,5 @@ path completion, discovery beacons, and the controller's destructive-run gate.
 
 See the design doc for the full plan. Next milestones: harden SSH/daemon flows,
 polish the preview UX, expand the advanced options tier, package signed macOS/Linux
-builds, and add Windows support through cwRsync or WSL engines.
+builds, and add Windows support. The Windows bundled-rsync checklist lives in
+[`TODO.md`](TODO.md).

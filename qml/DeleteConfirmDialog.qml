@@ -15,6 +15,8 @@ Rectangle {
     anchors.fill: parent
     visible: open
     color: "#cc000000"
+    focus: open
+    Keys.onEscapePressed: root.canceled()
 
     MouseArea { anchors.fill: parent }
 
@@ -58,7 +60,7 @@ Rectangle {
                 text: (root.deletions > 0
                        ? root.deletions + " file(s) in the destination will be permanently deleted."
                        : "Files in the destination that aren't in the source will be permanently deleted.")
-                      + " This cannot be undone - preview first to see exactly which."
+                      + " This cannot be undone — preview first to see exactly which."
             }
 
             Text {
@@ -67,7 +69,7 @@ Rectangle {
                 font.family: Theme.mono
                 font.pixelSize: 11
                 elide: Text.ElideMiddle
-                text: root.fromText + "  ->  " + root.toText
+                text: root.fromText + " → " + root.toText
             }
 
             RowLayout {

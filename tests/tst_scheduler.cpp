@@ -15,6 +15,11 @@ private slots:
     void systemdQuotesRunnerPath();
     void launchdClampsOutOfRangeTime();
     void rejectsUnsafeIds();
+    void windowsIntervalTask();
+    void windowsDailyTask();
+    void windowsWeeklyTask();
+    void windowsTaskEscapesAndClamps();
+    void windowsTaskNameSafe();
 };
 
 void SchedulerTest::intervalPlist()
@@ -157,6 +162,75 @@ void SchedulerTest::rejectsUnsafeIds()
     j.id = QStringLiteral("../bad");
     j.schedule = ScheduleKind::Daily;
     QVERIFY(!Scheduler().apply(j, QStringLiteral("/r")));
+}
+
+void SchedulerTest::windowsIntervalTask()
+{
+    SyncJob j;
+    j.id = QStringLiteral("job1");
+    j.name = QStringLiteral("My backup");
+    j.schedule = ScheduleKind::Interval;
+    j.intervalMinutes = 30;
+
+    const QString x = Scheduler::windowsTaskXml(j, QStringLiteral("C:/Apps/ceres-runner.exe"));
+    QVERIFY(x.contains(QStringLiteral("encoding=\"UTF-16\"")));
+    QVERIFY(x.contains(QStringLiteral("<TimeTrigger>")));
+    QVERIFY(x.contains(QStringLiteral("<Interval>PT30M</Interval>")));
+    QVERIFY(x.contains(QStringLiteral("<Command>C:/Apps/ceres-runner.exe</Command>")));
+    QVERIFY(x.contains(QStringLiteral("<Arguments>--job job1</Arguments>")));
+    QVERIFY(!x.contains(QStringLiteral("CalendarTrigger")));
+}
+
+void SchedulerTest::windowsDailyTask()
+{
+    SyncJob j;
+    j.id = QStringLiteral("job2");
+    j.schedule = ScheduleKind::Daily;
+    j.atHour = 9;
+    j.atMinute = 15;
+
+    const QString x = Scheduler::windowsTaskXml(j, QStringLiteral("/r"));
+    QVERIFY(x.contains(QStringLiteral("<CalendarTrigger>")));
+    QVERIFY(x.contains(QStringLiteral("<StartBoundary>2020-01-01T09:15:00</StartBoundary>")));
+    QVERIFY(x.contains(QStringLiteral("<ScheduleByDay>")));
+    QVERIFY(!x.contains(QStringLiteral("TimeTrigger")));
+}
+
+void SchedulerTest::windowsWeeklyTask()
+{
+    SyncJob j;
+    j.id = QStringLiteral("job3");
+    j.schedule = ScheduleKind::Weekly;
+    j.weekday = 1;  // Monday
+    j.atHour = 6;
+    j.atMinute = 0;
+
+    const QString x = Scheduler::windowsTaskXml(j, QStringLiteral("/r"));
+    QVERIFY(x.contains(QStringLiteral("<ScheduleByWeek>")));
+    QVERIFY(x.contains(QStringLiteral("<Monday />")));
+    QVERIFY(x.contains(QStringLiteral("<StartBoundary>2020-01-01T06:00:00</StartBoundary>")));
+}
+
+void SchedulerTest::windowsTaskEscapesAndClamps()
+{
+    SyncJob j;
+    j.id = QStringLiteral("job4");
+    j.name = QStringLiteral("A & B <evil>");  // must be XML-escaped
+    j.schedule = ScheduleKind::Daily;
+    j.atHour = 40;     // out of range
+    j.atMinute = 99;
+
+    const QString x = Scheduler::windowsTaskXml(j, QStringLiteral("C:/A & B/ceres-runner.exe"));
+    QVERIFY(x.contains(QStringLiteral("Ceres sync A &amp; B &lt;evil&gt;")));
+    QVERIFY(x.contains(QStringLiteral("C:/A &amp; B/ceres-runner.exe")));
+    QVERIFY(!x.contains(QStringLiteral("A & B")));  // raw ampersand would be invalid XML
+    QVERIFY(x.contains(QStringLiteral("2020-01-01T23:59:00")));  // clamped time
+}
+
+void SchedulerTest::windowsTaskNameSafe()
+{
+    QCOMPARE(Scheduler::windowsTaskName(QStringLiteral("job1")), QStringLiteral("Ceres\\job1"));
+    QVERIFY(Scheduler::windowsTaskName(QStringLiteral("../bad")).isEmpty());
 }
 
 QTEST_MAIN(SchedulerTest)

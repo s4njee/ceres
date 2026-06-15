@@ -3,7 +3,10 @@
 #include <QString>
 #include <QStringList>
 
-// How often a saved job runs automatically (registered with the OS scheduler).
+/// Determines how often a saved sync job runs automatically. When set to anything
+/// other than Manual, the Scheduler registers an OS-level timer (launchd on macOS,
+/// systemd on Linux) so the job runs even when the GUI is closed. The headless
+/// `ceres-runner` binary is invoked by the OS when the timer fires.
 enum class ScheduleKind { Manual, Interval, Daily, Weekly };
 
 inline QString scheduleKindToString(ScheduleKind k)
@@ -25,7 +28,12 @@ inline ScheduleKind scheduleKindFromString(const QString &s)
     return ScheduleKind::Manual;
 }
 
-// A single sync job / profile.
+/// A single sync job / profile: the central value object of the app. It is the
+/// unit the user edits in the form, ProfileStore serialises to `<id>.json`, the
+/// Scheduler registers with the OS, and ArgvBuilder translates into an rsync
+/// command line. Plain data with no behaviour so it stays trivially copyable and
+/// testable; fields map closely to the rsync flags they drive.
+/// @ingroup core
 struct SyncJob {
     QString id;    // stable profile id (empty = unsaved / ad-hoc)
     QString name;  // display name in the jobs sidebar

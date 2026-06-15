@@ -1,0 +1,59 @@
+/// @page architecture Architecture overview
+/// @tableofcontents
+///
+/// Ceres is a Qt 6 / Qt Quick front-end for the real @c rsync binary. It is split
+/// into a thin QML presentation layer and a headless, fully unit-tested C++ core
+/// (@c ceres_core). The guiding rule is that **everything below the QML layer is
+/// GUI-free** — no Quick, no QML, no windowing — so the interesting logic (arg
+/// building, output parsing, profile storage, scheduling, the safety gate) can be
+/// exercised without launching a UI.
+///
+/// @section arch_layers The layers
+///
+/// @verbatim
+/// QML (Qt Quick Controls 2, Basic)           — UI shell
+///   └─ JobController (QObject)               — the single context property QML sees
+///        ├─ ChangeListModel / JobListModel / PeerModel   — QAbstractListModel adapters
+///        ├─ ProfileStore / SecretStore       — JSON profiles + OS keychain/libsecret
+///        ├─ Scheduler / DiscoveryService     — launchd/systemd + LAN beacons
+///        └─ SyncEngine (abstract)            — the portability seam
+///             └─ RsyncProcessEngine          — QProcess + the real rsync binary
+///                  ├─ ArgvBuilder            — SyncJob -> argv (capability-aware)
+///                  ├─ OutputParser           — progress2 / itemize / stats / log
+///                  └─ BinaryLocator          — finds rsync, detects its capabilities
+/// @endverbatim
+///
+/// @section arch_modules Module map
+///
+/// The code is organised into directory-aligned modules. Each is documented as a
+/// topic:
+///
+/// - @ref core  — value types (SyncJob, Endpoint, Peer) and persistence.
+/// - @ref engine — SyncJob → rsync process → parsed events.
+/// - @ref models — @c QAbstractListModel adapters for QML.
+/// - @ref net   — UDP multicast peer discovery.
+/// - @ref sched — OS-level scheduling of jobs.
+/// - @ref app   — JobController and UI-facing helpers.
+///
+/// @section arch_core The ceres_core boundary
+///
+/// @c ceres_core is a static library built from the non-GUI sources. It links only
+/// Qt Core and Qt Network — never Qt Quick. The GUI executable (@c ceres) and the
+/// headless scheduler runner (@c ceres-runner) both link against it, and so does
+/// the test suite. This boundary is what makes the project testable: a test can
+/// construct a JobController with fake stores and a fake engine and assert on
+/// behaviour without a display server.
+///
+/// @section arch_di Dependency injection
+///
+/// JobController does not @c new its own collaborators in production-only code
+/// paths. Its constructor accepts a SyncEngine, the stores, the Scheduler, the
+/// detected RsyncCapabilities, and a flag selecting whether network services run.
+/// Production wiring passes the real implementations; tests pass fakes. See
+/// @ref app and the @c tst_jobcontroller.cpp test for how the seam is used.
+///
+/// @section arch_seealso See also
+///
+/// - @ref sync_pipeline — the end-to-end lifecycle of a single sync.
+/// - @ref safety — the gates that stop a sync from destroying data.
+/// - @ref portability — how the same core targets macOS and Linux (and, later, Windows).

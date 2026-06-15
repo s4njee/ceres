@@ -14,14 +14,16 @@ private slots:
     void singleFileHasNoSlash();
     void noMatchReturnsInput();
     void bareTildeExpandsToHome();
+    void localChoicesUseFullPaths();
+    void localChoicesSuppressTooManyMatches();
 };
 
-static void touch(const QString &path)
+static bool touch(const QString &path)
 {
     QFile f(path);
-    f.open(QIODevice::WriteOnly);
-    f.write("x");
-    f.close();
+    if (!f.open(QIODevice::WriteOnly))
+        return false;
+    return f.write("x") == 1;
 }
 
 void PathCompleterTest::completesLongestCommonPrefix()
@@ -29,8 +31,8 @@ void PathCompleterTest::completesLongestCommonPrefix()
     QTemporaryDir tmp;
     QVERIFY(tmp.isValid());
     QVERIFY(QDir(tmp.path()).mkdir(QStringLiteral("alpha")));  // dir
-    touch(tmp.path() + QStringLiteral("/alps"));               // file
-    touch(tmp.path() + QStringLiteral("/beta"));
+    QVERIFY(touch(tmp.path() + QStringLiteral("/alps")));      // file
+    QVERIFY(touch(tmp.path() + QStringLiteral("/beta")));
 
     PathCompleter c;
     // "al" matches alpha + alps -> common prefix "alp" (two matches, no slash)
@@ -42,7 +44,7 @@ void PathCompleterTest::completesSingleDirWithSlash()
     QTemporaryDir tmp;
     QVERIFY(tmp.isValid());
     QVERIFY(QDir(tmp.path()).mkdir(QStringLiteral("alpha")));
-    touch(tmp.path() + QStringLiteral("/beta"));
+    QVERIFY(touch(tmp.path() + QStringLiteral("/beta")));
 
     PathCompleter c;
     QCOMPARE(c.completeLocal(tmp.path() + QStringLiteral("/alp")),
@@ -53,7 +55,7 @@ void PathCompleterTest::singleFileHasNoSlash()
 {
     QTemporaryDir tmp;
     QVERIFY(tmp.isValid());
-    touch(tmp.path() + QStringLiteral("/beta"));
+    QVERIFY(touch(tmp.path() + QStringLiteral("/beta")));
 
     PathCompleter c;
     QCOMPARE(c.completeLocal(tmp.path() + QStringLiteral("/bet")),
@@ -73,6 +75,33 @@ void PathCompleterTest::bareTildeExpandsToHome()
 {
     PathCompleter c;
     QCOMPARE(c.completeLocal(QStringLiteral("~")), QDir::homePath() + QStringLiteral("/"));
+}
+
+void PathCompleterTest::localChoicesUseFullPaths()
+{
+    QTemporaryDir tmp;
+    QVERIFY(tmp.isValid());
+    QVERIFY(QDir(tmp.path()).mkdir(QStringLiteral("alpha")));
+    QVERIFY(touch(tmp.path() + QStringLiteral("/alps")));
+    QVERIFY(touch(tmp.path() + QStringLiteral("/beta")));
+
+    PathCompleter c;
+    const QStringList choices = c.localChoices(tmp.path() + QStringLiteral("/al"), 8);
+    QCOMPARE(choices.size(), 2);
+    QCOMPARE(choices.at(0), tmp.path() + QStringLiteral("/alpha/"));
+    QCOMPARE(choices.at(1), tmp.path() + QStringLiteral("/alps"));
+}
+
+void PathCompleterTest::localChoicesSuppressTooManyMatches()
+{
+    QTemporaryDir tmp;
+    QVERIFY(tmp.isValid());
+    QVERIFY(QDir(tmp.path()).mkdir(QStringLiteral("one")));
+    QVERIFY(QDir(tmp.path()).mkdir(QStringLiteral("two")));
+    QVERIFY(QDir(tmp.path()).mkdir(QStringLiteral("three")));
+
+    PathCompleter c;
+    QVERIFY(c.localChoices(tmp.path() + QStringLiteral("/"), 2).isEmpty());
 }
 
 QTEST_MAIN(PathCompleterTest)

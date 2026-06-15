@@ -1,0 +1,66 @@
+/// @page safety The safety model
+/// @tableofcontents
+///
+/// rsync is a power tool: a stray @c --delete against the wrong source can erase a
+/// backup. Ceres layers several independent guards so that no single mistake —
+/// a typo, an unmounted drive, a stale schedule, a hostile filename — turns into
+/// data loss or command injection.
+///
+/// @section safe_gate The destructive-run fingerprint gate
+///
+/// A @c --delete run can only proceed if it matches what the user just previewed.
+/// JobController computes a fingerprint (a hash of the sync-relevant fields of the
+/// SyncJob) for every preview and stores it on success. When a real run starts, a
+/// destructive job's fingerprint must equal that stored value, otherwise the run
+/// is refused. After any real sync the stored fingerprint is cleared, so editing
+/// the job after previewing — or running it again — forces a fresh preview. This
+/// closes the "preview A, secretly run B" gap.
+///
+/// @section safe_maxdelete The --max-delete cap
+///
+/// A job may set a @c --max-delete=N ceiling. rsync then aborts rather than delete
+/// more than N entries, which protects against the classic failure mode where an
+/// empty or unmounted source makes the destination look entirely extraneous. A
+/// value of 0 means "no cap".
+///
+/// @section safe_jobid Job-id validation
+///
+/// A job id becomes both a profile filename (@c \<id\>.json) and part of an OS
+/// scheduler unit name (e.g. @c com.ceres.job.\<id\>). Before any id is used to
+/// read, write, remove, register, or discover such a resource, it is validated:
+/// ASCII letters, digits, @c -, @c _ and @c . only, length-bounded, and never
+/// @c "." or @c ".." . This blocks path traversal and unit-name injection. See
+/// @c isSafeJobId in @ref core.
+///
+/// @section safe_secrets Secret handling
+///
+/// rsync-daemon passwords never touch disk in cleartext and never appear on a
+/// process command line (where any user could see them via @c ps):
+///
+/// - **macOS** — stored via the native Keychain Services API (SecItem /
+///   SecKeychain calls), not by shelling out to @c "security -w" with the secret
+///   as an argument.
+/// - **Linux** — handed to @c secret-tool over stdin, never as an argv element.
+///
+/// At run time the password is passed to rsync through the @c RSYNC_PASSWORD
+/// environment variable and is never persisted in the job's JSON profile. See
+/// SecretStore in @ref core.
+///
+/// @section safe_quoting SSH command quoting
+///
+/// When a job uses an SSH transport, the @c -e "ssh ..." command is assembled from
+/// user-supplied parts (key path, port). Those parts are shell-quoted so spaces or
+/// metacharacters in a key path cannot break out of the intended command, and
+/// @c --protect-args is enabled so remote paths with spaces survive intact. See
+/// ArgvBuilder in @ref engine.
+///
+/// @section safe_probe Binary probing
+///
+/// Not every @c rsync on @c PATH is usable. BinaryLocator only treats a candidate
+/// as valid if it exits normally, prints a parseable version, and its probe times
+/// out cleanly rather than hanging. The detected RsyncCapabilities then gate which
+/// flags ArgvBuilder may emit (see @ref portability).
+///
+/// @section safe_seealso See also
+///
+/// - @ref sync_pipeline — where each guard sits in the end-to-end flow.

@@ -1,15 +1,10 @@
 #include "app/JobController.h"
 
-#include <QAbstractSocket>
 #include <QCryptographicHash>
-#include <QHostAddress>
 #include <QHostInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
-#include <QNetworkInterface>
-#include <QSysInfo>
-#include <QUdpSocket>
 #include <QUuid>
 #include <utility>
 
@@ -18,90 +13,9 @@
 #include "core/SyncJob.h"
 #include "engine/RsyncProcessEngine.h"
 #include "net/DiscoveryService.h"
+#include "net/NetworkUtils.h"
 
 namespace {
-// Best-effort primary LAN IPv4: prefer a physical interface (en0) over virtual
-// ones (utun/awdl/Tailscale), which we keep only as a fallback.
-QString detectPrimaryAddress()
-{
-    QString fallback;
-    const auto ifaces = QNetworkInterface::allInterfaces();
-    for (const QNetworkInterface &iface : ifaces) {
-        const auto flags = iface.flags();
-        if (!flags.testFlag(QNetworkInterface::IsUp) || !flags.testFlag(QNetworkInterface::IsRunning))
-            continue;
-        if (flags.testFlag(QNetworkInterface::IsLoopBack))
-            continue;
-        const QString name = iface.name();
-        const bool virtualish = name.startsWith(QLatin1String("utun"))
-            || name.startsWith(QLatin1String("awdl")) || name.startsWith(QLatin1String("llw"))
-            || name.startsWith(QLatin1String("bridge"));
-        for (const QNetworkAddressEntry &entry : iface.addressEntries()) {
-            const QHostAddress ip = entry.ip();
-            if (ip.protocol() != QAbstractSocket::IPv4Protocol || ip.isLoopback())
-                continue;
-            if (virtualish) {
-                if (fallback.isEmpty())
-                    fallback = ip.toString();
-                continue;
-            }
-            return ip.toString();
-        }
-    }
-    return fallback;
-}
-
-// The address a peer on the network would actually reach us on: the default-route
-// egress IP. A UDP "connect" sends no packets — it just makes the OS pick the
-// source IP for the default route, which is more reliable than guessing by
-// interface name. Falls back to the interface scan when offline.
-QString primaryAddress()
-{
-    QUdpSocket sock;
-    sock.connectToHost(QHostAddress(QStringLiteral("198.51.100.1")), 9);  // TEST-NET-2, no traffic
-    const QHostAddress local = sock.localAddress();
-    sock.abort();
-    if (local.protocol() == QAbstractSocket::IPv4Protocol && !local.isNull() && !local.isLoopback()
-        && local.toString() != QLatin1String("0.0.0.0"))
-        return local.toString();
-    return detectPrimaryAddress();
-}
-
-// All non-loopback IPv4 addresses, physical interfaces first, virtual/overlay
-// (utun/awdl/Tailscale) after — so the beacon advertises every reachable route.
-QStringList gatherAddresses()
-{
-    QStringList physical;
-    QStringList virtualish;
-    const auto ifaces = QNetworkInterface::allInterfaces();
-    for (const QNetworkInterface &iface : ifaces) {
-        const auto f = iface.flags();
-        if (!f.testFlag(QNetworkInterface::IsUp) || !f.testFlag(QNetworkInterface::IsRunning)
-            || f.testFlag(QNetworkInterface::IsLoopBack))
-            continue;
-        const QString name = iface.name();
-        const bool v = name.startsWith(QLatin1String("utun")) || name.startsWith(QLatin1String("awdl"))
-            || name.startsWith(QLatin1String("llw")) || name.startsWith(QLatin1String("bridge"));
-        for (const QNetworkAddressEntry &entry : iface.addressEntries()) {
-            const QHostAddress ip = entry.ip();
-            if (ip.protocol() != QAbstractSocket::IPv4Protocol || ip.isLoopback())
-                continue;
-            (v ? virtualish : physical) << ip.toString();
-        }
-    }
-    return physical + virtualish;
-}
-
-QString osName()
-{
-#if defined(Q_OS_MACOS)
-    return QStringLiteral("macOS");
-#elif defined(Q_OS_WIN)
-    return QStringLiteral("Windows");
-#else
-    return QStringLiteral("Linux");
-#endif
-}
 
 QStringList stringListFromVariant(const QVariant &value)
 {
@@ -133,14 +47,14 @@ JobController::JobController(RsyncCapabilities caps, SyncEngine *engine, Profile
       m_scheduler(std::move(scheduler))
 {
     m_hostName = QHostInfo::localHostName();
-    m_hostAddress = primaryAddress();
+    m_hostAddress = NetworkUtils::primaryAddress();
 
     if (startNetworkServices) {
         // The primary IP can change (Wi-Fi switch, VPN up/down), so re-check it and
         // update the corner pill live instead of freezing the launch-time value.
         m_addressTimer.setInterval(10000);
         connect(&m_addressTimer, &QTimer::timeout, this, [this] {
-            const QString addr = primaryAddress();
+            const QString addr = NetworkUtils::primaryAddress();
             if (addr != m_hostAddress) {
                 m_hostAddress = addr;
                 emit hostAddressChanged();
@@ -185,8 +99,8 @@ JobController::JobController(RsyncCapabilities caps, SyncEngine *engine, Profile
         if (self.id.isEmpty())
             self.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
         self.name = m_hostName;
-        self.addresses = gatherAddresses();
-        self.os = osName();
+        self.addresses = NetworkUtils::gatherAddresses();
+        self.os = NetworkUtils::osName();
         self.version = QStringLiteral("0.1");
         self.accepts = {QStringLiteral("ssh")};
         m_discovery = new DiscoveryService(&m_peers, self, this);
@@ -198,8 +112,12 @@ JobController::JobController(RsyncCapabilities caps, SyncEngine *engine, Profile
     connect(m_engine, &SyncEngine::change, &m_changes, &ChangeListModel::append);
 
     connect(m_engine, &SyncEngine::progress, this, [this](const ProgressInfo &p) {
-        if (m_percent != p.percent) {
+        if (!m_activeDryRun)
+            setStatus(QStringLiteral("Transferring…"));
+        const bool changed = m_percent != p.percent || m_speed != p.rate;
+        if (changed) {
             m_percent = p.percent;
+            m_speed = p.rate;
             emit progressChanged();
         }
     });
@@ -214,6 +132,7 @@ JobController::JobController(RsyncCapabilities caps, SyncEngine *engine, Profile
         m_logLines.clear();
         emit logChanged();
         m_percent = 0;
+        m_speed.clear();
         emit progressChanged();
         setRunning(true);
         setStatus(QStringLiteral("Scanning…"));

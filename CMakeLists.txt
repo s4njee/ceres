@@ -34,6 +34,7 @@ add_library(ceres_core STATIC
     src/engine/RsyncProcessEngine.h  src/engine/RsyncProcessEngine.cpp
     src/net/Beacon.h                 src/net/Beacon.cpp
     src/net/DiscoveryService.h       src/net/DiscoveryService.cpp
+    src/net/NetworkUtils.h           src/net/NetworkUtils.cpp
     src/sched/Scheduler.h            src/sched/Scheduler.cpp
     src/models/ChangeListModel.h     src/models/ChangeListModel.cpp
     src/models/JobListModel.h        src/models/JobListModel.cpp
