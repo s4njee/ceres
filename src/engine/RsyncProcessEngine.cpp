@@ -12,6 +12,10 @@
 #  include <unistd.h>
 #endif
 
+#ifdef Q_OS_WIN
+#  include <windows.h>
+#endif
+
 RsyncProcessEngine::RsyncProcessEngine(RsyncCapabilities caps, QObject *parent)
     : SyncEngine(parent), m_caps(std::move(caps))
 {
@@ -56,6 +60,39 @@ void RsyncProcessEngine::ensureProcess()
     // Become a process-group leader so cancel() can signal the whole group.
     m_process->setChildProcessModifier([] { ::setpgid(0, 0); });
 #endif
+
+#ifdef Q_OS_WIN
+    // Create the kill-on-close job that the child will be assigned to.
+    if (!m_jobObject) {
+        m_jobObject = ::CreateJobObjectW(nullptr, nullptr);
+        if (m_jobObject) {
+            JOBOBJECT_EXTENDED_LIMIT_INFORMATION info{};
+            info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+            ::SetInformationJobObject(static_cast<HANDLE>(m_jobObject),
+                                      JobObjectExtendedLimitInformation, &info, sizeof(info));
+        }
+    }
+
+    // Assign the child to a Job Object as soon as it starts, so cancel() can
+    // tear down rsync and any ssh grandchild together. We assign on the
+    // started() signal (the earliest point a PID is available) rather than
+    // before launch, because QProcess owns the CreateProcess call. The small
+    // window before assignment is acceptable: rsync forks ssh only after it has
+    // parsed its arguments, by which point the job assignment has landed.
+    connect(m_process, &QProcess::started, this, [this] {
+        if (!m_jobObject)
+            return;
+        const qint64 pid = m_process->processId();
+        if (pid <= 0)
+            return;
+        HANDLE proc = ::OpenProcess(PROCESS_SET_QUOTA | PROCESS_TERMINATE, FALSE,
+                                    static_cast<DWORD>(pid));
+        if (proc) {
+            ::AssignProcessToJobObject(static_cast<HANDLE>(m_jobObject), proc);
+            ::CloseHandle(proc);
+        }
+    });
+#endif
 }
 
 void RsyncProcessEngine::start(const SyncJob &job, bool dryRun)
@@ -94,6 +131,14 @@ void RsyncProcessEngine::cancel()
         return;
     }
 #endif
+
+#ifdef Q_OS_WIN
+    if (m_jobObject) {
+        ::TerminateJobObject(static_cast<HANDLE>(m_jobObject), 1);  // rsync + ssh child
+        return;
+    }
+#endif
+
     m_process->terminate();
 }
 
@@ -101,3 +146,11 @@ bool RsyncProcessEngine::isRunning() const
 {
     return m_process && m_process->state() != QProcess::NotRunning;
 }
+
+#ifdef Q_OS_WIN
+RsyncProcessEngine::~RsyncProcessEngine()
+{
+    if (m_jobObject)
+        ::CloseHandle(static_cast<HANDLE>(m_jobObject));  // KILL_ON_JOB_CLOSE reaps stragglers
+}
+#endif

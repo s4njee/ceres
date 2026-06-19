@@ -17,6 +17,12 @@
 /// `-e ssh` spawns ssh as a grandchild — a plain QProcess::terminate() would
 /// only signal rsync, orphaning the ssh process. By signaling the whole group
 /// with `kill(-pid, SIGTERM)`, both rsync and its ssh child are cleaned up.
+///
+/// On Windows the equivalent is a Job Object: the child is assigned to a job
+/// when it starts, so cancel() can TerminateJobObject() and take down rsync
+/// plus any ssh grandchild in one call. The job is created with
+/// JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE so the tree is also reaped if the app
+/// itself dies.
 /// @ingroup engine
 class RsyncProcessEngine : public SyncEngine {
     Q_OBJECT
@@ -29,10 +35,18 @@ public:
 
     const RsyncCapabilities &capabilities() const { return m_caps; }
 
+#ifdef Q_OS_WIN
+    ~RsyncProcessEngine() override;
+#endif
+
 private:
     void ensureProcess();
 
     RsyncCapabilities m_caps;
     QProcess *m_process = nullptr;
     OutputParser m_parser;
+
+#ifdef Q_OS_WIN
+    void *m_jobObject = nullptr;  // HANDLE; kills the rsync process tree on cancel
+#endif
 };

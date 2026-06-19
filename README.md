@@ -70,3 +70,10 @@ See the design doc for the full plan. Next milestones: harden SSH/daemon flows,
 polish the preview UX, expand the advanced options tier, package signed macOS/Linux
 builds, and add Windows support. The Windows bundled-rsync checklist lives in
 [`TODO.md`](TODO.md).
+
+## License
+
+Ceres is free software licensed under the GNU General Public License v3.0 — see
+[`LICENSE`](LICENSE). It bundles or builds on third-party components (Qt, rsync,
+OpenSSH, and a Cygwin/MSYS runtime on Windows); their licenses are documented in
+[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
