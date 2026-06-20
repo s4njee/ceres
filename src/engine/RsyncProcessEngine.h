@@ -45,6 +45,10 @@ private:
     RsyncCapabilities m_caps;
     QProcess *m_process = nullptr;
     OutputParser m_parser;
+    // Set by cancel() so finished() reports the run as interrupted regardless of
+    // how the OS classifies the kill: Unix SIGTERM surfaces as CrashExit, but a
+    // Windows TerminateJobObject is a NormalExit with the exit code we passed.
+    bool m_cancelRequested = false;
 
 #ifdef Q_OS_WIN
     void *m_jobObject = nullptr;  // HANDLE; kills the rsync process tree on cancel

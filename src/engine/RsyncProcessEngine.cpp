@@ -48,7 +48,8 @@ void RsyncProcessEngine::ensureProcess()
             [this](int exitCode, QProcess::ExitStatus status) {
                 m_parser.feed(m_process->readAllStandardOutput());
                 m_parser.flush();
-                emit finished(exitCode, status == QProcess::CrashExit);
+                const bool interrupted = status == QProcess::CrashExit || m_cancelRequested;
+                emit finished(exitCode, interrupted);
             });
 
     connect(m_process, &QProcess::errorOccurred, this, [this](QProcess::ProcessError e) {
@@ -106,6 +107,7 @@ void RsyncProcessEngine::start(const SyncJob &job, bool dryRun)
 
     ensureProcess();
     m_parser.reset();
+    m_cancelRequested = false;
 
     m_process->setProgram(m_caps.path);
     m_process->setArguments(ArgvBuilder::build(job, m_caps, dryRun));
@@ -123,6 +125,8 @@ void RsyncProcessEngine::cancel()
 {
     if (!isRunning())
         return;
+
+    m_cancelRequested = true;  // so finished() reports "interrupted" on every platform
 
 #ifdef Q_OS_UNIX
     const qint64 pid = m_process->processId();
