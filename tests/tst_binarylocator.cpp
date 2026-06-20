@@ -31,6 +31,13 @@ static QString writeScript(const QString &dir, const QString &name, const QByteA
 
 void BinaryLocatorTest::probeAcceptsValidVersion()
 {
+#ifdef Q_OS_WIN
+    // A `#!/bin/sh` script can't be executed on Windows (no shebang support, and
+    // a file without an executable extension isn't runnable), so probe() can't
+    // exercise a fake binary here. The real bundled rsync.exe is covered by the
+    // Windows runtime smoke test instead.
+    QSKIP("shebang fake-binary is not executable on Windows");
+#endif
     QTemporaryDir tmp;
     QVERIFY(tmp.isValid());
     const QString script = writeScript(tmp.path(), QStringLiteral("rsync-ok"),

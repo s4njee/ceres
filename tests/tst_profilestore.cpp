@@ -144,10 +144,15 @@ void ProfileStoreTest::rejectsUnsafeIds()
     injected.write("{\"id\":\"../bad\",\"name\":\"Bad\"}");
     injected.close();
 
+#ifndef Q_OS_WIN
+    // NTFS forbids a newline in a filename, so this hostile-on-disk case can only
+    // be staged on POSIX filesystems. The id-safety guard it checks is itself
+    // platform-independent (covered by the rejections above).
     QFile oddName(tmp.path() + QStringLiteral("/bad\nid.json"));
     QVERIFY(oddName.open(QIODevice::WriteOnly));
     oddName.write("{\"id\":\"bad\\nid\",\"name\":\"Bad\"}");
     oddName.close();
+#endif
 
     QVERIFY(store.loadAll().isEmpty());
     QVERIFY(!store.presentJobIds().contains(QStringLiteral("bad\nid")));
