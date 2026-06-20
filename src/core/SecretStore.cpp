@@ -5,11 +5,28 @@
 #if defined(Q_OS_MACOS)
 #  include <CoreFoundation/CoreFoundation.h>
 #  include <Security/Security.h>
+#elif defined(Q_OS_WIN)
+#  include <windows.h>
+#  include <wincred.h>
 #endif
 
 namespace {
-// Keychain service / libsecret schema name.
+// Keychain service / libsecret schema name (also the Credential Manager prefix).
 const QString kService = QStringLiteral("Ceres daemon password");
+
+#if defined(Q_OS_WIN)
+// Windows Credential Manager keys on a single TargetName, so fold service +
+// job id into one string. The id is a stable UUID, keeping the target unique.
+QString credTarget(const QString &id)
+{
+    return kService + QLatin1Char('/') + id;
+}
+
+LPCWSTR asWide(const QString &s)
+{
+    return reinterpret_cast<LPCWSTR>(s.utf16());
+}
+#endif
 
 #if defined(Q_OS_MACOS)
 template <typename T>
@@ -96,6 +113,19 @@ bool SecretStore::set(const QString &id, const QString &secret) const
     p.write(secret.toUtf8());  // secret-tool reads the secret from stdin (not argv)
     p.closeWriteChannel();
     return p.waitForFinished(3000) && p.exitStatus() == QProcess::NormalExit && p.exitCode() == 0;
+#elif defined(Q_OS_WIN)
+    const QString target = credTarget(id);
+    const QByteArray blob = secret.toUtf8();  // stored as raw bytes, not a wide string
+    CREDENTIALW cred{};
+    cred.Type = CRED_TYPE_GENERIC;
+    cred.TargetName = const_cast<LPWSTR>(asWide(target));
+    cred.CredentialBlobSize = static_cast<DWORD>(blob.size());
+    cred.CredentialBlob = reinterpret_cast<LPBYTE>(const_cast<char *>(blob.constData()));
+    // LOCAL_MACHINE so the scheduled ceres-runner (a different logon session of the
+    // same user) can still read it.
+    cred.Persist = CRED_PERSIST_LOCAL_MACHINE;
+    cred.UserName = const_cast<LPWSTR>(asWide(id));
+    return CredWriteW(&cred, 0);
 #else
     Q_UNUSED(secret);
     return false;
@@ -142,6 +172,17 @@ QString SecretStore::get(const QString &id) const
     if (p.exitStatus() != QProcess::NormalExit || p.exitCode() != 0)
         return {};
     return chompOne(p.readAllStandardOutput());
+#elif defined(Q_OS_WIN)
+    Q_UNUSED(chompOne);  // the Credential Manager blob has no trailing newline to strip
+    PCREDENTIALW cred = nullptr;
+    if (!CredReadW(asWide(credTarget(id)), CRED_TYPE_GENERIC, 0, &cred))
+        return {};
+    QString result;
+    if (cred->CredentialBlobSize > 0 && cred->CredentialBlob)
+        result = QString::fromUtf8(reinterpret_cast<const char *>(cred->CredentialBlob),
+                                   static_cast<int>(cred->CredentialBlobSize));
+    CredFree(cred);
+    return result;
 #else
     Q_UNUSED(chompOne);
     return {};
@@ -163,6 +204,10 @@ bool SecretStore::remove(const QString &id) const
                              {QStringLiteral("clear"), QStringLiteral("service"), kService,
                               QStringLiteral("account"), id})
         == 0;
+#elif defined(Q_OS_WIN)
+    if (CredDeleteW(asWide(credTarget(id)), CRED_TYPE_GENERIC, 0))
+        return true;
+    return GetLastError() == ERROR_NOT_FOUND;  // already gone counts as success (matches macOS)
 #else
     return false;
 #endif

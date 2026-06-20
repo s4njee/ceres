@@ -68,15 +68,17 @@ QString ArgvBuilder::toRsyncLocalPath(const QString &path, RsyncCapabilities::Pa
     p.replace(QLatin1Char('\\'), QLatin1Char('/'));  // rsync wants forward slashes
 
     // Map a drive path ("X:/rest" or bare "X:") onto the runtime's mount root.
+    // Standalone Cygwin- AND MSYS2-based rsync builds both resolve Windows drives
+    // under /cygdrive by default: that prefix is compiled into the runtime DLL.
+    // MSYS2's shorter "/c" form only applies inside a full install whose
+    // etc/fstab remaps the cygdrive prefix to "/", which a bundled rsync.exe does
+    // not carry — so /cygdrive is the reliable choice for both flavors.
     if (p.size() >= 2 && p.at(0).isLetter() && p.at(1) == QLatin1Char(':')) {
         const QChar drive = p.at(0).toLower();
         QString rest = p.mid(2);  // after "X:"
         if (!rest.isEmpty() && !rest.startsWith(QLatin1Char('/')))
             rest.prepend(QLatin1Char('/'));  // "X:foo" is drive-relative
-        const QString root = (style == RsyncCapabilities::PathStyle::Cygwin)
-            ? QStringLiteral("/cygdrive/")
-            : QStringLiteral("/");
-        return root + drive + rest;
+        return QStringLiteral("/cygdrive/") + drive + rest;
     }
     return p;  // already-POSIX, relative, or UNC (//server/share) — slashes normalised
 }

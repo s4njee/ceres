@@ -1,5 +1,12 @@
 # TODO
 
+## Windows
+
+- [x] Implement `SecretStore` on Windows with Credential Manager.
+  - `CredWriteW`/`CredReadW`/`CredDeleteW` (`advapi32`), persisted
+    `LOCAL_MACHINE` so the scheduled `ceres-runner` can read daemon passwords.
+  - Round-trip covered by `tst_secretstore` (skips where no backend exists).
+
 ## Windows bundled rsync support
 
 - [x] Decide the project license before packaging Windows builds.

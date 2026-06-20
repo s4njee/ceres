@@ -18,8 +18,9 @@
 /// @ingroup engine
 struct RsyncCapabilities {
     /// How the located runtime expects local filesystem paths. Native = pass
-    /// through (macOS/Linux). On Windows, rsync is a Cygwin or MSYS2 build that
-    /// wants POSIX paths: Cygwin maps `C:\` to `/cygdrive/c/`, MSYS2 to `/c/`.
+    /// through (macOS/Linux). On Windows, rsync is a Cygwin or MSYS2 build; both
+    /// standalone flavors map `C:\` to `/cygdrive/c/` (the prefix compiled into
+    /// the runtime). The flavor is still detected for diagnostics/notices.
     enum class PathStyle { Native, Cygwin, Msys };
 
     QString path;

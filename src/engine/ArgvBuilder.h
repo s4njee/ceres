@@ -20,7 +20,7 @@ public:
 
     /// Rewrite a LOCAL path into the form the located rsync runtime expects. Native
     /// runtimes pass through unchanged; Cygwin/MSYS2 runtimes (Windows) get drive
-    /// paths mapped to POSIX, e.g. `C:\Users\me` → `/cygdrive/c/Users/me` (Cygwin)
-    /// or `/c/Users/me` (MSYS2). Remote specs must not be passed here.
+    /// paths mapped to POSIX under the /cygdrive prefix, e.g. `C:\Users\me` →
+    /// `/cygdrive/c/Users/me`. Remote specs must not be passed here.
     static QString toRsyncLocalPath(const QString &path, RsyncCapabilities::PathStyle style);
 };

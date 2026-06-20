@@ -278,9 +278,10 @@ void ArgvBuilderTest::convertsWindowsLocalPaths()
     QCOMPARE(ArgvBuilder::toRsyncLocalPath(QStringLiteral("C:"), PS::Cygwin),
              QStringLiteral("/cygdrive/c"));
 
-    // MSYS2: drive maps to /<letter>/.
+    // MSYS2 standalone builds default to the same /cygdrive prefix as Cygwin
+    // (the "/c" form needs a full install's etc/fstab, which a bundle lacks).
     QCOMPARE(ArgvBuilder::toRsyncLocalPath(QStringLiteral("C:\\Users\\me"), PS::Msys),
-             QStringLiteral("/c/Users/me"));
+             QStringLiteral("/cygdrive/c/Users/me"));
 
     // Non-drive paths only get their slashes normalised.
     QCOMPARE(ArgvBuilder::toRsyncLocalPath(QStringLiteral("/already/posix"), PS::Cygwin),

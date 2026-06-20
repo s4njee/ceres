@@ -46,6 +46,8 @@ target_include_directories(ceres_core PUBLIC src)
 target_link_libraries(ceres_core PUBLIC Qt6::Core Qt6::Network)
 if(APPLE)
     target_link_libraries(ceres_core PUBLIC "-framework Security" "-framework CoreFoundation")
+elseif(WIN32)
+    target_link_libraries(ceres_core PUBLIC advapi32)  # Credential Manager (CredWrite/Read/Delete)
 endif()
 
 # ---------------------------------------------------------------------------

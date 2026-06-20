@@ -20,6 +20,10 @@ qt_add_executable(tst_profilestore tst_profilestore.cpp)
 target_link_libraries(tst_profilestore PRIVATE ceres_core Qt6::Test)
 add_test(NAME ProfileStore COMMAND tst_profilestore)
 
+qt_add_executable(tst_secretstore tst_secretstore.cpp)
+target_link_libraries(tst_secretstore PRIVATE ceres_core Qt6::Test)
+add_test(NAME SecretStore COMMAND tst_secretstore)
+
 qt_add_executable(tst_beacon tst_beacon.cpp)
 target_link_libraries(tst_beacon PRIVATE ceres_core Qt6::Test)
 add_test(NAME Beacon COMMAND tst_beacon)
