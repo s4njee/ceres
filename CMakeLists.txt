@@ -66,6 +66,7 @@ qt_add_qml_module(ceres
         qml/FlatButton.qml
         qml/Field.qml
         qml/DeleteConfirmDialog.qml
+        qml/SshPasswordDialog.qml
 )
 target_link_libraries(ceres PRIVATE
     ceres_core

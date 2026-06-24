@@ -14,6 +14,8 @@
 /// they outlive the QML engine — QML pointers to them remain valid during
 /// teardown.
 
+#include <cstdio>
+
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
@@ -33,6 +35,15 @@
 
 int main(int argc, char *argv[])
 {
+    // SSH_ASKPASS hook: when the rsync child's ssh execs us to obtain a password, we
+    // run with CERES_ASKPASS set — just print the password and exit before booting the
+    // GUI. The password is passed in-env (never on argv) by RsyncProcessEngine.
+    if (qEnvironmentVariableIsSet("CERES_ASKPASS")) {
+        fputs(qgetenv("CERES_SSH_PASSWORD").constData(), stdout);
+        fputc('\n', stdout);
+        return 0;
+    }
+
     QGuiApplication app(argc, argv);
     QGuiApplication::setApplicationName(QStringLiteral("Ceres"));
     QGuiApplication::setOrganizationName(QStringLiteral("Ceres"));

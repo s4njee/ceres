@@ -97,6 +97,14 @@ public:
     Q_INVOKABLE void run(const QVariantMap &job);
     Q_INVOKABLE void cancel();
 
+    /// Re-run the just-failed SSH job authenticating with a password instead of a key.
+    /// Called by the password modal that the `sshAuthRequired` signal triggers:
+    /// `username` (if any) is folded into the remote endpoint, `password` is fed to
+    /// ssh via SSH_ASKPASS, and the run repeats in the same preview/real mode. When
+    /// `remember` is set and the job is saved, the password is stored in the keychain.
+    Q_INVOKABLE void retryWithPassword(const QVariantMap &job, const QString &username,
+                                       const QString &password, bool remember);
+
     // Profile management (sidebar jobs).
     Q_INVOKABLE void newJob();  // reset the editor to a blank, unsaved job
     Q_INVOKABLE void loadJob(const QString &id);
@@ -117,6 +125,11 @@ signals:
     /// Pushes a job's fields into the QML editor. Emitted on loadJob() (with
     /// the saved job's fields) and newJob() (with blank defaults, archive=on).
     void jobLoaded(const QVariantMap &job);
+
+    /// An SSH run failed public-key authentication. The UI responds by prompting for
+    /// a username/password (prefilled with `user`, parsed from the remote endpoint)
+    /// and then calling retryWithPassword(). `host` is shown for context.
+    void sshAuthRequired(const QString &host, const QString &user);
 
 private:
     void startJob(const SyncJob &job, bool dryRun);
@@ -147,6 +160,9 @@ private:
     int m_percent = 0;
     bool m_running = false;
     bool m_activeDryRun = true;
+    bool m_activeUsedPassword = false;  // active run authenticated with a password
+    QString m_activeRemote;             // active run's remote endpoint (for the auth prompt)
+    QString m_runStderr;                // this run's stderr, scanned for auth failures
     QByteArray m_activeFingerprint;
     QByteArray m_lastPreviewFingerprint;
     QTimer m_addressTimer;  // re-checks the primary IP for network changes

@@ -1,5 +1,6 @@
 #include "app/PathCompleter.h"
 
+#include <QCoreApplication>
 #include <QDir>
 #include <QFileInfo>
 #include <QProcess>
@@ -46,12 +47,37 @@ QString shellSingleQuote(QString s)
     return QLatin1Char('\'') + s + QLatin1Char('\'');
 }
 
-QStringList sshArgsFor(const Endpoint &endpoint, const QString &sshKey, int port,
-                       RsyncCapabilities::PathStyle pathStyle)
+// Quote a remote path for the shell, but leave a leading "~" / "~user" prefix
+// UNQUOTED so the remote shell still expands it to the home directory. rsync expands
+// tildes on the remote too, so a browse/complete must match — single-quoting the
+// whole path (e.g. '~/Backups') defeats expansion and makes `cd` fail. Everything
+// after the tilde segment is single-quoted against injection.
+QString shellPathArg(const QString &path)
 {
-    QStringList args{QStringLiteral("-o"), QStringLiteral("BatchMode=yes"),
-                     QStringLiteral("-o"), QStringLiteral("StrictHostKeyChecking=accept-new"),
-                     QStringLiteral("-o"), QStringLiteral("ConnectTimeout=5")};
+    if (!path.startsWith(QLatin1Char('~')))
+        return shellSingleQuote(path);
+    const int slash = path.indexOf(QLatin1Char('/'));
+    if (slash < 0)
+        return path;  // "~" or "~user" alone — usernames are shell-safe
+    return path.left(slash) + QLatin1Char('/') + shellSingleQuote(path.mid(slash + 1));
+}
+
+QStringList sshArgsFor(const Endpoint &endpoint, const QString &sshKey, int port,
+                       RsyncCapabilities::PathStyle pathStyle, bool passwordMode)
+{
+    // Mirror ArgvBuilder: key mode uses BatchMode (fail fast instead of hanging on a
+    // prompt QProcess can't answer); password mode drops it and steers ssh to a
+    // single password prompt fed through SSH_ASKPASS (see sshEnvironmentFor).
+    QStringList args;
+    if (passwordMode) {
+        args << QStringLiteral("-o")
+             << QStringLiteral("PreferredAuthentications=password,keyboard-interactive")
+             << QStringLiteral("-o") << QStringLiteral("NumberOfPasswordPrompts=1");
+    } else {
+        args << QStringLiteral("-o") << QStringLiteral("BatchMode=yes");
+    }
+    args << QStringLiteral("-o") << QStringLiteral("StrictHostKeyChecking=accept-new")
+         << QStringLiteral("-o") << QStringLiteral("ConnectTimeout=5");
     if (!sshKey.isEmpty())
         args << QStringLiteral("-i") << ArgvBuilder::toRsyncLocalPath(sshKey, pathStyle);
     if (port > 0)
@@ -69,9 +95,23 @@ QStringList sshArgsFor(const Endpoint &endpoint, const QString &sshKey, int port
     return args;
 }
 
-QProcessEnvironment sshEnvironmentFor(const RsyncCapabilities &caps)
+QProcessEnvironment sshEnvironmentFor(const RsyncCapabilities &caps, const QString &sshPassword)
 {
     QProcessEnvironment env = QProcessEnvironment::systemEnvironment();  // ssh-agent
+
+    // Feed a password to ssh non-interactively via the askpass hook (same mechanism as
+    // RsyncProcessEngine): this executable, run with CERES_ASKPASS set, prints the
+    // password. Never placed on the argv.
+    if (!sshPassword.isEmpty()) {
+        QString askpass = QCoreApplication::applicationFilePath();
+#ifdef Q_OS_WIN
+        askpass = ArgvBuilder::toRsyncLocalPath(askpass, caps.pathStyle);
+#endif
+        env.insert(QStringLiteral("SSH_ASKPASS"), askpass);
+        env.insert(QStringLiteral("SSH_ASKPASS_REQUIRE"), QStringLiteral("force"));
+        env.insert(QStringLiteral("CERES_ASKPASS"), QStringLiteral("1"));
+        env.insert(QStringLiteral("CERES_SSH_PASSWORD"), sshPassword);
+    }
 
 #ifdef Q_OS_WIN
     // Match RsyncProcessEngine: bundled Cygwin/MSYS ssh is launched via PATH and
@@ -89,6 +129,13 @@ QProcessEnvironment sshEnvironmentFor(const RsyncCapabilities &caps)
 #endif
 
     return env;
+}
+
+// True if ssh stderr indicates the connection failed authentication (vs unreachable).
+bool looksLikeAuthFailure(const QString &stderrText)
+{
+    return stderrText.contains(QStringLiteral("Permission denied"))
+        || stderrText.contains(QStringLiteral("Authentication failed"));
 }
 
 QList<LocalMatch> localMatchesFor(const QString &input)
@@ -170,21 +217,23 @@ QStringList PathCompleter::localChoices(const QString &input, int maxChoices) co
     return choices;
 }
 
-void PathCompleter::completeRemote(const QString &input, const QString &sshKey, int port, int maxChoices)
+void PathCompleter::completeRemote(const QString &input, const QString &sshKey, int port,
+                                   int maxChoices, const QString &sshPassword)
 {
     const Endpoint endpoint = EndpointParser::parse(input);
     if (endpoint.kind != EndpointKind::Ssh || endpoint.sshTarget.isEmpty())
         return;
 
-    QStringList args = sshArgsFor(endpoint, sshKey, port, m_caps.pathStyle);
+    QStringList args = sshArgsFor(endpoint, sshKey, port, m_caps.pathStyle, !sshPassword.isEmpty());
+    args << QStringLiteral("/bin/sh");  // run our POSIX script via sh, whatever the login shell
 
     // Single-quote the partial path (so spaces are safe and it can't inject), but
     // leave the * outside the quotes so the remote shell still globs it.
-    args << QStringLiteral("ls -dp -- %1* 2>/dev/null | head -n %2")
-                .arg(shellSingleQuote(endpoint.sshPath), QString::number(qMax(1, maxChoices) + 1));
+    const QString script = QStringLiteral("ls -dp -- %1* 2>/dev/null | head -n %2\n")
+                .arg(shellPathArg(endpoint.sshPath), QString::number(qMax(1, maxChoices) + 1));
 
     auto *proc = new QProcess(this);
-    proc->setProcessEnvironment(sshEnvironmentFor(m_caps));
+    proc->setProcessEnvironment(sshEnvironmentFor(m_caps, sshPassword));
     connect(proc, &QProcess::finished, this,
             [this, proc, input, target = endpoint.sshTarget, maxChoices](int, QProcess::ExitStatus) {
         const QStringList lines =
@@ -206,9 +255,12 @@ void PathCompleter::completeRemote(const QString &input, const QString &sshKey, 
     });
     connect(proc, &QProcess::errorOccurred, proc, [proc](QProcess::ProcessError) { proc->deleteLater(); });
     proc->start(QStringLiteral("ssh"), args);
+    proc->write(script.toUtf8());  // feed the script to the remote sh over stdin
+    proc->closeWriteChannel();
 }
 
-void PathCompleter::browseRemote(const QString &input, const QString &sshKey, int port, int maxEntries)
+void PathCompleter::browseRemote(const QString &input, const QString &sshKey, int port,
+                                 int maxEntries, const QString &sshPassword)
 {
     const Endpoint endpoint = EndpointParser::parse(input);
     if (endpoint.kind != EndpointKind::Ssh || endpoint.sshTarget.isEmpty())
@@ -216,9 +268,11 @@ void PathCompleter::browseRemote(const QString &input, const QString &sshKey, in
 
     const int limit = qMax(1, maxEntries) + 1;
     const QString remoteDir = endpoint.sshPath.isEmpty() ? QStringLiteral(".") : endpoint.sshPath;
-    QStringList args = sshArgsFor(endpoint, sshKey, port, m_caps.pathStyle);
-    args << QStringLiteral(
-                "cd -- %1 2>/dev/null || { printf '__CERES_ERROR__Cannot open folder\\n'; exit 2; }; "
+    QStringList args = sshArgsFor(endpoint, sshKey, port, m_caps.pathStyle, !sshPassword.isEmpty());
+    args << QStringLiteral("/bin/sh");  // run our POSIX script via sh, whatever the login shell
+    const QString script = QStringLiteral(
+                "cd -- %1 2>/dev/null || { msg=$(cd -- %1 2>&1); "
+                "printf '__CERES_ERROR__%s\\n' \"${msg:-Cannot open folder}\"; exit 2; }; "
                 "pwd=$(pwd -P); case \"$pwd\" in */) ;; *) pwd=\"$pwd/\";; esac; "
                 "printf '__CERES_PWD__%s\\n' \"$pwd\"; "
                 "find . -mindepth 1 -maxdepth 1 -type d -print 2>/dev/null "
@@ -226,21 +280,35 @@ void PathCompleter::browseRemote(const QString &input, const QString &sshKey, in
                 "| while IFS= read -r d; do "
                 "case \"$d\" in .|..) continue;; esac; "
                 "printf '%s%s/\\n' \"$pwd\" \"$d\"; "
-                "done")
-                .arg(shellSingleQuote(remoteDir), QString::number(limit));
+                "done\n")
+                .arg(shellPathArg(remoteDir), QString::number(limit));
 
     auto *proc = new QProcess(this);
-    proc->setProcessEnvironment(sshEnvironmentFor(m_caps));
+    proc->setProcessEnvironment(sshEnvironmentFor(m_caps, sshPassword));
     connect(proc, &QProcess::finished, this,
-            [this, proc, input, target = endpoint.sshTarget, maxEntries](int, QProcess::ExitStatus) {
+            [this, proc, input, target = endpoint.sshTarget, maxEntries]
+            (int, QProcess::ExitStatus) {
         const QStringList lines =
             QString::fromUtf8(proc->readAllStandardOutput()).split(QLatin1Char('\n'), Qt::SkipEmptyParts);
         const QString errorOutput = QString::fromUtf8(proc->readAllStandardError()).trimmed();
         const bool failed = proc->exitStatus() != QProcess::NormalExit || proc->exitCode() != 0;
         proc->deleteLater();
 
+        // Auth failed (key rejected, or a reused password that's for the wrong user
+        // because the target has no "user@") — ask the UI to prompt for credentials
+        // and retry. Prompt regardless of whether a password was already tried: the
+        // user may need to supply the right username. The modal requires an explicit
+        // submit, so this can't loop on its own.
+        if (failed && looksLikeAuthFailure(errorOutput)) {
+            const int at = target.lastIndexOf(QLatin1Char('@'));
+            const QString host = at >= 0 ? target.mid(at + 1) : target;
+            const QString user = at >= 0 ? target.left(at) : QString();
+            emit remoteAuthRequired(input, host, user);
+            return;
+        }
+
         QString current;
-        QString error = failed ? QStringLiteral("Could not list remote folder") : QString{};
+        QString error;
         QStringList directories;
         for (const QString &line : lines) {
             if (line.startsWith(QLatin1String("__CERES_ERROR__"))) {
@@ -260,8 +328,12 @@ void PathCompleter::browseRemote(const QString &input, const QString &sshKey, in
         }
         if (current.isEmpty())
             current = input;
-        if (!errorOutput.isEmpty() && error.isEmpty())
-            error = errorOutput;
+        // Surface the real remote/ssh stderr when something went wrong, instead of a
+        // generic message that hides it. Only fall back to the generic text when the
+        // process failed but said nothing useful.
+        if (error.isEmpty() && failed)
+            error = errorOutput.isEmpty() ? QStringLiteral("Could not list remote folder")
+                                          : errorOutput;
 
         emit remoteBrowseCompleted(input, current, directories, error);
     });
@@ -272,4 +344,6 @@ void PathCompleter::browseRemote(const QString &input, const QString &sshKey, in
         emit remoteBrowseCompleted(input, input, {}, reason);
     });
     proc->start(QStringLiteral("ssh"), args);
+    proc->write(script.toUtf8());  // feed the script to the remote sh over stdin
+    proc->closeWriteChannel();
 }

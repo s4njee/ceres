@@ -124,12 +124,16 @@ JobController::JobController(RsyncCapabilities caps, SyncEngine *engine, Profile
 
     connect(m_engine, &SyncEngine::log, this, [this](const QString &l) { appendLog(l); });
     connect(m_engine, &SyncEngine::stats, this, [this](const QString &l) { appendLog(l); });
-    connect(m_engine, &SyncEngine::errorOutput, this,
-            [this](const QString &l) { appendLog(QStringLiteral("[stderr] ") + l); });
+    connect(m_engine, &SyncEngine::errorOutput, this, [this](const QString &l) {
+        m_runStderr += l;
+        m_runStderr += QLatin1Char('\n');
+        appendLog(QStringLiteral("[stderr] ") + l);
+    });
 
     connect(m_engine, &SyncEngine::started, this, [this] {
         m_changes.clear();
         m_logLines.clear();
+        m_runStderr.clear();
         emit logChanged();
         m_percent = 0;
         m_speed.clear();
@@ -157,6 +161,23 @@ JobController::JobController(RsyncCapabilities caps, SyncEngine *engine, Profile
         } else {
             if (!m_activeDryRun)
                 m_lastPreviewFingerprint.clear();
+
+            // SSH public-key auth failed and we haven't tried a password yet — prompt
+            // for credentials and retry, instead of just reporting a connection error.
+            const bool authFailed = m_runStderr.contains(QStringLiteral("Permission denied"))
+                || m_runStderr.contains(QStringLiteral("Authentication failed"));
+            if (authFailed && !m_activeUsedPassword && !m_activeRemote.isEmpty()) {
+                const Endpoint e = EndpointParser::parse(m_activeRemote);
+                const int at = e.sshTarget.lastIndexOf(QLatin1Char('@'));
+                const QString host = at >= 0 ? e.sshTarget.mid(at + 1) : e.sshTarget;
+                const QString user = at >= 0 ? e.sshTarget.left(at) : QString();
+                setStatus(QStringLiteral("Key authentication failed — enter a password for %1")
+                              .arg(host));
+                m_activeFingerprint.clear();
+                emit sshAuthRequired(host, user);
+                return;
+            }
+
             switch (code) {
             case 5:
                 setStatus(QStringLiteral("Authentication failed (rsync daemon)"));
@@ -225,6 +246,7 @@ SyncJob JobController::jobFromMap(const QVariantMap &m) const
     j.sshKeyPath = m.value(QStringLiteral("sshKey")).toString().trimmed();
     j.sshPort = qBound(0, m.value(QStringLiteral("sshPort")).toInt(), 65535);
     j.daemonPassword = m.value(QStringLiteral("daemonPassword")).toString();
+    j.sshPassword = m.value(QStringLiteral("sshPassword")).toString();
     j.schedule = scheduleKindFromString(m.value(QStringLiteral("schedule")).toString());
     j.intervalMinutes = qMax(1, m.value(QStringLiteral("intervalMinutes"), 60).toInt());
     j.atHour = qBound(0, m.value(QStringLiteral("atHour"), 9).toInt(), 23);
@@ -291,6 +313,17 @@ void JobController::startJob(const SyncJob &job, bool dryRun)
         if (saved.source == j.source && saved.destination == j.destination)
             j.daemonPassword = m_secrets.get(m_currentId);
     }
+    // Likewise pull a remembered SSH password (stored under "<id>.ssh") for an
+    // unchanged SSH target, so a saved credential authenticates without re-prompting.
+    if (j.sshPassword.isEmpty() && EndpointParser::usesSsh(j) && !m_currentId.isEmpty()) {
+        const SyncJob saved = m_jobs.jobById(m_currentId);
+        if (saved.source == j.source && saved.destination == j.destination)
+            j.sshPassword = m_secrets.get(m_currentId + QStringLiteral(".ssh"));
+    }
+
+    m_activeUsedPassword = !j.sshPassword.isEmpty();
+    m_activeRemote = EndpointParser::isSsh(j.source) ? j.source
+        : (EndpointParser::isSsh(j.destination) ? j.destination : QString());
 
     const QByteArray fingerprint = syncFingerprint(j);
     if (!dryRun && j.deleteExtraneous && fingerprint != m_lastPreviewFingerprint) {
@@ -305,6 +338,28 @@ void JobController::startJob(const SyncJob &job, bool dryRun)
 void JobController::cancel()
 {
     m_engine->cancel();
+}
+
+void JobController::retryWithPassword(const QVariantMap &job, const QString &username,
+                                      const QString &password, bool remember)
+{
+    if (password.isEmpty())
+        return;
+
+    SyncJob j = jobFromMap(job);
+    // Fold the username into whichever endpoint is the SSH target.
+    if (EndpointParser::isSsh(j.source))
+        j.source = EndpointParser::withUser(j.source, username);
+    else if (EndpointParser::isSsh(j.destination))
+        j.destination = EndpointParser::withUser(j.destination, username);
+    j.sshPassword = password;
+
+    // Persist only for a saved job the user opted to remember; the session keeps it
+    // in the editor regardless (QML holds it for subsequent manual runs).
+    if (remember && !m_currentId.isEmpty())
+        m_secrets.set(m_currentId + QStringLiteral(".ssh"), password);
+
+    startJob(j, m_activeDryRun);  // repeat the failed run in the same mode
 }
 
 void JobController::newJob()
@@ -342,6 +397,14 @@ void JobController::saveJob(const QVariantMap &jobMap)
         m_secrets.set(job.id, job.daemonPassword);  // keychain, never the profile JSON
     else if (!EndpointParser::usesDaemon(job))
         m_secrets.remove(job.id);  // target no longer a daemon -> drop any stale secret
+
+    // SSH password (stored under "<id>.ssh") is remembered only when the user opted in
+    // via the auth modal; otherwise drop any stale secret if the target isn't SSH.
+    const QString sshKey = job.id + QStringLiteral(".ssh");
+    if (jobMap.value(QStringLiteral("rememberSshPassword")).toBool() && !job.sshPassword.isEmpty())
+        m_secrets.set(sshKey, job.sshPassword);
+    else if (!EndpointParser::usesSsh(job))
+        m_secrets.remove(sshKey);
     m_currentId = job.id;
     emit currentChanged();
 
@@ -362,6 +425,7 @@ void JobController::deleteJob(const QString &id)
 {
     m_scheduler.remove(id);  // drop any OS schedule first
     m_secrets.remove(id);    // and its stored daemon password
+    m_secrets.remove(id + QStringLiteral(".ssh"));  // and any remembered SSH password
     m_store.remove(id);
     m_jobs.removeById(id);
     if (m_currentId == id)

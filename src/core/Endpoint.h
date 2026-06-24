@@ -35,4 +35,11 @@ public:
     static bool isSsh(const QString &text) { return kind(text) == EndpointKind::Ssh; }
     static bool usesSsh(const SyncJob &job);
     static bool usesDaemon(const SyncJob &job);
+
+    /// Inject (or replace) the login user in an SSH endpoint's target so rsync/ssh
+    /// authenticate as `user`: `host:/p` → `user@host:/p`, and `old@host:/p` →
+    /// `user@host:/p`. Non-SSH endpoints (local/daemon) and an empty `user` are
+    /// returned unchanged. The username belongs in the endpoint itself, so this is
+    /// how the password modal's username field is applied.
+    static QString withUser(const QString &text, const QString &user);
 };

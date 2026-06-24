@@ -56,6 +56,7 @@ struct SyncJob {
     QString sshKeyPath;       // -e 'ssh -i <key>' (optional; agent/default key if empty)
     int sshPort = 0;          // -e 'ssh -p <port>' (0 = default 22)
     QString daemonPassword;   // transient: RSYNC_PASSWORD for rsync:// auth (never persisted)
+    QString sshPassword;      // transient: SSH password (via SSH_ASKPASS, never in argv/JSON)
 
     // Scheduling (registered with the OS so it runs while the app is closed).
     ScheduleKind schedule = ScheduleKind::Manual;

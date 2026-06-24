@@ -25,15 +25,24 @@ public:
     Q_INVOKABLE QStringList localChoices(const QString &path, int maxChoices) const;
 
     /// Lists `<path>*` on the remote over ssh; emits remoteCompleted when it returns.
-    Q_INVOKABLE void completeRemote(const QString &path, const QString &sshKey, int port, int maxChoices);
+    /// A non-empty `sshPassword` authenticates with a password (via SSH_ASKPASS).
+    Q_INVOKABLE void completeRemote(const QString &path, const QString &sshKey, int port,
+                                    int maxChoices, const QString &sshPassword = QString());
 
-    /// Lists child directories for an SSH endpoint; emits remoteBrowseCompleted.
-    Q_INVOKABLE void browseRemote(const QString &path, const QString &sshKey, int port, int maxEntries);
+    /// Lists child directories for an SSH endpoint; emits remoteBrowseCompleted. When
+    /// the connection fails public-key auth and no `sshPassword` was supplied, emits
+    /// remoteAuthRequired instead so the UI can prompt for a password and retry.
+    Q_INVOKABLE void browseRemote(const QString &path, const QString &sshKey, int port,
+                                  int maxEntries, const QString &sshPassword = QString());
 
 signals:
     void remoteCompleted(const QString &input, const QString &completion, const QStringList &choices);
     void remoteBrowseCompleted(const QString &input, const QString &current,
                                const QStringList &directories, const QString &error);
+    /// A browse attempt failed key authentication; the UI should prompt for a
+    /// password (prefilled with `user`) and call browseRemote again with it. `host`
+    /// is shown for context. Mirrors JobController::sshAuthRequired.
+    void remoteAuthRequired(const QString &input, const QString &host, const QString &user);
 
 private:
     RsyncCapabilities m_caps;

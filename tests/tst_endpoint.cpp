@@ -8,6 +8,7 @@ private slots:
     void classifiesLocalSshAndDaemon();
     void classifiesWindowsDrivePaths();
     void jobHelpersSeeTransport();
+    void withUserInjectsAndReplaces();
 };
 
 void EndpointTest::classifiesLocalSshAndDaemon()
@@ -67,6 +68,23 @@ void EndpointTest::jobHelpersSeeTransport()
     j.destination = QStringLiteral("rsync://host/module");
     QVERIFY(!EndpointParser::usesSsh(j));
     QVERIFY(EndpointParser::usesDaemon(j));
+}
+
+void EndpointTest::withUserInjectsAndReplaces()
+{
+    // Adds a user to a bare-host SSH endpoint.
+    QCOMPARE(EndpointParser::withUser(QStringLiteral("host:/backup"), QStringLiteral("bob")),
+             QStringLiteral("bob@host:/backup"));
+    // Replaces an existing user.
+    QCOMPARE(EndpointParser::withUser(QStringLiteral("old@host:~/p"), QStringLiteral("bob")),
+             QStringLiteral("bob@host:~/p"));
+    // Empty user and non-SSH endpoints pass through untouched.
+    QCOMPARE(EndpointParser::withUser(QStringLiteral("host:/backup"), QString()),
+             QStringLiteral("host:/backup"));
+    QCOMPARE(EndpointParser::withUser(QStringLiteral("/tmp/local"), QStringLiteral("bob")),
+             QStringLiteral("/tmp/local"));
+    QCOMPARE(EndpointParser::withUser(QStringLiteral("rsync://host/mod"), QStringLiteral("bob")),
+             QStringLiteral("rsync://host/mod"));
 }
 
 QTEST_MAIN(EndpointTest)

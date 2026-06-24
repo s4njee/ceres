@@ -43,6 +43,15 @@ ApplicationWindow {
     property string scheduleKind: "manual"
     property int weekday: 0
 
+    // SSH password auth state. Modal-driven (no always-visible field): held for the
+    // session so subsequent manual runs reuse it; persisted to the keychain only when
+    // the user ticks "remember" in the auth modal (see retryWithPassword/saveJob).
+    property string sshPassword: ""
+    property bool rememberSshPassword: false
+    // Which flow opened the auth modal: "run" (a sync) or "browse" (remote folder picker).
+    property string authContext: "run"
+    property string authBrowseInput: ""
+
     // Advanced options (supported in backend/argv/fingerprint/storage but not yet
     // exposed in the form UI; round-tripped here so loads/previews/runs/saves
     // and the --delete safety gate preserve them for jobs that have them).
@@ -64,6 +73,29 @@ ApplicationWindow {
     function setPathField(field, path) {
         field.text = path
         field.cursorPosition = path.length
+    }
+
+    // Inject/replace the login user in an SSH endpoint string ("host:/p" ->
+    // "user@host:/p"). Mirrors EndpointParser::withUser; no-op for blank user or
+    // non-SSH text.
+    function sshWithUser(text, user) {
+        if (!user || user.length === 0 || !looksSsh(text))
+            return text
+        var colon = text.indexOf(":")
+        if (colon < 0) return text
+        var target = text.substring(0, colon)
+        var rest = text.substring(colon)  // includes ":"
+        var at = target.lastIndexOf("@")
+        if (at >= 0) target = target.substring(at + 1)
+        return user + "@" + target + rest
+    }
+
+    // Apply sshWithUser to a path field so the editor matches the credentials used
+    // for a password retry.
+    function applyUserToSshField(field, user) {
+        var t = root.sshWithUser(field.text, user)
+        if (t !== field.text)
+            root.setPathField(field, t)
     }
 
     function showCompletionChoices(field, choices) {
@@ -121,7 +153,7 @@ ApplicationWindow {
         if (t.length === 0 || looksDaemon(t)) return
         if (looksSsh(t)) {
             completer.completeRemote(t, sshKeyField.text, parseInt(sshPortField.text) || 0,
-                                     root.completionChoiceLimit)
+                                     root.completionChoiceLimit, root.sshPassword)
         } else {
             var choices = completer.localChoices(t, root.completionChoiceLimit)
             var c = completer.completeLocal(t)
@@ -149,6 +181,8 @@ ApplicationWindow {
             sshKey: sshKeyField.text,
             sshPort: parseInt(sshPortField.text) || 0,
             daemonPassword: daemonPwField.text,
+            sshPassword: root.sshPassword,
+            rememberSshPassword: root.rememberSshPassword,
             schedule: root.scheduleKind,
             intervalMinutes: parseInt(intervalField.text) || 60,
             atHour: parseInt(timeField.text.split(":")[0]) || 0,
@@ -195,6 +229,8 @@ ApplicationWindow {
             sshKeyField.text = job.sshKey || ""
             sshPortField.text = job.sshPort ? String(job.sshPort) : ""
             daemonPwField.text = ""
+            root.sshPassword = ""
+            root.rememberSshPassword = false
             root.scheduleKind = job.schedule || "manual"
             intervalField.text = String(job.intervalMinutes || 60)
             timeField.text = pad(job.atHour) + ":" + pad(job.atMinute)
@@ -202,6 +238,10 @@ ApplicationWindow {
             root.excludes = job.excludes || []
             root.extraArgs = job.extraArgs || []
             controller.changes.clear()
+        }
+        function onSshAuthRequired(host, user) {
+            root.authContext = "run"
+            sshAuthDialog.show(host, user)
         }
     }
 
@@ -223,6 +263,15 @@ ApplicationWindow {
 
         function onRemoteBrowseCompleted(input, current, directories, error) {
             remoteBrowser.complete(input, current, directories || [], error || "")
+        }
+
+        // Browse hit a key-auth failure: close the folder picker (a Popup renders above
+        // the modal) and prompt for a password; the retry reopens it (see onSubmitted).
+        function onRemoteAuthRequired(input, host, user) {
+            root.authContext = "browse"
+            root.authBrowseInput = input
+            remoteBrowser.close()
+            sshAuthDialog.show(host, user)
         }
     }
 
@@ -361,7 +410,7 @@ ApplicationWindow {
             selectedIndex = -1
             remoteDirModel.clear()
             completer.browseRemote(path, sshKeyField.text, parseInt(sshPortField.text) || 0,
-                                   root.remoteBrowseLimit)
+                                   root.remoteBrowseLimit, root.sshPassword)
         }
 
         function complete(input, current, directories, error) {
@@ -372,7 +421,9 @@ ApplicationWindow {
             remoteDirModel.clear()
             for (var i = 0; i < directories.length; ++i)
                 remoteDirModel.append({ value: directories[i], label: displayName(directories[i]) })
-            selectedIndex = remoteDirModel.count > 0 ? 0 : -1
+            // Start with nothing selected so Choose picks the folder you're viewing;
+            // click (or arrow keys) to explicitly select a child instead.
+            selectedIndex = -1
             message = error.length > 0 ? error : (remoteDirModel.count === 0 ? "No folders" : "")
             remoteDirList.forceActiveFocus()
         }
@@ -520,13 +571,22 @@ ApplicationWindow {
                     }
 
                     delegate: Rectangle {
+                        id: dirRow
                         required property string value
                         required property string label
                         required property int index
 
+                        readonly property bool selected: index === remoteBrowser.selectedIndex
+
                         width: remoteDirList.width
                         height: 28
-                        color: index === remoteBrowser.selectedIndex ? Theme.bgTertiary : "transparent"
+                        radius: Theme.radius
+                        // Selection (click/keyboard) is the strong highlight; hover is a
+                        // subtle, separate cue so it never decides what Choose picks.
+                        color: selected ? Theme.bgTertiary
+                                        : (dirMouse.containsMouse ? Theme.bgSecondary : "transparent")
+                        border.width: selected ? 1 : 0
+                        border.color: Theme.accent
 
                         Text {
                             anchors.fill: parent
@@ -541,10 +601,10 @@ ApplicationWindow {
                         }
 
                         MouseArea {
+                            id: dirMouse
                             anchors.fill: parent
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
-                            onEntered: remoteBrowser.selectedIndex = index
                             onClicked: remoteBrowser.selectedIndex = index
                             onDoubleClicked: remoteBrowser.openSelected()
                         }
@@ -567,7 +627,7 @@ ApplicationWindow {
                     onClicked: remoteBrowser.openSelected()
                 }
                 FlatButton {
-                    label: "Choose"
+                    label: remoteBrowser.selectedIndex >= 0 ? "Choose selected" : "Choose this folder"
                     primary: true
                     active: !remoteBrowser.loading
                     onClicked: remoteBrowser.chooseSelectedOrCurrent()
@@ -1179,6 +1239,25 @@ ApplicationWindow {
         onConfirmed: {
             root.confirmOpen = false
             controller.run(root.jobMap())
+        }
+    }
+
+    SshPasswordDialog {
+        id: sshAuthDialog
+        onCanceled: open = false
+        onSubmitted: function(user, password, remember) {
+            root.sshPassword = password
+            root.rememberSshPassword = remember
+            if (root.authContext === "browse") {
+                // Reopen the folder picker and re-list with the new credentials. The
+                // username is folded into the browse target so chosen paths carry it.
+                remoteBrowser.open()
+                remoteBrowser.load(root.sshWithUser(root.authBrowseInput, user))
+            } else {
+                root.applyUserToSshField(fromField, user)
+                root.applyUserToSshField(toField, user)
+                controller.retryWithPassword(root.jobMap(), user, password, remember)
+            }
         }
     }
 }

@@ -66,3 +66,19 @@ bool EndpointParser::usesDaemon(const SyncJob &job)
 {
     return isDaemon(job.source) || isDaemon(job.destination);
 }
+
+QString EndpointParser::withUser(const QString &text, const QString &user)
+{
+    if (user.isEmpty())
+        return text;
+    const Endpoint e = parse(text);
+    if (e.kind != EndpointKind::Ssh)
+        return text;
+
+    // Strip any existing "user@" from the host part, then prefix the new user.
+    QString target = e.sshTarget;
+    const int at = target.lastIndexOf(QLatin1Char('@'));
+    if (at >= 0)
+        target = target.mid(at + 1);
+    return user + QLatin1Char('@') + target + QLatin1Char(':') + e.sshPath;
+}

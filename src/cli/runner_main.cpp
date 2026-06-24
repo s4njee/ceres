@@ -13,6 +13,8 @@
 /// the OS keychain (SecretStore) at runtime only if the destination is a
 /// daemon-style endpoint.
 
+#include <cstdio>
+
 #include <QCoreApplication>
 #include <QTextStream>
 
@@ -25,6 +27,14 @@
 #include "sched/Scheduler.h"
 int main(int argc, char *argv[])
 {
+    // SSH_ASKPASS hook (see main.cpp): a scheduled ssh run execs us to fetch the
+    // password from the env; print it and exit before doing any real work.
+    if (qEnvironmentVariableIsSet("CERES_ASKPASS")) {
+        fputs(qgetenv("CERES_SSH_PASSWORD").constData(), stdout);
+        fputc('\n', stdout);
+        return 0;
+    }
+
     QCoreApplication app(argc, argv);
     QCoreApplication::setApplicationName(QStringLiteral("Ceres"));
     QCoreApplication::setOrganizationName(QStringLiteral("Ceres"));
@@ -62,6 +72,8 @@ int main(int argc, char *argv[])
     SyncJob runJob = job;
     if (EndpointParser::usesDaemon(runJob))  // daemon password lives in the keychain, not the profile
         runJob.daemonPassword = SecretStore().get(runJob.id);
+    else if (EndpointParser::usesSsh(runJob))  // SSH password (if remembered) likewise
+        runJob.sshPassword = SecretStore().get(runJob.id + QStringLiteral(".ssh"));
 
     out << "ceres-runner: '" << job.name << "'  " << job.source << " -> " << job.destination << "\n";
     out.flush();

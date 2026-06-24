@@ -38,6 +38,8 @@ public:
         info.rate = rate;
         emit progress(info);
     }
+
+    void sendStderr(const QString &line) { emit errorOutput(line); }
 };
 
 class JobControllerTest : public QObject {
@@ -46,6 +48,7 @@ private slots:
     void deleteRunRequiresMatchingSuccessfulPreview();
     void progressSpeedIsExposedAndReset();
     void realSyncProgressSetsTransferringStatus();
+    void sshKeyFailurePromptsThenRetriesWithPassword();
 };
 
 static RsyncCapabilities fakeCaps()
@@ -155,6 +158,46 @@ void JobControllerTest::realSyncProgressSetsTransferringStatus()
 
     engine.sendProgress(7, QStringLiteral("1.25MB/s"));
     QCOMPARE(controller.status(), QStringLiteral("Transferring…"));
+}
+
+void JobControllerTest::sshKeyFailurePromptsThenRetriesWithPassword()
+{
+    QTemporaryDir tmp;
+    QVERIFY(tmp.isValid());
+
+    FakeEngine engine;
+    JobController controller(fakeCaps(), &engine, ProfileStore(tmp.path()), SecretStore{},
+                             Scheduler{}, false);
+
+    QSignalSpy authSpy(&controller, &JobController::sshAuthRequired);
+
+    QVariantMap job = {
+        {QStringLiteral("source"), QStringLiteral("/tmp/source/")},
+        {QStringLiteral("destination"), QStringLiteral("host:/backup/")},
+    };
+
+    controller.run(job);
+    QCOMPARE(engine.starts, 1);
+    QVERIFY(engine.lastJob.sshPassword.isEmpty());  // first attempt uses the key
+
+    // ssh prints a permission-denied line, then rsync exits with the SSH error code.
+    engine.sendStderr(QStringLiteral("Permission denied (publickey,password)."));
+    engine.finish(255);
+
+    QCOMPARE(authSpy.count(), 1);
+    QCOMPARE(authSpy.at(0).at(0).toString(), QStringLiteral("host"));  // host parsed out
+    QCOMPARE(authSpy.at(0).at(1).toString(), QString());               // no user in endpoint
+
+    // The modal supplies credentials; the run repeats with the password and user@host.
+    controller.retryWithPassword(job, QStringLiteral("bob"), QStringLiteral("hunter2"), false);
+    QCOMPARE(engine.starts, 2);
+    QCOMPARE(engine.lastJob.sshPassword, QStringLiteral("hunter2"));
+    QCOMPARE(engine.lastJob.destination, QStringLiteral("bob@host:/backup/"));
+
+    // A password attempt that also fails must not loop back into another prompt.
+    engine.sendStderr(QStringLiteral("Permission denied (publickey,password)."));
+    engine.finish(255);
+    QCOMPARE(authSpy.count(), 1);
 }
 
 QTEST_MAIN(JobControllerTest)

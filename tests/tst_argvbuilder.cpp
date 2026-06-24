@@ -50,6 +50,7 @@ private slots:
     void sourceAndDestComeLast();
     void localTargetHasNoSsh();
     void sshTargetGetsSafeOptions();
+    void sshPasswordModeSwapsAuthOptions();
     void sshKeyAndPort();
     void sshKeyWithSpacesIsQuoted();
     void sshTargetsUseProtectedArgs();
@@ -165,6 +166,29 @@ void ArgvBuilderTest::sshTargetGetsSafeOptions()
     QVERIFY(ssh.contains(QStringLiteral("ConnectTimeout=10")));
     // Never weaken host-key checking.
     QVERIFY(!ssh.contains(QStringLiteral("StrictHostKeyChecking=no")));
+}
+
+void ArgvBuilderTest::sshPasswordModeSwapsAuthOptions()
+{
+    SyncJob job;
+    job.source = QStringLiteral("/tmp/a/");
+    job.destination = QStringLiteral("user@host:/backup/");
+    job.sshPassword = QStringLiteral("s3cr3t");
+
+    const QStringList args = ArgvBuilder::build(job, modern(), false);
+    const QString ssh = args.at(args.indexOf(QStringLiteral("-e")) + 1);
+
+    // Password mode drops BatchMode (which would disable password auth) and steers
+    // ssh to password/keyboard-interactive with a single prompt.
+    QVERIFY(!ssh.contains(QStringLiteral("BatchMode")));
+    QVERIFY(ssh.contains(QStringLiteral("PreferredAuthentications=password,keyboard-interactive")));
+    QVERIFY(ssh.contains(QStringLiteral("NumberOfPasswordPrompts=1")));
+    QVERIFY(ssh.contains(QStringLiteral("StrictHostKeyChecking=accept-new")));
+
+    // The password is fed via SSH_ASKPASS, never on the command line.
+    QVERIFY(!ssh.contains(QStringLiteral("s3cr3t")));
+    for (const QString &a : args)
+        QVERIFY(!a.contains(QStringLiteral("s3cr3t")));
 }
 
 void ArgvBuilderTest::sshKeyAndPort()

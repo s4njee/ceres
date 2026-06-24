@@ -1,5 +1,6 @@
 #include "engine/RsyncProcessEngine.h"
 
+#include <QCoreApplication>
 #include <QDir>
 #include <QFileInfo>
 #include <QProcessEnvironment>
@@ -117,6 +118,23 @@ void RsyncProcessEngine::start(const SyncJob &job, bool dryRun)
     QProcessEnvironment env = QProcessEnvironment::systemEnvironment();  // carries SSH_AUTH_SOCK
     if (!job.daemonPassword.isEmpty())
         env.insert(QStringLiteral("RSYNC_PASSWORD"), job.daemonPassword);  // rsync:// daemon auth
+
+    // SSH password auth: ssh can't read /dev/tty under QProcess, so feed the password
+    // through OpenSSH's askpass hook. We point SSH_ASKPASS at *this* executable, which
+    // short-circuits to printing CERES_SSH_PASSWORD when it sees CERES_ASKPASS (see
+    // main.cpp / runner_main.cpp). REQUIRE=force makes ssh use the helper even without
+    // a DISPLAY/tty (OpenSSH >= 8.4). The password never touches the argv.
+    if (ArgvBuilder::usesSsh(job) && !job.sshPassword.isEmpty()) {
+        QString askpass = QCoreApplication::applicationFilePath();
+#ifdef Q_OS_WIN
+        // The bundled Cygwin/MSYS ssh exec's the helper, so hand it a POSIX-form path.
+        askpass = ArgvBuilder::toRsyncLocalPath(askpass, m_caps.pathStyle);
+#endif
+        env.insert(QStringLiteral("SSH_ASKPASS"), askpass);
+        env.insert(QStringLiteral("SSH_ASKPASS_REQUIRE"), QStringLiteral("force"));
+        env.insert(QStringLiteral("CERES_ASKPASS"), QStringLiteral("1"));
+        env.insert(QStringLiteral("CERES_SSH_PASSWORD"), job.sshPassword);
+    }
 
 #ifdef Q_OS_WIN
     // The bundled rsync is a Cygwin/MSYS binary; for an `-e ssh` job it execs

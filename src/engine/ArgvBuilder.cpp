@@ -119,15 +119,25 @@ QStringList ArgvBuilder::build(const SyncJob &job, const RsyncCapabilities &caps
     if (usesSsh(job) && caps.supportsProtectArgs())
         args << QStringLiteral("--protect-args");  // remote paths with spaces stay intact
 
-    // SSH transport: force non-interactive options. QProcess can't answer ssh's
-    // /dev/tty password/host-key prompts, so BatchMode=yes fails cleanly instead
-    // of hanging. accept-new trusts first-seen hosts but hard-fails on a CHANGED
-    // key (MITM protection) — never StrictHostKeyChecking=no.
+    // SSH transport: force non-interactive options. accept-new trusts first-seen
+    // hosts but hard-fails on a CHANGED key (MITM protection) — never
+    // StrictHostKeyChecking=no.
     if (usesSsh(job)) {
-        QStringList ssh{QStringLiteral("ssh"),
-                        QStringLiteral("-o"), QStringLiteral("BatchMode=yes"),
-                        QStringLiteral("-o"), QStringLiteral("StrictHostKeyChecking=accept-new"),
-                        QStringLiteral("-o"), QStringLiteral("ConnectTimeout=10")};
+        // Key mode (no password supplied): BatchMode=yes makes a missing/failed key
+        // fail cleanly instead of hanging on ssh's /dev/tty prompt that QProcess
+        // can't answer. Password mode: BatchMode would *disable* password auth, so
+        // drop it and steer ssh to password/keyboard-interactive — the password is
+        // fed via SSH_ASKPASS (see RsyncProcessEngine), never on the argv.
+        QStringList ssh{QStringLiteral("ssh")};
+        if (job.sshPassword.isEmpty()) {
+            ssh << QStringLiteral("-o") << QStringLiteral("BatchMode=yes");
+        } else {
+            ssh << QStringLiteral("-o")
+                << QStringLiteral("PreferredAuthentications=password,keyboard-interactive")
+                << QStringLiteral("-o") << QStringLiteral("NumberOfPasswordPrompts=1");
+        }
+        ssh << QStringLiteral("-o") << QStringLiteral("StrictHostKeyChecking=accept-new")
+            << QStringLiteral("-o") << QStringLiteral("ConnectTimeout=10");
         if (!job.sshKeyPath.isEmpty())
             ssh << QStringLiteral("-i") << toRsyncLocalPath(job.sshKeyPath, caps.pathStyle);
         if (job.sshPort > 0)
