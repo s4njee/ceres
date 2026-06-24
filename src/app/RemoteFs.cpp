@@ -10,6 +10,7 @@
 #include <utility>
 
 #include "core/Endpoint.h"
+#include "core/SshKnownHosts.h"
 #include "engine/ArgvBuilder.h"
 
 namespace {
@@ -70,6 +71,21 @@ QStringList sshArgsFor(const Endpoint &endpoint, const QString &sshKey, int port
 #endif
     args << endpoint.sshTarget;
     return args;
+}
+
+QString sshProgramFor(const RsyncCapabilities &caps)
+{
+#ifdef Q_OS_WIN
+    if (caps.found && !caps.path.isEmpty()) {
+        const QString bundledSsh =
+            QFileInfo(caps.path).absoluteDir().filePath(QStringLiteral("ssh.exe"));
+        if (QFileInfo::exists(bundledSsh))
+            return bundledSsh;
+    }
+#else
+    Q_UNUSED(caps);
+#endif
+    return QStringLiteral("ssh");
 }
 
 QProcessEnvironment sshEnvironmentFor(const RsyncCapabilities &caps, const QString &sshPassword)
@@ -168,6 +184,11 @@ void RemoteFs::list(const QString &target, const QString &dir, const QString &ss
         const bool failed = proc->exitStatus() != QProcess::NormalExit || proc->exitCode() != 0;
         proc->deleteLater();
 
+        if (failed && SshKnownHosts::looksLikeChangedHostKey(errorOutput)) {
+            emit hostKeyChanged(target, SshKnownHosts::hostFromTarget(target));
+            return;
+        }
+
         // Auth failed (key rejected, or a reused password that's for the wrong user) —
         // ask the UI to prompt for credentials and retry.
         if (failed && looksLikeAuthFailure(errorOutput)) {
@@ -213,7 +234,7 @@ void RemoteFs::list(const QString &target, const QString &dir, const QString &ss
         proc->deleteLater();
         emit listed(target, dir, {}, reason);
     });
-    proc->start(QStringLiteral("ssh"), args);
+    proc->start(sshProgramFor(m_caps), args);
     proc->write(script.toUtf8());  // feed the script to the remote sh over stdin
     proc->closeWriteChannel();
 }
@@ -237,6 +258,11 @@ void runOpCommand(RemoteFs *self, const RsyncCapabilities &caps, const QString &
         const bool failed = proc->exitStatus() != QProcess::NormalExit || proc->exitCode() != 0;
         proc->deleteLater();
 
+        if (failed && SshKnownHosts::looksLikeChangedHostKey(errorOutput)) {
+            emit self->hostKeyChanged(target, SshKnownHosts::hostFromTarget(target));
+            return;
+        }
+
         if (failed && looksLikeAuthFailure(errorOutput)) {
             QString host;
             QString user;
@@ -256,7 +282,7 @@ void runOpCommand(RemoteFs *self, const RsyncCapabilities &caps, const QString &
         proc->deleteLater();
         emit self->opFinished(reason);
     });
-    proc->start(QStringLiteral("ssh"), args);
+    proc->start(sshProgramFor(caps), args);
     proc->write(script.toUtf8());
     proc->closeWriteChannel();
 }

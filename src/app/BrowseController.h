@@ -54,9 +54,11 @@ public:
     // with `password`, and (if `remember`) persist the host + password.
     Q_INVOKABLE void connectWithPassword(const QString &user, const QString &password, bool remember);
     Q_INVOKABLE void disconnectHost();
+    Q_INVOKABLE void repairKnownHostAndRetry();
 
     // Remote navigation / ops (no-ops when not connected).
     Q_INVOKABLE void remoteCd(const QString &name);
+    Q_INVOKABLE void setRemotePath(const QString &path);
     Q_INVOKABLE void remoteUp();
     Q_INVOKABLE void remoteRefresh();
     Q_INVOKABLE void mkdirRemote(const QString &name);
@@ -90,6 +92,8 @@ signals:
     void authRequired(const QString &host, const QString &user);
     /// A remote op or listing failed; carries a human-readable message for a toast.
     void errorOccurred(const QString &message);
+    /// The remote host key changed; UI should confirm before removing known_hosts.
+    void hostKeyChanged(const QString &host);
     /// A host was saved/updated (so the sidebar's SshHostListModel can reload).
     void hostsChanged();
 
@@ -117,6 +121,7 @@ private:
 
     QString m_localPath;
     QString m_remotePath;   // resolved absolute remote dir (trailing slash)
+    QString m_pendingRemotePath;
     bool m_connected = false;
     bool m_busy = false;
 };

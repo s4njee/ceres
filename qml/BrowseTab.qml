@@ -234,6 +234,7 @@ Item {
                     side: "local"
                     onUpRequested: browse.localUp()
                     onRefreshRequested: browse.localRefresh()
+                    onPathSubmitted: function(path) { browse.setLocalPath(path); clearSelection() }
                     onOpenDir: function(name) { browse.localCd(name); clearSelection() }
                     onContextMenuRequested: localMenu.popup()
                     onDragBegan: function(side, names, sx, sy) { tab.dragBeginAt(side, names, sx, sy) }
@@ -260,6 +261,7 @@ Item {
                     acceptFileDrops: browse.connected
                     onUpRequested: browse.remoteUp()
                     onRefreshRequested: browse.remoteRefresh()
+                    onPathSubmitted: function(path) { browse.setRemotePath(path); clearSelection() }
                     onOpenDir: function(name) { browse.remoteCd(name); clearSelection() }
                     onContextMenuRequested: remoteMenu.popup()
                     onDragBegan: function(side, names, sx, sy) { tab.dragBeginAt(side, names, sx, sy) }
@@ -371,6 +373,7 @@ Item {
     Connections {
         target: browse
         function onAuthRequired(host, user) { sshAuthDialog.show(host, user) }
+        function onHostKeyChanged(host) { knownHostDialog.show(host) }
         function onErrorOccurred(msg) { tab.message = msg; messageTimer.restart() }
     }
     Connections {
@@ -384,6 +387,15 @@ Item {
         onCanceled: open = false
         onSubmitted: function(user, password, remember) {
             browse.connectWithPassword(user, password, remember)
+        }
+    }
+
+    KnownHostChangedDialog {
+        id: knownHostDialog
+        onCanceled: open = false
+        onConfirmed: {
+            open = false
+            browse.repairKnownHostAndRetry()
         }
     }
 

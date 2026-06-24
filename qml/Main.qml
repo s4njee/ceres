@@ -302,6 +302,9 @@ ApplicationWindow {
             root.authContext = "run"
             sshAuthDialog.show(host, user)
         }
+        function onSshHostKeyChanged(host) {
+            knownHostDialog.show(host)
+        }
     }
 
     Connections {
@@ -1290,6 +1293,13 @@ ApplicationWindow {
                         font.family: Theme.mono
                         font.pixelSize: 12
                     }
+                    Text {
+                        visible: controller.running && controller.bytesProgress.length > 0
+                        text: controller.bytesProgress
+                        color: Theme.textSecondary
+                        font.family: Theme.mono
+                        font.pixelSize: 12
+                    }
                     Text { text: controller.status; color: Theme.textSecondary; font.pixelSize: 12 }
                 }
             }
@@ -1335,6 +1345,15 @@ ApplicationWindow {
                 root.applyUserToSshField(toField, user)
                 controller.retryWithPassword(root.jobMap(), user, password, remember)
             }
+        }
+    }
+
+    KnownHostChangedDialog {
+        id: knownHostDialog
+        onCanceled: open = false
+        onConfirmed: {
+            open = false
+            controller.repairKnownHostAndRetry(root.jobMap())
         }
     }
 

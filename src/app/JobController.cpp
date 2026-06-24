@@ -10,6 +10,7 @@
 
 #include "core/Endpoint.h"
 #include "core/Peer.h"
+#include "core/SshKnownHosts.h"
 #include "core/SshHost.h"
 #include "core/SyncJob.h"
 #include "engine/RsyncProcessEngine.h"
@@ -28,6 +29,42 @@ QStringList stringListFromVariant(const QVariant &value)
     for (const QVariant &item : list)
         result << item.toString();
     return result;
+}
+
+QString formatBytes(qint64 bytes)
+{
+    if (bytes < 0)
+        bytes = 0;
+
+    static const QStringList units = {QStringLiteral("B"), QStringLiteral("kB"),
+                                     QStringLiteral("MB"), QStringLiteral("GB")};
+    double value = static_cast<double>(bytes);
+    int unit = 0;
+    while (value >= 1024.0 && unit < units.size() - 1) {
+        value /= 1024.0;
+        ++unit;
+    }
+
+    if (unit == 0)
+        return QStringLiteral("%1 B").arg(bytes);
+
+    const int decimals = value < 10.0 ? 1 : 0;
+    return QStringLiteral("%1 %2").arg(QString::number(value, 'f', decimals), units.at(unit));
+}
+
+QString formatBytesProgress(const ProgressInfo &p)
+{
+    if (p.bytes <= 0 && p.percent <= 0)
+        return {};
+
+    const QString transferred = formatBytes(p.bytes);
+    if (p.percent <= 0)
+        return transferred + QStringLiteral(" / ?");
+
+    const qint64 total = p.percent >= 100
+        ? p.bytes
+        : static_cast<qint64>(static_cast<double>(p.bytes) * 100.0 / p.percent + 0.5);
+    return transferred + QStringLiteral(" / ") + formatBytes(total);
 }
 
 } // namespace
@@ -118,10 +155,13 @@ JobController::JobController(RsyncCapabilities caps, SyncEngine *engine, Profile
     connect(m_engine, &SyncEngine::progress, this, [this](const ProgressInfo &p) {
         if (!m_activeDryRun)
             setStatus(QStringLiteral("Transferring…"));
-        const bool changed = m_percent != p.percent || m_speed != p.rate;
+        const QString bytesProgress = formatBytesProgress(p);
+        const bool changed = m_percent != p.percent || m_speed != p.rate
+            || m_bytesProgress != bytesProgress;
         if (changed) {
             m_percent = p.percent;
             m_speed = p.rate;
+            m_bytesProgress = bytesProgress;
             emit progressChanged();
         }
     });
@@ -141,6 +181,7 @@ JobController::JobController(RsyncCapabilities caps, SyncEngine *engine, Profile
         emit logChanged();
         m_percent = 0;
         m_speed.clear();
+        m_bytesProgress.clear();
         emit progressChanged();
         setRunning(true);
         setStatus(QStringLiteral("Scanning…"));
@@ -165,6 +206,15 @@ JobController::JobController(RsyncCapabilities caps, SyncEngine *engine, Profile
         } else {
             if (!m_activeDryRun)
                 m_lastPreviewFingerprint.clear();
+
+            if (SshKnownHosts::looksLikeChangedHostKey(m_runStderr) && !m_activeRemote.isEmpty()) {
+                const Endpoint e = EndpointParser::parse(m_activeRemote);
+                const QString host = SshKnownHosts::hostFromTarget(e.sshTarget);
+                setStatus(QStringLiteral("Host key changed for %1").arg(host));
+                m_activeFingerprint.clear();
+                emit sshHostKeyChanged(host);
+                return;
+            }
 
             // SSH public-key auth failed and we haven't tried a password yet — prompt
             // for credentials and retry, instead of just reporting a connection error.
@@ -341,6 +391,7 @@ void JobController::startJob(const SyncJob &job, bool dryRun)
     m_activeUsedPassword = !j.sshPassword.isEmpty();
     m_activeRemote = EndpointParser::isSsh(j.source) ? j.source
         : (EndpointParser::isSsh(j.destination) ? j.destination : QString());
+    m_activeSshPort = j.sshPort;
 
     const QByteArray fingerprint = syncFingerprint(j);
     if (!dryRun && j.deleteExtraneous && fingerprint != m_lastPreviewFingerprint) {
@@ -383,6 +434,23 @@ void JobController::retryWithPassword(const QVariantMap &job, const QString &use
     }
 
     startJob(j, m_activeDryRun);  // repeat the failed run in the same mode
+}
+
+void JobController::repairKnownHostAndRetry(const QVariantMap &job)
+{
+    if (m_activeRemote.isEmpty())
+        return;
+
+    const Endpoint e = EndpointParser::parse(m_activeRemote);
+    const KnownHostRepairResult result =
+        SshKnownHosts::removeHost(m_caps, e.sshTarget, m_activeSshPort);
+    if (!result.ok) {
+        setStatus(result.message);
+        return;
+    }
+
+    setStatus(result.message);
+    startJob(jobFromMap(job), m_activeDryRun);
 }
 
 void JobController::newJob()

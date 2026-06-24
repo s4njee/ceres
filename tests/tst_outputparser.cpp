@@ -156,7 +156,9 @@ void OutputParserTest::parsesPerFileProgress()
     QCOMPARE(files[2].path, QStringLiteral("dir/b.txt"));
     QCOMPARE(files[2].pct, 100);
 
-    // Aggregate is derived from completed-file count: 1/2 -> 50%, then 2/2 -> 100%.
+    // Aggregate must not mirror the first file's own 50% before rsync reports a
+    // to-chk denominator; once it does, it is derived from completed-file count.
+    QCOMPARE(agg.first(), 0);
     QVERIFY(agg.contains(50));
     QCOMPARE(agg.last(), 100);
 }

@@ -82,7 +82,7 @@ Rectangle {
                         required property int fileCount
 
                         property bool expanded: false
-                        readonly property bool expandable: fileCount > 1
+                        readonly property bool expandable: fileCount > 0
 
                         width: ListView.view.width
                         spacing: 3
@@ -170,7 +170,7 @@ Rectangle {
                             }
                         }
 
-                        // per-file detail (expandable)
+                        // per-file detail (expandable tree populated by the live rsync stream)
                         ColumnLayout {
                             visible: tRow.expanded
                             Layout.fillWidth: true
@@ -184,15 +184,27 @@ Rectangle {
                                     required property var modelData
                                     Layout.fillWidth: true
                                     spacing: 8
+                                    Item {
+                                        Layout.preferredWidth: Math.max(0, modelData.depth || 0) * 14
+                                        height: 1
+                                    }
+                                    Text {
+                                        text: modelData.isDir ? "▾" : "•"
+                                        color: Theme.textTertiary
+                                        font.pixelSize: 10
+                                        Layout.preferredWidth: 10
+                                        horizontalAlignment: Text.AlignHCenter
+                                    }
                                     Text {
                                         Layout.fillWidth: true
                                         text: modelData.name
-                                        color: Theme.textSecondary
+                                        color: modelData.isDir ? Theme.textPrimary : Theme.textSecondary
                                         font.family: Theme.mono
                                         font.pixelSize: 11
                                         elide: Text.ElideMiddle
                                     }
                                     Rectangle {
+                                        visible: !modelData.isDir
                                         Layout.preferredWidth: 90
                                         height: 3
                                         radius: 1.5
@@ -205,6 +217,7 @@ Rectangle {
                                         }
                                     }
                                     Text {
+                                        visible: !modelData.isDir
                                         text: modelData.percent + "%"
                                         color: Theme.textTertiary
                                         font.pixelSize: 10
@@ -212,6 +225,7 @@ Rectangle {
                                         horizontalAlignment: Text.AlignRight
                                     }
                                     Text {
+                                        visible: !modelData.isDir
                                         text: modelData.rate
                                         color: Theme.textTertiary
                                         font.pixelSize: 10

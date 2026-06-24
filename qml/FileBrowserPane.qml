@@ -23,6 +23,7 @@ ColumnLayout {
 
     signal upRequested()
     signal refreshRequested()
+    signal pathSubmitted(string path)
     signal openDir(string name)
     signal contextMenuRequested()
     // Drag of the current selection began/moved/ended; coords are scene-relative.
@@ -61,13 +62,14 @@ ColumnLayout {
         FlatButton { label: "Refresh"; active: pane.enabledActions && !pane.busy; onClicked: pane.refreshRequested() }
     }
 
-    Text {
+    Field {
+        id: pathField
         Layout.fillWidth: true
         text: pane.path
-        color: Theme.textSecondary
-        font.family: Theme.mono
-        font.pixelSize: 11
-        elide: Text.ElideMiddle
+        enabled: pane.enabledActions && !pane.busy
+        selectByMouse: true
+        onAccepted: pane.pathSubmitted(text)
+        onActiveFocusChanged: if (!activeFocus) text = pane.path
     }
 
     Rectangle {

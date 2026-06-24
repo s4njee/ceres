@@ -31,11 +31,12 @@ public:
         emit finished(code, crashed);
     }
 
-    void sendProgress(int percent, const QString &rate)
+    void sendProgress(int percent, const QString &rate, qint64 bytes = 0)
     {
         ProgressInfo info;
         info.percent = percent;
         info.rate = rate;
+        info.bytes = bytes;
         emit progress(info);
     }
 
@@ -132,18 +133,22 @@ void JobControllerTest::progressSpeedIsExposedAndReset()
     };
 
     QVERIFY(controller.speed().isEmpty());
+    QVERIFY(controller.bytesProgress().isEmpty());
     controller.preview(job);
     QCOMPARE(controller.percent(), 0);
     QVERIFY(controller.speed().isEmpty());
+    QVERIFY(controller.bytesProgress().isEmpty());
 
-    engine.sendProgress(42, QStringLiteral("512.00kB/s"));
+    engine.sendProgress(42, QStringLiteral("512.00kB/s"), 524288);
     QCOMPARE(controller.percent(), 42);
     QCOMPARE(controller.speed(), QStringLiteral("512.00kB/s"));
+    QCOMPARE(controller.bytesProgress(), QStringLiteral("512 kB / 1.2 MB"));
 
     engine.finish();
     controller.preview(job);
     QCOMPARE(controller.percent(), 0);
     QVERIFY(controller.speed().isEmpty());
+    QVERIFY(controller.bytesProgress().isEmpty());
 }
 
 void JobControllerTest::realSyncProgressSetsTransferringStatus()

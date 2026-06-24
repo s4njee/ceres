@@ -26,6 +26,8 @@ ceres_add_test(ProfileStore tst_profilestore tst_profilestore.cpp)
 
 ceres_add_test(SecretStore tst_secretstore tst_secretstore.cpp)
 
+ceres_add_test(SshKnownHosts tst_sshknownhosts tst_sshknownhosts.cpp)
+
 ceres_add_test(Beacon tst_beacon tst_beacon.cpp)
 
 ceres_add_test(Scheduler tst_scheduler tst_scheduler.cpp)

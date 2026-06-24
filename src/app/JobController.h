@@ -51,6 +51,7 @@ class JobController : public QObject {
     Q_PROPERTY(QString log READ log NOTIFY logChanged)
     Q_PROPERTY(int percent READ percent NOTIFY progressChanged)
     Q_PROPERTY(QString speed READ speed NOTIFY progressChanged)
+    Q_PROPERTY(QString bytesProgress READ bytesProgress NOTIFY progressChanged)
     Q_PROPERTY(QString status READ status NOTIFY statusChanged)
     Q_PROPERTY(QString hostName READ hostName CONSTANT)
     Q_PROPERTY(QString hostAddress READ hostAddress NOTIFY hostAddressChanged)
@@ -89,6 +90,7 @@ public:
     QString log() const { return m_logLines.join(QLatin1Char('\n')); }
     int percent() const { return m_percent; }
     QString speed() const { return m_speed; }
+    QString bytesProgress() const { return m_bytesProgress; }
     QString status() const { return m_status; }
     QString hostName() const { return m_hostName; }
     QString hostAddress() const { return m_hostAddress; }
@@ -109,6 +111,7 @@ public:
     /// `remember` is set, the password is stored for the SSH host in the keychain.
     Q_INVOKABLE void retryWithPassword(const QVariantMap &job, const QString &username,
                                        const QString &password, bool remember);
+    Q_INVOKABLE void repairKnownHostAndRetry(const QVariantMap &job);
 
     // Profile management (sidebar jobs).
     Q_INVOKABLE void newJob();  // reset the editor to a blank, unsaved job
@@ -147,6 +150,7 @@ signals:
     /// a username/password (prefilled with `user`, parsed from the remote endpoint)
     /// and then calling retryWithPassword(). `host` is shown for context.
     void sshAuthRequired(const QString &host, const QString &user);
+    void sshHostKeyChanged(const QString &host);
 
 private:
     void startJob(const SyncJob &job, bool dryRun);
@@ -178,6 +182,7 @@ private:
     QStringList m_logLines;
     QString m_status;
     QString m_speed;
+    QString m_bytesProgress;
     QString m_hostName;
     QString m_hostAddress;
     int m_percent = 0;
@@ -185,6 +190,7 @@ private:
     bool m_activeDryRun = true;
     bool m_activeUsedPassword = false;  // active run authenticated with a password
     QString m_activeRemote;             // active run's remote endpoint (for the auth prompt)
+    int m_activeSshPort = 0;
     QString m_runStderr;                // this run's stderr, scanned for auth failures
     QByteArray m_activeFingerprint;
     QByteArray m_lastPreviewFingerprint;

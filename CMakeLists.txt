@@ -27,6 +27,7 @@ add_library(ceres_core STATIC
     src/core/Endpoint.h            src/core/Endpoint.cpp
     src/core/JobId.h
     src/core/SshHost.h
+    src/core/SshKnownHosts.h        src/core/SshKnownHosts.cpp
     src/core/SshHostStore.h          src/core/SshHostStore.cpp
     src/core/ProfileStore.h          src/core/ProfileStore.cpp
     src/core/SecretStore.h           src/core/SecretStore.cpp
@@ -77,6 +78,7 @@ qt_add_qml_module(ceres
         qml/Field.qml
         qml/DeleteConfirmDialog.qml
         qml/SshPasswordDialog.qml
+        qml/KnownHostChangedDialog.qml
         qml/AddSshHostDialog.qml
         qml/BrowseTab.qml
         qml/TransfersDialog.qml

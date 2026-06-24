@@ -46,6 +46,8 @@ signals:
     void opFinished(const QString &error);
     // A command failed public-key auth; UI should prompt for a password and retry.
     void authRequired(const QString &target, const QString &host, const QString &user);
+    // SSH found a changed known_hosts entry; UI should ask before removing it.
+    void hostKeyChanged(const QString &target, const QString &host);
 
 private:
     RsyncCapabilities m_caps;

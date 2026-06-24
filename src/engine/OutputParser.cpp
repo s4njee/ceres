@@ -231,8 +231,9 @@ bool OutputParser::tryParseProgress(const QString &text)
 
     if (p.totalToCheck > 0) {
         // A completion line: this file is done; to-chk tells us how many remain.
-        m_totalFiles = p.totalToCheck;
-        m_filesDone = p.totalToCheck - p.toCheck;
+        m_totalFiles = qMax(m_totalFiles, p.totalToCheck);
+        m_filesDone = qMax(m_filesDone,
+                           p.xfr >= 0 ? p.xfr : (p.totalToCheck - p.toCheck));
         m_curPercent = 0;  // the just-finished file no longer contributes a fraction
     }
 
@@ -240,6 +241,8 @@ bool OutputParser::tryParseProgress(const QString &text)
     if (m_totalFiles > 0) {
         const double done = m_filesDone + m_curPercent / 100.0;
         agg.percent = qBound(0, static_cast<int>(done / m_totalFiles * 100.0 + 0.5), 100);
+    } else {
+        agg.percent = 0;
     }
     emit progress(agg);
     return true;

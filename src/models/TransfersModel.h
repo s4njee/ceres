@@ -39,8 +39,8 @@ public:
         PercentRole,
         SpeedRole,
         ErrorRole,
-        FilesRole,      // QVariantList of { name, percent, rate } for the expandable view
-        FileCountRole,  // number of per-file rows recorded so far
+        FilesRole,      // QVariantList tree rows: { name, path, depth, isDir, percent, rate }
+        FileCountRole,  // number of file rows recorded so far
     };
 
     using QAbstractListModel::QAbstractListModel;
@@ -54,8 +54,8 @@ public:
              const QString &source, const QString &destination);
     void setStatus(const QString &id, Status status, const QString &error = {});
     void updateProgress(const QString &id, int percent, const QString &speed);
-    // Records/updates one file's progress within a transfer (drives the expandable
-    // per-file view). Adds the file row on first sight, updates it thereafter.
+    // Records/updates one transferred path. Parent folder rows are synthesized so
+    // the UI can render a tree without a costly pre-transfer enumeration pass.
     void updateFileProgress(const QString &id, const QString &path, int percent,
                             const QString &rate);
 
@@ -71,6 +71,9 @@ signals:
 private:
     struct FileLine {
         QString name;
+        QString path;
+        int depth = 0;
+        bool isDir = false;
         int percent = 0;
         QString rate;
     };
@@ -82,6 +85,7 @@ private:
     };
 
     int indexOfId(const QString &id) const;
+    static int fileCount(const Row &row);
 
     QList<Row> m_rows;
 };

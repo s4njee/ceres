@@ -95,6 +95,21 @@ QStringList sshArgsFor(const Endpoint &endpoint, const QString &sshKey, int port
     return args;
 }
 
+QString sshProgramFor(const RsyncCapabilities &caps)
+{
+#ifdef Q_OS_WIN
+    if (caps.found && !caps.path.isEmpty()) {
+        const QString bundledSsh =
+            QFileInfo(caps.path).absoluteDir().filePath(QStringLiteral("ssh.exe"));
+        if (QFileInfo::exists(bundledSsh))
+            return bundledSsh;
+    }
+#else
+    Q_UNUSED(caps);
+#endif
+    return QStringLiteral("ssh");
+}
+
 QProcessEnvironment sshEnvironmentFor(const RsyncCapabilities &caps, const QString &sshPassword)
 {
     QProcessEnvironment env = QProcessEnvironment::systemEnvironment();  // ssh-agent
@@ -254,7 +269,7 @@ void PathCompleter::completeRemote(const QString &input, const QString &sshKey, 
         }
     });
     connect(proc, &QProcess::errorOccurred, proc, [proc](QProcess::ProcessError) { proc->deleteLater(); });
-    proc->start(QStringLiteral("ssh"), args);
+    proc->start(sshProgramFor(m_caps), args);
     proc->write(script.toUtf8());  // feed the script to the remote sh over stdin
     proc->closeWriteChannel();
 }
@@ -343,7 +358,7 @@ void PathCompleter::browseRemote(const QString &input, const QString &sshKey, in
         proc->deleteLater();
         emit remoteBrowseCompleted(input, input, {}, reason);
     });
-    proc->start(QStringLiteral("ssh"), args);
+    proc->start(sshProgramFor(m_caps), args);
     proc->write(script.toUtf8());  // feed the script to the remote sh over stdin
     proc->closeWriteChannel();
 }

@@ -1,6 +1,8 @@
 #include <QtTest>
 
 #include <QList>
+#include <QVariantList>
+#include <QVariantMap>
 
 #include "app/TransferManager.h"
 #include "engine/SyncEngine.h"
@@ -52,6 +54,20 @@ public:
         emit progress(info);
     }
 
+    void sendChange(const QString &path)
+    {
+        ChangeItem item;
+        item.op = ChangeItem::Op::Update;
+        item.fileType = QLatin1Char('f');
+        item.path = path;
+        emit change(item);
+    }
+
+    void sendFileProgress(const QString &path, int percent, const QString &rate)
+    {
+        emit fileProgress(path, percent, rate);
+    }
+
     void failStart(const QString &reason) { emit failedToStart(reason); }
 };
 
@@ -78,6 +94,7 @@ private slots:
     void cancelQueuedAndActive();
     void enqueuedSignalFiresPerEnqueue();
     void pauseAndResume();
+    void fileProgressBuildsTree();
 };
 
 static SyncJob jobN(int n)
@@ -247,6 +264,48 @@ void TransferManagerTest::pauseAndResume()
     mgr.resume(b);
     QCOMPARE(factory.created.size(), 2);
     QCOMPARE(countStatus(model, TransfersModel::Active), 1);
+}
+
+void TransferManagerTest::fileProgressBuildsTree()
+{
+    FakeEngineFactory factory;
+    TransferManager mgr(std::ref(factory));
+    mgr.setMaxConcurrent(1);
+
+    mgr.enqueue(jobN(1), QStringLiteral("down"), QStringLiteral("folder"));
+    QCOMPARE(factory.created.size(), 1);
+
+    factory.created.at(0)->sendChange(QStringLiteral("dir/sub/a.txt"));
+    factory.created.at(0)->sendFileProgress(QStringLiteral("dir/sub/a.txt"), 40,
+                                            QStringLiteral("10.00kB/s"));
+    factory.created.at(0)->sendChange(QStringLiteral("dir/b.txt"));
+    factory.created.at(0)->sendFileProgress(QStringLiteral("dir/b.txt"), 100,
+                                            QStringLiteral("20.00kB/s"));
+
+    const QModelIndex row = mgr.model()->index(0);
+    QCOMPARE(mgr.model()->data(row, TransfersModel::FileCountRole).toInt(), 2);
+
+    const QVariantList files = mgr.model()->data(row, TransfersModel::FilesRole).toList();
+    QCOMPARE(files.size(), 4);
+
+    const auto asMap = [](const QVariant &v) { return v.toMap(); };
+    QCOMPARE(asMap(files.at(0)).value(QStringLiteral("name")).toString(), QStringLiteral("dir"));
+    QCOMPARE(asMap(files.at(0)).value(QStringLiteral("isDir")).toBool(), true);
+    QCOMPARE(asMap(files.at(0)).value(QStringLiteral("depth")).toInt(), 0);
+
+    QCOMPARE(asMap(files.at(1)).value(QStringLiteral("name")).toString(), QStringLiteral("sub"));
+    QCOMPARE(asMap(files.at(1)).value(QStringLiteral("isDir")).toBool(), true);
+    QCOMPARE(asMap(files.at(1)).value(QStringLiteral("depth")).toInt(), 1);
+
+    QCOMPARE(asMap(files.at(2)).value(QStringLiteral("name")).toString(), QStringLiteral("a.txt"));
+    QCOMPARE(asMap(files.at(2)).value(QStringLiteral("isDir")).toBool(), false);
+    QCOMPARE(asMap(files.at(2)).value(QStringLiteral("depth")).toInt(), 2);
+    QCOMPARE(asMap(files.at(2)).value(QStringLiteral("percent")).toInt(), 40);
+
+    QCOMPARE(asMap(files.at(3)).value(QStringLiteral("name")).toString(), QStringLiteral("b.txt"));
+    QCOMPARE(asMap(files.at(3)).value(QStringLiteral("isDir")).toBool(), false);
+    QCOMPARE(asMap(files.at(3)).value(QStringLiteral("depth")).toInt(), 1);
+    QCOMPARE(asMap(files.at(3)).value(QStringLiteral("percent")).toInt(), 100);
 }
 
 QTEST_MAIN(TransferManagerTest)

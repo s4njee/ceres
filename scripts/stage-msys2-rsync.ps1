@@ -39,6 +39,7 @@ $StageBin = Join-Path $DestinationDir "rsync\bin"
 
 $rsync = Require-File (Join-Path $UsrBin "rsync.exe")
 $ssh = Require-File (Join-Path $UsrBin "ssh.exe")
+$sshKeygen = Require-File (Join-Path $UsrBin "ssh-keygen.exe")
 $bash = Require-File (Join-Path $UsrBin "bash.exe")
 $ldd = Require-File (Join-Path $UsrBin "ldd.exe")
 
@@ -47,14 +48,15 @@ if ($Clean -and (Test-Path -LiteralPath $StageBin)) {
 }
 New-Item -ItemType Directory -Force -Path $StageBin | Out-Null
 
-$lddOutput = & $bash -lc "ldd /usr/bin/rsync.exe /usr/bin/ssh.exe"
+$lddOutput = & $bash -lc "ldd /usr/bin/rsync.exe /usr/bin/ssh.exe /usr/bin/ssh-keygen.exe"
 if ($LASTEXITCODE -ne 0) {
-    throw "ldd failed for MSYS2 rsync.exe/ssh.exe"
+    throw "ldd failed for MSYS2 rsync.exe/ssh.exe/ssh-keygen.exe"
 }
 
 $files = [System.Collections.Generic.SortedSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
 [void]$files.Add($rsync)
 [void]$files.Add($ssh)
+[void]$files.Add($sshKeygen)
 
 foreach ($line in $lddOutput) {
     if ($line -match '=>\s+(/usr/bin/[^ ]+)') {

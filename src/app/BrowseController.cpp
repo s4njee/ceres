@@ -6,6 +6,7 @@
 #include <QFileInfo>
 
 #include "app/TransferManager.h"
+#include "core/SshKnownHosts.h"
 #include "core/SyncJob.h"
 
 namespace {
@@ -60,6 +61,11 @@ BrowseController::BrowseController(RsyncCapabilities caps, SshHostStore hostStor
             [this](const QString &, const QString &host, const QString &user) {
                 setBusy(false);
                 emit authRequired(host, user);
+            });
+    connect(&m_remoteFs, &RemoteFs::hostKeyChanged, this,
+            [this](const QString &, const QString &host) {
+                setBusy(false);
+                emit hostKeyChanged(host);
             });
     connect(&m_remoteFs, &RemoteFs::opFinished, this, [this](const QString &error) {
         if (!error.isEmpty())
@@ -140,6 +146,7 @@ void BrowseController::disconnectHost()
     m_sshPassword.clear();
     m_sshPort = 0;
     m_remotePath.clear();
+    m_pendingRemotePath.clear();
     m_remote.clear();
     setConnected(false);
     emit targetChanged();
@@ -150,6 +157,7 @@ void BrowseController::listRemote(const QString &dir)
 {
     if (m_target.isEmpty())
         return;
+    m_pendingRemotePath = dir;
     setBusy(true);
     m_remoteFs.list(m_target, dir, m_sshKey, m_sshPort, m_sshPassword);
 }
@@ -163,6 +171,7 @@ void BrowseController::onListed(const QString & /*target*/, const QString &path,
         return;
     }
     m_remote.setEntries(entries);
+    m_pendingRemotePath.clear();
     if (path != m_remotePath) {
         m_remotePath = path;
         emit remotePathChanged();
@@ -174,6 +183,35 @@ void BrowseController::remoteCd(const QString &name)
 {
     if (m_connected)
         listRemote(joinRemote(m_remotePath, name));
+}
+
+void BrowseController::repairKnownHostAndRetry()
+{
+    if (m_target.isEmpty())
+        return;
+
+    const KnownHostRepairResult result = SshKnownHosts::removeHost(m_caps, m_target, m_sshPort);
+    if (!result.ok) {
+        emit errorOccurred(result.message);
+        return;
+    }
+    emit errorOccurred(result.message);
+    listRemote(m_pendingRemotePath.isEmpty()
+                   ? (m_remotePath.isEmpty() ? QStringLiteral(".") : m_remotePath)
+                   : m_pendingRemotePath);
+}
+
+void BrowseController::setRemotePath(const QString &path)
+{
+    if (!m_connected)
+        return;
+    const QString clean = path.trimmed();
+    if (clean.isEmpty())
+        return;
+    if (clean.startsWith(QLatin1Char('/')) || clean.startsWith(QLatin1Char('~')))
+        listRemote(clean);
+    else
+        listRemote(joinRemote(m_remotePath, clean));
 }
 
 void BrowseController::remoteUp()
@@ -220,9 +258,15 @@ void BrowseController::localUp()
 
 void BrowseController::setLocalPath(const QString &path)
 {
-    const QString clean = QDir(path).absolutePath();
-    if (!QFileInfo(clean).isDir())
+    const QString input = path.trimmed();
+    if (input.isEmpty())
         return;
+    const QString candidate = QDir::isAbsolutePath(input) ? input : QDir(m_localPath).filePath(input);
+    const QString clean = QDir(candidate).absolutePath();
+    if (!QFileInfo(clean).isDir()) {
+        emit errorOccurred(QStringLiteral("No such folder: %1").arg(input));
+        return;
+    }
     if (clean != m_localPath) {
         m_localPath = clean;
         emit localPathChanged();
