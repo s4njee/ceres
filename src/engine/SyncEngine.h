@@ -33,6 +33,11 @@ public:
 signals:
     void change(const ChangeItem &item);
     void progress(const ProgressInfo &info);
+    /// Per-file progress, emitted only when the engine runs in per-file mode
+    /// (transfers). `path` is the file rsync is currently sending; `percent` is
+    /// that file's own 0..100. Drives the expandable per-file view in the
+    /// transfers UI. The aggregate `progress()` is still emitted alongside.
+    void fileProgress(const QString &path, int percent, const QString &rate);
     void stats(const QString &line);
     void log(const QString &line);
     void errorOutput(const QString &line);

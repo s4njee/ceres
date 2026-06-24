@@ -117,7 +117,11 @@ QStringList ArgvBuilder::build(const SyncJob &job, const RsyncCapabilities &caps
     args << QStringLiteral("--itemize-changes") << QStringLiteral("--stats");
 
     // Capability-gated: keep the command valid on limited rsyncs (openrsync).
-    if (caps.supportsInfoProgress2())
+    // Per-file mode swaps the aggregate progress2 for rsync's per-file --progress so
+    // the parser can report each file individually (and derive the aggregate itself).
+    if (options.perFileProgress && caps.supportsInfoProgress2())
+        args << QStringLiteral("--progress");
+    else if (caps.supportsInfoProgress2())
         args << QStringLiteral("--info=progress2");
     if (caps.supportsOutbuf())
         args << QStringLiteral("--outbuf=L");  // line-buffer so progress streams live

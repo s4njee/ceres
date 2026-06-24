@@ -13,6 +13,7 @@ private slots:
     void parsesProgress2();
     void parsesHumanReadableProgress2();
     void parsesProgress2WithoutToCheck();
+    void parsesPerFileProgress();
     void routesStatsAndLog();
 };
 
@@ -123,6 +124,41 @@ void OutputParserTest::parsesProgress2WithoutToCheck()
     QCOMPARE(prog[0].bytes, qint64(698880));
     QCOMPARE(prog[0].toCheck, -1);
     QCOMPARE(prog[0].xfr, -1);
+}
+
+void OutputParserTest::parsesPerFileProgress()
+{
+    OutputParser p;
+    p.setPerFileProgress(true);
+
+    struct FileProg { QString path; int pct; };
+    QList<FileProg> files;
+    QList<int> agg;
+    connect(&p, &OutputParser::fileProgress, this,
+            [&](const QString &path, int pct, const QString &) { files.append({path, pct}); });
+    connect(&p, &OutputParser::progress, this,
+            [&](const ProgressInfo &i) { agg.append(i.percent); });
+
+    // rsync --progress: each file's itemize line, then its own progress redraws,
+    // ending with a \n completion line carrying to-chk=remaining/total.
+    p.feed(">f+++++++++ dir/a.txt\n"
+           "       512  50%    1.00MB/s    0:00:01\r"
+           "     1,024 100%    1.00MB/s    0:00:00 (xfr#1, to-chk=1/2)\n"
+           ">f+++++++++ dir/b.txt\n"
+           "     2,048 100%    2.00MB/s    0:00:00 (xfr#2, to-chk=0/2)\n");
+
+    // Per-file: a@50, a@100, b@100 — each tagged with the right path.
+    QCOMPARE(files.size(), 3);
+    QCOMPARE(files[0].path, QStringLiteral("dir/a.txt"));
+    QCOMPARE(files[0].pct, 50);
+    QCOMPARE(files[1].path, QStringLiteral("dir/a.txt"));
+    QCOMPARE(files[1].pct, 100);
+    QCOMPARE(files[2].path, QStringLiteral("dir/b.txt"));
+    QCOMPARE(files[2].pct, 100);
+
+    // Aggregate is derived from completed-file count: 1/2 -> 50%, then 2/2 -> 100%.
+    QVERIFY(agg.contains(50));
+    QCOMPARE(agg.last(), 100);
 }
 
 void OutputParserTest::routesStatsAndLog()

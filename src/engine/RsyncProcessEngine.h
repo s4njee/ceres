@@ -2,6 +2,7 @@
 
 #include <QProcess>
 
+#include "core/SyncJob.h"
 #include "engine/BinaryLocator.h"
 #include "engine/OutputParser.h"
 #include "engine/SyncEngine.h"
@@ -35,14 +36,28 @@ public:
 
     const RsyncCapabilities &capabilities() const { return m_caps; }
 
+    /// Run rsync with per-file `--progress` so fileProgress() is emitted per file and
+    /// progress() is the parser-derived aggregate. Set by TransferManager for ad-hoc
+    /// transfers; the saved-job sync path leaves it off (aggregate progress2).
+    void setPerFileProgress(bool on) { m_perFileProgress = on; }
+
 #ifdef Q_OS_WIN
     ~RsyncProcessEngine() override;
 #endif
 
 private:
     void ensureProcess();
+    void launch(bool dryRun);  // configure + start m_process for one phase
+
+    // Per-file transfers run in two phases on one process: a --dry-run pass that
+    // itemizes every file to be transferred (so the UI can pre-list them all up
+    // front), then the real transfer. A non-per-file run (the sync tab) is Single.
+    enum class Phase { Single, Enumerate, Transfer };
 
     RsyncCapabilities m_caps;
+    bool m_perFileProgress = false;
+    Phase m_phase = Phase::Single;
+    SyncJob m_job;  // retained across the enumerate→transfer phases
     QProcess *m_process = nullptr;
     OutputParser m_parser;
     // Set by cancel() so finished() reports the run as interrupted regardless of

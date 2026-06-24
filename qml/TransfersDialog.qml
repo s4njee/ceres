@@ -68,7 +68,8 @@ Rectangle {
                         font.pixelSize: 12
                     }
 
-                    delegate: Rectangle {
+                    delegate: ColumnLayout {
+                        id: tRow
                         required property string id
                         required property string name
                         required property string direction
@@ -77,55 +78,134 @@ Rectangle {
                         required property string speed
                         required property string statusText
                         required property string error
+                        required property var files
+                        required property int fileCount
+
+                        property bool expanded: false
+                        readonly property bool expandable: fileCount > 1
 
                         width: ListView.view.width
-                        height: 46
-                        radius: Theme.radius
-                        color: "transparent"
+                        spacing: 3
 
-                        ColumnLayout {
-                            anchors.fill: parent
-                            anchors.leftMargin: 8
-                            anchors.rightMargin: 8
-                            spacing: 3
-
-                            RowLayout {
-                                Layout.fillWidth: true
-                                spacing: 8
-                                Text { text: direction === "up" ? "↑" : "↓"; color: Theme.accent; font.pixelSize: 13 }
-                                Text {
-                                    Layout.fillWidth: true
-                                    text: name
-                                    color: Theme.textPrimary
-                                    font.family: Theme.mono
-                                    font.pixelSize: 12
-                                    elide: Text.ElideMiddle
-                                }
-                                Text {
-                                    text: error.length > 0 ? error : (speed.length > 0 ? speed : statusText)
-                                    color: status === 3 ? Theme.danger
-                                                        : (status === 2 ? Theme.ok : Theme.textTertiary)
-                                    font.pixelSize: 11
-                                    elide: Text.ElideRight
-                                    Layout.maximumWidth: 160
-                                }
-                                FlatButton {
-                                    label: "✕"
-                                    active: status === 0 || status === 1   // Queued or Active
-                                    onClicked: transfers.cancel(id)
+                        RowLayout {
+                            Layout.fillWidth: true
+                            Layout.leftMargin: 8
+                            Layout.rightMargin: 8
+                            Layout.topMargin: 4
+                            spacing: 8
+                            Text {
+                                text: tRow.expandable ? (tRow.expanded ? "▾" : "▸") : ""
+                                color: Theme.textTertiary
+                                font.pixelSize: 11
+                                Layout.preferredWidth: 10
+                                MouseArea {
+                                    anchors.fill: parent
+                                    enabled: tRow.expandable
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: tRow.expanded = !tRow.expanded
                                 }
                             }
-
-                            Rectangle {
+                            Text { text: tRow.direction === "up" ? "↑" : "↓"; color: Theme.accent; font.pixelSize: 13 }
+                            Text {
                                 Layout.fillWidth: true
-                                height: 4
+                                text: tRow.name
+                                color: Theme.textPrimary
+                                font.family: Theme.mono
+                                font.pixelSize: 12
+                                elide: Text.ElideMiddle
+                                MouseArea {
+                                    anchors.fill: parent
+                                    enabled: tRow.expandable
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: tRow.expanded = !tRow.expanded
+                                }
+                            }
+                            Text {
+                                visible: tRow.fileCount > 0
+                                text: tRow.fileCount + (tRow.fileCount === 1 ? " file" : " files")
+                                color: Theme.textTertiary
+                                font.pixelSize: 10
+                            }
+                            Text {
+                                text: tRow.error.length > 0 ? tRow.error
+                                      : (tRow.speed.length > 0 ? tRow.speed : tRow.statusText)
+                                color: tRow.status === 3 ? Theme.danger
+                                                         : (tRow.status === 2 ? Theme.ok : Theme.textTertiary)
+                                font.pixelSize: 11
+                                elide: Text.ElideRight
+                                Layout.maximumWidth: 150
+                            }
+                            FlatButton {
+                                label: "✕"
+                                active: tRow.status === 0 || tRow.status === 1   // Queued or Active
+                                onClicked: transfers.cancel(tRow.id)
+                            }
+                        }
+
+                        // aggregate bar
+                        Rectangle {
+                            Layout.fillWidth: true
+                            Layout.leftMargin: 8
+                            Layout.rightMargin: 8
+                            height: 4
+                            radius: 2
+                            color: Theme.bgTertiary
+                            Rectangle {
+                                width: parent.width * Math.max(0, Math.min(100, tRow.percent)) / 100
+                                height: parent.height
                                 radius: 2
-                                color: Theme.bgTertiary
-                                Rectangle {
-                                    width: parent.width * Math.max(0, Math.min(100, percent)) / 100
-                                    height: parent.height
-                                    radius: 2
-                                    color: status === 3 ? Theme.danger : (status === 2 ? Theme.ok : Theme.accent)
+                                color: tRow.status === 3 ? Theme.danger : (tRow.status === 2 ? Theme.ok : Theme.accent)
+                            }
+                        }
+
+                        // per-file detail (expandable)
+                        ColumnLayout {
+                            visible: tRow.expanded
+                            Layout.fillWidth: true
+                            Layout.leftMargin: 26
+                            Layout.rightMargin: 8
+                            Layout.bottomMargin: 4
+                            spacing: 2
+                            Repeater {
+                                model: tRow.files
+                                delegate: RowLayout {
+                                    required property var modelData
+                                    Layout.fillWidth: true
+                                    spacing: 8
+                                    Text {
+                                        Layout.fillWidth: true
+                                        text: modelData.name
+                                        color: Theme.textSecondary
+                                        font.family: Theme.mono
+                                        font.pixelSize: 11
+                                        elide: Text.ElideMiddle
+                                    }
+                                    Rectangle {
+                                        Layout.preferredWidth: 90
+                                        height: 3
+                                        radius: 1.5
+                                        color: Theme.bgTertiary
+                                        Rectangle {
+                                            width: parent.width * Math.max(0, Math.min(100, modelData.percent)) / 100
+                                            height: parent.height
+                                            radius: 1.5
+                                            color: modelData.percent >= 100 ? Theme.ok : Theme.accent
+                                        }
+                                    }
+                                    Text {
+                                        text: modelData.percent + "%"
+                                        color: Theme.textTertiary
+                                        font.pixelSize: 10
+                                        Layout.preferredWidth: 32
+                                        horizontalAlignment: Text.AlignRight
+                                    }
+                                    Text {
+                                        text: modelData.rate
+                                        color: Theme.textTertiary
+                                        font.pixelSize: 10
+                                        Layout.preferredWidth: 70
+                                        elide: Text.ElideRight
+                                    }
                                 }
                             }
                         }

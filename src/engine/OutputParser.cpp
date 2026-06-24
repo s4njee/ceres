@@ -84,6 +84,10 @@ OutputParser::OutputParser(QObject *parent) : QObject(parent) {}
 void OutputParser::reset()
 {
     m_buf.clear();
+    m_currentFile.clear();
+    m_curPercent = 0;
+    m_filesDone = 0;
+    m_totalFiles = 0;
 }
 
 void OutputParser::feed(const QByteArray &data)
@@ -152,6 +156,12 @@ void OutputParser::handleLine(const QString &line)
             it.fileType = line.at(1);
             it.isDir = (line.at(1) == QLatin1Char('d'));
             it.isNew = (field.mid(2, 9) == QStringLiteral("+++++++++"));
+            // In per-file mode rsync prints this itemize line as it starts sending the
+            // file, so the progress redraws that follow belong to it.
+            if (m_perFile && it.fileType == QLatin1Char('f')) {
+                m_currentFile = it.path;
+                m_curPercent = 0;
+            }
         }
         emit change(it);
         return;
@@ -207,6 +217,30 @@ bool OutputParser::tryParseProgress(const QString &text)
     if (xm.hasMatch())
         p.xfr = xm.captured(1).toInt();
 
-    emit progress(p);
+    if (!m_perFile) {
+        emit progress(p);  // aggregate (--info=progress2)
+        return true;
+    }
+
+    // Per-file mode: `percent` is this file's own progress. Report it for the
+    // current file, then synthesize the run aggregate from the completed-file count
+    // (rsync's to-chk) plus the current file's fraction.
+    m_curPercent = p.percent;
+    if (!m_currentFile.isEmpty())
+        emit fileProgress(m_currentFile, p.percent, p.rate);
+
+    if (p.totalToCheck > 0) {
+        // A completion line: this file is done; to-chk tells us how many remain.
+        m_totalFiles = p.totalToCheck;
+        m_filesDone = p.totalToCheck - p.toCheck;
+        m_curPercent = 0;  // the just-finished file no longer contributes a fraction
+    }
+
+    ProgressInfo agg = p;
+    if (m_totalFiles > 0) {
+        const double done = m_filesDone + m_curPercent / 100.0;
+        agg.percent = qBound(0, static_cast<int>(done / m_totalFiles * 100.0 + 0.5), 100);
+    }
+    emit progress(agg);
     return true;
 }

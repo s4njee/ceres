@@ -22,9 +22,15 @@
 RsyncProcessEngine::RsyncProcessEngine(RsyncCapabilities caps, QObject *parent)
     : SyncEngine(parent), m_caps(std::move(caps))
 {
-    // Forward parser output straight through as engine signals.
-    connect(&m_parser, &OutputParser::change, this, &SyncEngine::change);
+    // Forward parser output straight through as engine signals. During the real
+    // transfer phase of a per-file run the files were already itemized in the
+    // enumerate phase, so suppress the duplicate change() stream then.
+    connect(&m_parser, &OutputParser::change, this, [this](const ChangeItem &c) {
+        if (m_phase != Phase::Transfer)
+            emit change(c);
+    });
     connect(&m_parser, &OutputParser::progress, this, &SyncEngine::progress);
+    connect(&m_parser, &OutputParser::fileProgress, this, &SyncEngine::fileProgress);
     connect(&m_parser, &OutputParser::stats, this, &SyncEngine::stats);
     connect(&m_parser, &OutputParser::log, this, &SyncEngine::log);
 }
@@ -52,6 +58,14 @@ void RsyncProcessEngine::ensureProcess()
                 m_parser.feed(m_process->readAllStandardOutput());
                 m_parser.flush();
                 const bool interrupted = status == QProcess::CrashExit || m_cancelRequested;
+                // Enumerate pass succeeded → roll straight into the real transfer
+                // without surfacing a finished() to the caller.
+                if (m_phase == Phase::Enumerate && !interrupted && exitCode == 0) {
+                    m_phase = Phase::Transfer;
+                    launch(/*dryRun=*/false);
+                    return;
+                }
+                m_phase = Phase::Single;
                 emit finished(exitCode, interrupted);
             });
 
@@ -108,12 +122,34 @@ void RsyncProcessEngine::start(const SyncJob &job, bool dryRun)
         return;
     }
 
+    m_job = job;
+    m_cancelRequested = false;
+    emit started();
+
+    // A per-file transfer first enumerates the full file list with a dry-run, then
+    // transfers for real; everything else is a single pass.
+    if (m_perFileProgress && !dryRun) {
+        m_phase = Phase::Enumerate;
+        launch(/*dryRun=*/true);
+    } else {
+        m_phase = Phase::Single;
+        launch(dryRun);
+    }
+}
+
+void RsyncProcessEngine::launch(bool dryRun)
+{
+    const SyncJob &job = m_job;
+
     ensureProcess();
     m_parser.reset();
-    m_cancelRequested = false;
+    m_parser.setPerFileProgress(m_perFileProgress);
 
     m_process->setProgram(m_caps.path);
-    m_process->setArguments(ArgvBuilder::build(job, m_caps, dryRun));
+    ArgvBuilder::BuildOptions opts;
+    opts.dryRun = dryRun;
+    opts.perFileProgress = m_perFileProgress;
+    m_process->setArguments(ArgvBuilder::build(job, m_caps, opts));
 
     QProcessEnvironment env = QProcessEnvironment::systemEnvironment();  // carries SSH_AUTH_SOCK
     if (!job.daemonPassword.isEmpty())
@@ -155,8 +191,6 @@ void RsyncProcessEngine::start(const SyncJob &job, bool dryRun)
 #endif
 
     m_process->setProcessEnvironment(env);
-
-    emit started();
     m_process->start();
 }
 

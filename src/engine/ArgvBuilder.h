@@ -15,6 +15,9 @@ public:
     struct BuildOptions {
         bool dryRun = false;
         bool allowInteractiveSsh = false;
+        // Use rsync's per-file `--progress` instead of aggregate `--info=progress2`,
+        // so the parser can report each file's own progress (transfers tab).
+        bool perFileProgress = false;
     };
 
     static QStringList build(const SyncJob &job, const RsyncCapabilities &caps, bool dryRun);

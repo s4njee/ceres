@@ -29,16 +29,31 @@ public:
     void flush();                       // emit any trailing buffered text as a line
     void reset();                       // drop buffered state between runs
 
+    /// Per-file mode parses rsync's `--progress` output (used for transfers): each
+    /// progress redraw is the *current file's* own percent rather than the whole-run
+    /// aggregate. In this mode the parser still emits an aggregate `progress()`, but
+    /// derives it from the completed-file count plus the current file's fraction.
+    /// Off by default (the sync tab uses `--info=progress2` aggregate).
+    void setPerFileProgress(bool on) { m_perFile = on; }
+
 signals:
     void change(const ChangeItem &item);
     void progress(const ProgressInfo &info);
+    void fileProgress(const QString &path, int percent, const QString &rate);
     void stats(const QString &line);
     void log(const QString &line);
 
 private:
     void handleLine(const QString &line);      // a complete \n-terminated line
     void handleProgress(const QString &seg);   // a \r-terminated redraw segment
-    bool tryParseProgress(const QString &text); // parse+emit if it's a progress2 line
+    bool tryParseProgress(const QString &text); // parse+emit if it's a progress line
 
     QByteArray m_buf;
+
+    // Per-file mode state (see setPerFileProgress).
+    bool m_perFile = false;
+    QString m_currentFile;   // last itemized file rsync started sending
+    int m_curPercent = 0;    // current file's percent (reset to 0 as each file finishes)
+    int m_filesDone = 0;     // files completed so far (from to-chk)
+    int m_totalFiles = 0;    // total files in the run (from to-chk denominator)
 };

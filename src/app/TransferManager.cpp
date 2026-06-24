@@ -8,8 +8,13 @@
 TransferManager::TransferManager(RsyncCapabilities caps, QObject *parent)
     : QObject(parent)
     // Each admitted transfer gets its own engine; rsync runs are independent so
-    // there's no shared state to coordinate between them.
-    , m_factory([caps] { return new RsyncProcessEngine(caps, nullptr); })
+    // there's no shared state to coordinate between them. Transfers use per-file
+    // progress so the UI can expand a folder to show individual file bars.
+    , m_factory([caps] {
+        auto *e = new RsyncProcessEngine(caps, nullptr);
+        e->setPerFileProgress(true);
+        return e;
+    })
 {
 }
 
@@ -53,8 +58,21 @@ void TransferManager::pump()
         m_active.insert(id, e);
         m_model.setStatus(id, TransfersModel::Active);
 
+        // The engine's enumerate pass itemizes every file up front; pre-list them as
+        // pending (0%) so the whole set is visible before bytes start moving. The
+        // real-transfer phase then fills in each file's progress by name.
+        connect(e, &SyncEngine::change, this, [this, id](const ChangeItem &c) {
+            if (c.op == ChangeItem::Op::Update && c.fileType == QLatin1Char('f'))
+                m_model.updateFileProgress(id, c.path, 0, QString());
+        });
+
         connect(e, &SyncEngine::progress, this, [this, id](const ProgressInfo &info) {
             m_model.updateProgress(id, info.percent, info.rate);
+        });
+
+        connect(e, &SyncEngine::fileProgress, this,
+                [this, id](const QString &path, int percent, const QString &rate) {
+            m_model.updateFileProgress(id, path, percent, rate);
         });
 
         // A crash here means cancel() was requested (the engine reports an

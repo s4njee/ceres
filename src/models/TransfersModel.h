@@ -38,6 +38,8 @@ public:
         PercentRole,
         SpeedRole,
         ErrorRole,
+        FilesRole,      // QVariantList of { name, percent, rate } for the expandable view
+        FileCountRole,  // number of per-file rows recorded so far
     };
 
     using QAbstractListModel::QAbstractListModel;
@@ -51,6 +53,10 @@ public:
              const QString &source, const QString &destination);
     void setStatus(const QString &id, Status status, const QString &error = {});
     void updateProgress(const QString &id, int percent, const QString &speed);
+    // Records/updates one file's progress within a transfer (drives the expandable
+    // per-file view). Adds the file row on first sight, updates it thereafter.
+    void updateFileProgress(const QString &id, const QString &path, int percent,
+                            const QString &rate);
 
     // Removes Done/Failed/Cancelled rows; leaves Queued/Active untouched.
     Q_INVOKABLE void clearCompleted();
@@ -62,10 +68,16 @@ signals:
     void activeCountChanged();
 
 private:
+    struct FileLine {
+        QString name;
+        int percent = 0;
+        QString rate;
+    };
     struct Row {
         QString id, name, direction, source, destination, speed, error;
         Status status = Queued;
         int percent = 0;
+        QList<FileLine> files;
     };
 
     int indexOfId(const QString &id) const;

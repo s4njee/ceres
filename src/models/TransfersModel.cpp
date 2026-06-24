@@ -1,5 +1,8 @@
 #include "models/TransfersModel.h"
 
+#include <QVariantList>
+#include <QVariantMap>
+
 int TransfersModel::rowCount(const QModelIndex &parent) const
 {
     if (parent.isValid())
@@ -46,6 +49,18 @@ QVariant TransfersModel::data(const QModelIndex &index, int role) const
         return r.speed;
     case ErrorRole:
         return r.error;
+    case FileCountRole:
+        return static_cast<int>(r.files.size());
+    case FilesRole: {
+        QVariantList list;
+        list.reserve(r.files.size());
+        for (const FileLine &f : r.files) {
+            list.append(QVariantMap{{QStringLiteral("name"), f.name},
+                                    {QStringLiteral("percent"), f.percent},
+                                    {QStringLiteral("rate"), f.rate}});
+        }
+        return list;
+    }
     default:
         return {};
     }
@@ -64,6 +79,8 @@ QHash<int, QByteArray> TransfersModel::roleNames() const
         {PercentRole, "percent"},
         {SpeedRole, "speed"},
         {ErrorRole, "error"},
+        {FilesRole, "files"},
+        {FileCountRole, "fileCount"},
     };
 }
 
@@ -123,6 +140,29 @@ void TransfersModel::updateProgress(const QString &id, int percent, const QStrin
     r.speed = speed;
     const QModelIndex mi = index(idx);
     emit dataChanged(mi, mi);
+}
+
+void TransfersModel::updateFileProgress(const QString &id, const QString &path, int percent,
+                                        const QString &rate)
+{
+    const int idx = indexOfId(id);
+    if (idx < 0 || path.isEmpty())
+        return;
+
+    Row &r = m_rows[idx];
+    for (FileLine &f : r.files) {
+        if (f.name == path) {
+            f.percent = percent;
+            f.rate = rate;
+            const QModelIndex mi = index(idx);
+            emit dataChanged(mi, mi, {FilesRole});
+            return;
+        }
+    }
+    // First time we see this file in the transfer — append a row for it.
+    r.files.append(FileLine{path, percent, rate});
+    const QModelIndex mi = index(idx);
+    emit dataChanged(mi, mi, {FilesRole, FileCountRole});
 }
 
 void TransfersModel::clearCompleted()
