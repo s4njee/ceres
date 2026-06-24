@@ -58,6 +58,20 @@ cmake --build build
 ctest --test-dir build --output-on-failure
 ```
 
+## Windows MSYS2 rsync runtime
+
+Ceres bundles the MSYS2 `msys` `rsync` and `openssh` packages for Windows
+builds. After building on Windows with MSYS2 available at `C:\msys64` (or with
+`MSYS2_ROOT` / `QT_ROOT` set), stage the testable runtime beside `ceres.exe`:
+
+```powershell
+cmake --build build --target stage-windows-runtime
+```
+
+This copies Qt DLLs/plugins/QML imports, writes `qt.conf`, and copies
+`rsync.exe`, `ssh.exe`, `msys-2.0.dll`, and the DLLs reported by `ldd` into
+`build/rsync/bin/`, which is one of the app-relative lookup paths.
+
 The tests cover the pieces that are easy to get subtly wrong: `OutputParser`
 (itemize parsing, `\r`/`\n` chunk-boundary handling, progress2 with/without `to-chk`),
 `ArgvBuilder`/`EndpointParser` (capability gating, SSH/daemon detection, quoting,

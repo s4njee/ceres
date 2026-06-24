@@ -23,4 +23,11 @@ public:
     /// paths mapped to POSIX under the /cygdrive prefix, e.g. `C:\Users\me` →
     /// `/cygdrive/c/Users/me`. Remote specs must not be passed here.
     static QString toRsyncLocalPath(const QString &path, RsyncCapabilities::PathStyle style);
+
+    /// Windows: the user's ssh directory (`%USERPROFILE%\.ssh`) in native form.
+    /// The bundled Cygwin/MSYS `ssh.exe` locates `~/.ssh` via `getpwuid()` — which
+    /// yields a nonexistent `/home/<user>` (the MSYS compiled-in default), not
+    /// `$HOME` — so `build()` pins it to this directory via `-o UserKnownHostsFile`
+    /// and the launcher must `mkpath` it first. Reads `USERPROFILE`; no side effects.
+    static QString windowsSshDir();
 };

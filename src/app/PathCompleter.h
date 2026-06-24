@@ -4,6 +4,8 @@
 #include <QString>
 #include <QStringList>
 
+#include "engine/BinaryLocator.h"
+
 /// Tab-completion of source/destination paths. Local paths complete synchronously
 /// against the filesystem; remote (`user@host:path`) targets complete asynchronously
 /// by listing the remote directory over ssh, reusing the job's key / ssh-agent.
@@ -11,7 +13,8 @@
 class PathCompleter : public QObject {
     Q_OBJECT
 public:
-    using QObject::QObject;
+    explicit PathCompleter(QObject *parent = nullptr);
+    explicit PathCompleter(RsyncCapabilities caps, QObject *parent = nullptr);
 
     /// Returns the completed path (longest common match, trailing '/' for a lone
     /// directory) or the input unchanged when there's nothing to add.
@@ -31,4 +34,7 @@ signals:
     void remoteCompleted(const QString &input, const QString &completion, const QStringList &choices);
     void remoteBrowseCompleted(const QString &input, const QString &current,
                                const QStringList &directories, const QString &error);
+
+private:
+    RsyncCapabilities m_caps;
 };

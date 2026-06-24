@@ -76,6 +76,28 @@ target_link_libraries(ceres PRIVATE
 qt_add_executable(ceres-runner src/cli/runner_main.cpp)
 target_link_libraries(ceres-runner PRIVATE ceres_core Qt6::Core)
 
+if(WIN32)
+    add_custom_target(stage-msys2-rsync
+        COMMAND powershell -NoProfile -ExecutionPolicy Bypass
+                -File "${CMAKE_CURRENT_SOURCE_DIR}/scripts/stage-msys2-rsync.ps1"
+                -DestinationDir "$<TARGET_FILE_DIR:ceres>"
+        DEPENDS ceres ceres-runner
+        COMMENT "Staging MSYS2 rsync/OpenSSH runtime beside ceres.exe"
+        VERBATIM
+    )
+    add_custom_target(stage-qt-runtime
+        COMMAND powershell -NoProfile -ExecutionPolicy Bypass
+                -File "${CMAKE_CURRENT_SOURCE_DIR}/scripts/stage-qt-runtime.ps1"
+                -DestinationDir "$<TARGET_FILE_DIR:ceres>"
+        DEPENDS ceres ceres-runner
+        COMMENT "Staging Qt runtime beside ceres.exe"
+        VERBATIM
+    )
+    add_custom_target(stage-windows-runtime
+        DEPENDS stage-msys2-rsync stage-qt-runtime
+    )
+endif()
+
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------

@@ -5,8 +5,10 @@
 #include <QProcess>
 #include <QProcessEnvironment>
 #include <QStringList>
+#include <utility>
 
 #include "core/Endpoint.h"
+#include "engine/ArgvBuilder.h"
 
 namespace {
 struct LocalMatch {
@@ -44,17 +46,49 @@ QString shellSingleQuote(QString s)
     return QLatin1Char('\'') + s + QLatin1Char('\'');
 }
 
-QStringList sshArgsFor(const Endpoint &endpoint, const QString &sshKey, int port)
+QStringList sshArgsFor(const Endpoint &endpoint, const QString &sshKey, int port,
+                       RsyncCapabilities::PathStyle pathStyle)
 {
     QStringList args{QStringLiteral("-o"), QStringLiteral("BatchMode=yes"),
                      QStringLiteral("-o"), QStringLiteral("StrictHostKeyChecking=accept-new"),
                      QStringLiteral("-o"), QStringLiteral("ConnectTimeout=5")};
     if (!sshKey.isEmpty())
-        args << QStringLiteral("-i") << sshKey;
+        args << QStringLiteral("-i") << ArgvBuilder::toRsyncLocalPath(sshKey, pathStyle);
     if (port > 0)
         args << QStringLiteral("-p") << QString::number(port);
+#ifdef Q_OS_WIN
+    // Bundled Cygwin/MSYS ssh resolves ~/.ssh via getpwuid → a nonexistent
+    // /home/<user>; pin known_hosts to the real profile (see sshEnvironmentFor,
+    // which creates the directory).
+    args << QStringLiteral("-o")
+         << (QStringLiteral("UserKnownHostsFile=")
+             + ArgvBuilder::toRsyncLocalPath(
+                   ArgvBuilder::windowsSshDir() + QStringLiteral("/known_hosts"), pathStyle));
+#endif
     args << endpoint.sshTarget;
     return args;
+}
+
+QProcessEnvironment sshEnvironmentFor(const RsyncCapabilities &caps)
+{
+    QProcessEnvironment env = QProcessEnvironment::systemEnvironment();  // ssh-agent
+
+#ifdef Q_OS_WIN
+    // Match RsyncProcessEngine: bundled Cygwin/MSYS ssh is launched via PATH and
+    // expects POSIX-form key paths.
+    if (caps.found && !caps.path.isEmpty()) {
+        const QString binDir = QDir::toNativeSeparators(QFileInfo(caps.path).absolutePath());
+        env.insert(QStringLiteral("PATH"),
+                   binDir + QLatin1Char(';') + env.value(QStringLiteral("PATH")));
+    }
+    // sshArgsFor pins known_hosts to the real profile's .ssh (the bundled ssh's
+    // getpwuid home, /home/<user>, doesn't exist); ensure that directory exists.
+    QDir().mkpath(ArgvBuilder::windowsSshDir());
+#else
+    Q_UNUSED(caps);
+#endif
+
+    return env;
 }
 
 QList<LocalMatch> localMatchesFor(const QString &input)
@@ -86,6 +120,16 @@ QList<LocalMatch> localMatchesFor(const QString &input)
     }
     return matches;
 }
+}
+
+PathCompleter::PathCompleter(QObject *parent)
+    : QObject(parent)
+{
+}
+
+PathCompleter::PathCompleter(RsyncCapabilities caps, QObject *parent)
+    : QObject(parent), m_caps(std::move(caps))
+{
 }
 
 QString PathCompleter::completeLocal(const QString &input) const
@@ -132,7 +176,7 @@ void PathCompleter::completeRemote(const QString &input, const QString &sshKey, 
     if (endpoint.kind != EndpointKind::Ssh || endpoint.sshTarget.isEmpty())
         return;
 
-    QStringList args = sshArgsFor(endpoint, sshKey, port);
+    QStringList args = sshArgsFor(endpoint, sshKey, port, m_caps.pathStyle);
 
     // Single-quote the partial path (so spaces are safe and it can't inject), but
     // leave the * outside the quotes so the remote shell still globs it.
@@ -140,7 +184,7 @@ void PathCompleter::completeRemote(const QString &input, const QString &sshKey, 
                 .arg(shellSingleQuote(endpoint.sshPath), QString::number(qMax(1, maxChoices) + 1));
 
     auto *proc = new QProcess(this);
-    proc->setProcessEnvironment(QProcessEnvironment::systemEnvironment());  // ssh-agent
+    proc->setProcessEnvironment(sshEnvironmentFor(m_caps));
     connect(proc, &QProcess::finished, this,
             [this, proc, input, target = endpoint.sshTarget, maxChoices](int, QProcess::ExitStatus) {
         const QStringList lines =
@@ -172,7 +216,7 @@ void PathCompleter::browseRemote(const QString &input, const QString &sshKey, in
 
     const int limit = qMax(1, maxEntries) + 1;
     const QString remoteDir = endpoint.sshPath.isEmpty() ? QStringLiteral(".") : endpoint.sshPath;
-    QStringList args = sshArgsFor(endpoint, sshKey, port);
+    QStringList args = sshArgsFor(endpoint, sshKey, port, m_caps.pathStyle);
     args << QStringLiteral(
                 "cd -- %1 2>/dev/null || { printf '__CERES_ERROR__Cannot open folder\\n'; exit 2; }; "
                 "pwd=$(pwd -P); case \"$pwd\" in */) ;; *) pwd=\"$pwd/\";; esac; "
@@ -186,7 +230,7 @@ void PathCompleter::browseRemote(const QString &input, const QString &sshKey, in
                 .arg(shellSingleQuote(remoteDir), QString::number(limit));
 
     auto *proc = new QProcess(this);
-    proc->setProcessEnvironment(QProcessEnvironment::systemEnvironment());
+    proc->setProcessEnvironment(sshEnvironmentFor(m_caps));
     connect(proc, &QProcess::finished, this,
             [this, proc, input, target = endpoint.sshTarget, maxEntries](int, QProcess::ExitStatus) {
         const QStringList lines =

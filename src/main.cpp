@@ -23,9 +23,13 @@
 
 #include "app/JobController.h"
 #include "app/PathCompleter.h"
+#include "core/ProfileStore.h"
+#include "core/SecretStore.h"
+#include "engine/BinaryLocator.h"
 #include "models/ChangeListModel.h"
 #include "models/JobListModel.h"
 #include "models/PeerModel.h"
+#include "sched/Scheduler.h"
 
 int main(int argc, char *argv[])
 {
@@ -47,8 +51,9 @@ int main(int argc, char *argv[])
         "CeresUi", 1, 0, "PeerModel",
         QStringLiteral("PeerModel is provided by the controller"));
 
-    JobController controller;
-    PathCompleter completer;
+    const RsyncCapabilities caps = BinaryLocator::locateRsync();
+    JobController controller(caps, nullptr, ProfileStore{}, SecretStore{}, Scheduler{}, true);
+    PathCompleter completer(caps);
 
     QQmlApplicationEngine engine;
     engine.rootContext()->setContextProperty(QStringLiteral("controller"), &controller);

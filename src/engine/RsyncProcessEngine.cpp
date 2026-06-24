@@ -1,5 +1,7 @@
 #include "engine/RsyncProcessEngine.h"
 
+#include <QDir>
+#include <QFileInfo>
 #include <QProcessEnvironment>
 #include <QStringList>
 #include <utility>
@@ -115,6 +117,25 @@ void RsyncProcessEngine::start(const SyncJob &job, bool dryRun)
     QProcessEnvironment env = QProcessEnvironment::systemEnvironment();  // carries SSH_AUTH_SOCK
     if (!job.daemonPassword.isEmpty())
         env.insert(QStringLiteral("RSYNC_PASSWORD"), job.daemonPassword);  // rsync:// daemon auth
+
+#ifdef Q_OS_WIN
+    // The bundled rsync is a Cygwin/MSYS binary; for an `-e ssh` job it execs
+    // "ssh" through PATH. Prepend rsync's own directory so it picks up the
+    // matching ssh.exe we ship beside it rather than a foreign (e.g. native
+    // Windows OpenSSH) one that wouldn't understand POSIX-form key paths.
+    if (ArgvBuilder::usesSsh(job)) {
+        const QString binDir = QDir::toNativeSeparators(QFileInfo(m_caps.path).absolutePath());
+        env.insert(QStringLiteral("PATH"),
+                   binDir + QLatin1Char(';') + env.value(QStringLiteral("PATH")));
+
+        // The bundled Cygwin/MSYS ssh finds ~/.ssh via getpwuid → a nonexistent
+        // /home/<user> (the MSYS default; it ignores $HOME), so accept-new can't
+        // write known_hosts. ArgvBuilder pins -o UserKnownHostsFile to the real
+        // profile's .ssh instead; make sure that directory exists first.
+        QDir().mkpath(ArgvBuilder::windowsSshDir());
+    }
+#endif
+
     m_process->setProcessEnvironment(env);
 
     emit started();

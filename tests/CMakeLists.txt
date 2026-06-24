@@ -1,41 +1,33 @@
 # Headless unit tests for the non-GUI pieces (no GUI, no real rsync needed).
 
-qt_add_executable(tst_outputparser tst_outputparser.cpp)
-target_link_libraries(tst_outputparser PRIVATE ceres_core Qt6::Test)
-add_test(NAME OutputParser COMMAND tst_outputparser)
+function(ceres_add_test name target source)
+    qt_add_executable(${target} ${source})
+    target_link_libraries(${target} PRIVATE ceres_core Qt6::Test)
+    if(WIN32)
+        add_test(NAME ${name} COMMAND ${CMAKE_COMMAND} -E env
+            "PATH=$<TARGET_FILE_DIR:Qt6::Core>;$ENV{PATH}"
+            $<TARGET_FILE:${target}>)
+    else()
+        add_test(NAME ${name} COMMAND ${target})
+    endif()
+endfunction()
 
-qt_add_executable(tst_argvbuilder tst_argvbuilder.cpp)
-target_link_libraries(tst_argvbuilder PRIVATE ceres_core Qt6::Test)
-add_test(NAME ArgvBuilder COMMAND tst_argvbuilder)
+ceres_add_test(OutputParser tst_outputparser tst_outputparser.cpp)
 
-qt_add_executable(tst_endpoint tst_endpoint.cpp)
-target_link_libraries(tst_endpoint PRIVATE ceres_core Qt6::Test)
-add_test(NAME Endpoint COMMAND tst_endpoint)
+ceres_add_test(ArgvBuilder tst_argvbuilder tst_argvbuilder.cpp)
 
-qt_add_executable(tst_binarylocator tst_binarylocator.cpp)
-target_link_libraries(tst_binarylocator PRIVATE ceres_core Qt6::Test)
-add_test(NAME BinaryLocator COMMAND tst_binarylocator)
+ceres_add_test(Endpoint tst_endpoint tst_endpoint.cpp)
 
-qt_add_executable(tst_profilestore tst_profilestore.cpp)
-target_link_libraries(tst_profilestore PRIVATE ceres_core Qt6::Test)
-add_test(NAME ProfileStore COMMAND tst_profilestore)
+ceres_add_test(BinaryLocator tst_binarylocator tst_binarylocator.cpp)
 
-qt_add_executable(tst_secretstore tst_secretstore.cpp)
-target_link_libraries(tst_secretstore PRIVATE ceres_core Qt6::Test)
-add_test(NAME SecretStore COMMAND tst_secretstore)
+ceres_add_test(ProfileStore tst_profilestore tst_profilestore.cpp)
 
-qt_add_executable(tst_beacon tst_beacon.cpp)
-target_link_libraries(tst_beacon PRIVATE ceres_core Qt6::Test)
-add_test(NAME Beacon COMMAND tst_beacon)
+ceres_add_test(SecretStore tst_secretstore tst_secretstore.cpp)
 
-qt_add_executable(tst_scheduler tst_scheduler.cpp)
-target_link_libraries(tst_scheduler PRIVATE ceres_core Qt6::Test)
-add_test(NAME Scheduler COMMAND tst_scheduler)
+ceres_add_test(Beacon tst_beacon tst_beacon.cpp)
 
-qt_add_executable(tst_pathcompleter tst_pathcompleter.cpp)
-target_link_libraries(tst_pathcompleter PRIVATE ceres_core Qt6::Test)
-add_test(NAME PathCompleter COMMAND tst_pathcompleter)
+ceres_add_test(Scheduler tst_scheduler tst_scheduler.cpp)
 
-qt_add_executable(tst_jobcontroller tst_jobcontroller.cpp)
-target_link_libraries(tst_jobcontroller PRIVATE ceres_core Qt6::Test)
-add_test(NAME JobController COMMAND tst_jobcontroller)
+ceres_add_test(PathCompleter tst_pathcompleter tst_pathcompleter.cpp)
+
+ceres_add_test(JobController tst_jobcontroller tst_jobcontroller.cpp)

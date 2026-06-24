@@ -15,8 +15,10 @@
 - [x] Add `THIRD_PARTY_NOTICES.md` covering bundled components.
   - Skeleton in place (Qt, rsync, OpenSSH, Cygwin/MSYS runtime). Version/source
     fields are marked TODO — fill them in once the exact binaries are picked.
-- [ ] Choose the Windows rsync distribution to bundle.
-  - Prefer a native `rsync.exe` package over WSL for the first Windows release.
+- [x] Choose the Windows rsync distribution to bundle.
+  - Use MSYS2 `msys` packages for the first Windows release: `rsync` plus
+    `openssh`, keeping `rsync.exe`, `ssh.exe`, `msys-2.0.dll`, and their runtime
+    DLL dependencies together in the bundled `rsync/bin/` directory.
   - Track required runtime DLLs and their licenses.
   - Then fill in the version/source `TODO`s in `THIRD_PARTY_NOTICES.md`.
 - [x] Fix `EndpointParser` so Windows drive paths classify as Local, not SSH. **(Do
@@ -50,10 +52,18 @@
   - Pure `windowsTaskXml` generator is unit-tested; the `schtasks` register/
     remove/query/reconcile wiring still needs a Windows build + runtime check.
 - [ ] Package `ceres.exe`, `ceres-runner.exe`, rsync, runtime DLLs, licenses, and notices.
-- [ ] Add Windows CI or a repeatable manual smoke-test checklist.
-  - Locate bundled rsync.
-  - Preview local sync.
-  - Run local sync.
-  - Run SSH sync.
-  - Cancel an active sync.
-  - Trigger a scheduled sync.
+  - [x] Add `stage-msys2-rsync` target to copy MSYS2 `rsync.exe`, `ssh.exe`,
+    `msys-2.0.dll`, and `ldd`-discovered DLLs into `rsync/bin/` beside
+    `ceres.exe`.
+  - [x] Add `stage-qt-runtime` / `stage-windows-runtime` targets to copy Qt DLLs,
+    plugins, QML imports, and `qt.conf` beside `ceres.exe`.
+  - [ ] Add final installer/archive layout.
+  - [ ] Copy license texts and corresponding source/written-offer material into
+    the final package.
+- [x] Add Windows CI or a repeatable manual smoke-test checklist.
+  - [x] Cross-platform CI (`.github/workflows/ci.yml`): Linux/macOS/Windows
+    build + ctest; the Windows job also stages the bundled rsync and asserts it
+    resolves `/cygdrive` paths (guards the path-style contract).
+  - [x] Manual GUI/network checklist (`docs/windows-smoke-test.md`): locate
+    bundled rsync, preview/run local sync, run SSH sync, cancel an active sync,
+    register + trigger + reconcile a scheduled sync, secrets round-trip.

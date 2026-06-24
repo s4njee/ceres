@@ -1,0 +1,122 @@
+name: CI
+
+on:
+  push:
+    branches: [main, grok]
+  pull_request:
+    branches: [main, grok]
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Linux — system Qt6 + GNU rsync. Headless tests run under the offscreen QPA
+  # platform. SecretStore/Scheduler tests self-skip when no backend is present.
+  # ---------------------------------------------------------------------------
+  linux:
+    name: Linux (Ubuntu, GCC)
+    runs-on: ubuntu-latest
+    env:
+      QT_QPA_PLATFORM: offscreen
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            cmake ninja-build g++ rsync \
+            qt6-base-dev qt6-declarative-dev qt6-tools-dev \
+            libgl1-mesa-dev
+
+      - name: Configure
+        run: cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
+  # ---------------------------------------------------------------------------
+  # macOS — Homebrew Qt6. Ships openrsync; the suite covers the degraded path.
+  # ---------------------------------------------------------------------------
+  macos:
+    name: macOS (Clang)
+    runs-on: macos-latest
+    env:
+      QT_QPA_PLATFORM: offscreen
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build deps
+        run: brew install qt cmake ninja rsync
+
+      - name: Configure
+        run: cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug -DCMAKE_PREFIX_PATH="$(brew --prefix qt)"
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
+  # ---------------------------------------------------------------------------
+  # Windows — MSYS2 MINGW64 toolchain (matches the documented local build).
+  # The bundled-rsync staging is exercised so a path-style regression like the
+  # /c vs /cygdrive one surfaces in CI rather than only at runtime.
+  # ---------------------------------------------------------------------------
+  windows:
+    name: Windows (MSYS2 MINGW64)
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up MSYS2
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: >-
+            mingw-w64-x86_64-qt6-base
+            mingw-w64-x86_64-qt6-declarative
+            mingw-w64-x86_64-qt6-tools
+            mingw-w64-x86_64-gcc
+            mingw-w64-x86_64-cmake
+            mingw-w64-x86_64-ninja
+            rsync
+            openssh
+
+      - name: Configure
+        run: cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
+      - name: Stage bundled MSYS2 rsync runtime
+        shell: pwsh
+        run: |
+          cmake --build build --target stage-windows-runtime
+
+      # Guards the path-style contract end-to-end: the staged (fstab-less) MSYS2
+      # rsync resolves Windows drives under /cygdrive, NOT /c. If a future change
+      # flips toRsyncLocalPath back to /c, this step fails on the real binary.
+      - name: Verify bundled rsync resolves /cygdrive paths
+        shell: pwsh
+        run: |
+          $rsync = Get-ChildItem -Recurse -Filter rsync.exe build |
+                   Where-Object { $_.FullName -match 'rsync[\\/]bin[\\/]rsync\.exe$' } |
+                   Select-Object -First 1
+          if (-not $rsync) { throw "staged rsync.exe not found under build/" }
+          # Convert the native path of a known file (README.md) to /cygdrive form.
+          $native = (Resolve-Path README.md).Path        # e.g. D:\a\ceres\ceres\README.md
+          $drive  = $native.Substring(0,1).ToLower()
+          $rest   = $native.Substring(2).Replace('\','/') # \a\ceres\... -> /a/ceres/...
+          $posix  = "/cygdrive/$drive$rest"
+          Write-Host "Resolving $posix"
+          & $rsync.FullName --list-only $posix
+          if ($LASTEXITCODE -ne 0) { throw "bundled rsync failed to resolve /cygdrive path (exit $LASTEXITCODE)" }

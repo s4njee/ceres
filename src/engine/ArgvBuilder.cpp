@@ -72,7 +72,8 @@ QString ArgvBuilder::toRsyncLocalPath(const QString &path, RsyncCapabilities::Pa
     // under /cygdrive by default: that prefix is compiled into the runtime DLL.
     // MSYS2's shorter "/c" form only applies inside a full install whose
     // etc/fstab remaps the cygdrive prefix to "/", which a bundled rsync.exe does
-    // not carry — so /cygdrive is the reliable choice for both flavors.
+    // not carry (verified: a fstab-less MSYS2 rsync fails on "/c/..." and resolves
+    // "/cygdrive/c/..."). So /cygdrive is the reliable choice for both flavors.
     if (p.size() >= 2 && p.at(0).isLetter() && p.at(1) == QLatin1Char(':')) {
         const QChar drive = p.at(0).toLower();
         QString rest = p.mid(2);  // after "X:"
@@ -81,6 +82,12 @@ QString ArgvBuilder::toRsyncLocalPath(const QString &path, RsyncCapabilities::Pa
         return QStringLiteral("/cygdrive/") + drive + rest;
     }
     return p;  // already-POSIX, relative, or UNC (//server/share) — slashes normalised
+}
+
+QString ArgvBuilder::windowsSshDir()
+{
+    const QString home = qEnvironmentVariable("USERPROFILE", QDir::homePath());
+    return home + QStringLiteral("/.ssh");
 }
 
 QStringList ArgvBuilder::build(const SyncJob &job, const RsyncCapabilities &caps, bool dryRun)
@@ -125,6 +132,15 @@ QStringList ArgvBuilder::build(const SyncJob &job, const RsyncCapabilities &caps
             ssh << QStringLiteral("-i") << toRsyncLocalPath(job.sshKeyPath, caps.pathStyle);
         if (job.sshPort > 0)
             ssh << QStringLiteral("-p") << QString::number(job.sshPort);
+#ifdef Q_OS_WIN
+        // The bundled Cygwin/MSYS ssh resolves ~/.ssh via getpwuid → a nonexistent
+        // /home/<user>, so accept-new can't create it to write known_hosts. Pin the
+        // file to the real profile's .ssh (converted); the launcher mkpaths it.
+        ssh << QStringLiteral("-o")
+            << (QStringLiteral("UserKnownHostsFile=")
+                + toRsyncLocalPath(windowsSshDir() + QStringLiteral("/known_hosts"),
+                                   caps.pathStyle));
+#endif
 
         QStringList quoted;
         quoted.reserve(ssh.size());

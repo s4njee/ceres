@@ -35,6 +35,12 @@ private:
         c.pathStyle = RsyncCapabilities::PathStyle::Cygwin;
         return c;
     }
+    RsyncCapabilities msys() const  // the selected Windows bundle runtime
+    {
+        RsyncCapabilities c = modern();
+        c.pathStyle = RsyncCapabilities::PathStyle::Msys;
+        return c;
+    }
 
 private slots:
     void modernRsyncGetsFullFlagSet();
@@ -279,9 +285,12 @@ void ArgvBuilderTest::convertsWindowsLocalPaths()
              QStringLiteral("/cygdrive/c"));
 
     // MSYS2 standalone builds default to the same /cygdrive prefix as Cygwin
-    // (the "/c" form needs a full install's etc/fstab, which a bundle lacks).
+    // (the "/c" form needs a full install's etc/fstab, which a bundle lacks —
+    // verified: a fstab-less MSYS2 rsync fails on "/c/..." paths).
     QCOMPARE(ArgvBuilder::toRsyncLocalPath(QStringLiteral("C:\\Users\\me"), PS::Msys),
              QStringLiteral("/cygdrive/c/Users/me"));
+    QCOMPARE(ArgvBuilder::toRsyncLocalPath(QStringLiteral("D:\\data"), PS::Msys),
+             QStringLiteral("/cygdrive/d/data"));
 
     // Non-drive paths only get their slashes normalised.
     QCOMPARE(ArgvBuilder::toRsyncLocalPath(QStringLiteral("/already/posix"), PS::Cygwin),
@@ -299,6 +308,10 @@ void ArgvBuilderTest::windowsBuildConvertsLocalEndpoints()
     const QStringList args = ArgvBuilder::build(job, cygwin(), false);
     QCOMPARE(args.at(args.size() - 2), QStringLiteral("/cygdrive/c/src"));
     QCOMPARE(args.last(), QStringLiteral("user@host:/backup"));
+
+    const QStringList msysArgs = ArgvBuilder::build(job, msys(), false);
+    QCOMPARE(msysArgs.at(msysArgs.size() - 2), QStringLiteral("/cygdrive/c/src"));
+    QCOMPARE(msysArgs.last(), QStringLiteral("user@host:/backup"));
 }
 
 void ArgvBuilderTest::windowsConvertsSshKeyPath()
@@ -311,6 +324,17 @@ void ArgvBuilderTest::windowsConvertsSshKeyPath()
     const QStringList args = ArgvBuilder::build(job, cygwin(), false);
     const QString ssh = args.at(args.indexOf(QStringLiteral("-e")) + 1);
     QVERIFY(ssh.contains(QStringLiteral("-i /cygdrive/c/Users/me/.ssh/id_ed25519")));
+
+    const QStringList msysArgs = ArgvBuilder::build(job, msys(), false);
+    const QString msysSsh = msysArgs.at(msysArgs.indexOf(QStringLiteral("-e")) + 1);
+    QVERIFY(msysSsh.contains(QStringLiteral("-i /cygdrive/c/Users/me/.ssh/id_ed25519")));
+
+#ifdef Q_OS_WIN
+    // The bundled ssh finds ~/.ssh via getpwuid (a nonexistent /home/<user>), so
+    // known_hosts must be pinned to the real profile's .ssh in /cygdrive form.
+    QVERIFY(ssh.contains(QStringLiteral("UserKnownHostsFile=/cygdrive/")));
+    QVERIFY(ssh.contains(QStringLiteral("/.ssh/known_hosts")));
+#endif
 }
 
 QTEST_MAIN(ArgvBuilderTest)
