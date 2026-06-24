@@ -194,6 +194,29 @@ void RsyncProcessEngine::launch(bool dryRun)
     m_process->start();
 }
 
+void RsyncProcessEngine::pause()
+{
+    if (!isRunning())
+        return;
+#ifdef Q_OS_UNIX
+    const qint64 pid = m_process->processId();
+    if (pid > 0)
+        ::kill(static_cast<pid_t>(-pid), SIGSTOP);  // suspend the rsync+ssh group
+#endif
+    // Windows has no portable SIGSTOP equivalent; pause is a no-op there for now.
+}
+
+void RsyncProcessEngine::resume()
+{
+    if (!isRunning())
+        return;
+#ifdef Q_OS_UNIX
+    const qint64 pid = m_process->processId();
+    if (pid > 0)
+        ::kill(static_cast<pid_t>(-pid), SIGCONT);
+#endif
+}
+
 void RsyncProcessEngine::cancel()
 {
     if (!isRunning())
@@ -204,6 +227,9 @@ void RsyncProcessEngine::cancel()
 #ifdef Q_OS_UNIX
     const qint64 pid = m_process->processId();
     if (pid > 0) {
+        // Continue first in case the group is suspended (paused), so SIGTERM is
+        // actually delivered rather than left pending.
+        ::kill(static_cast<pid_t>(-pid), SIGCONT);
         ::kill(static_cast<pid_t>(-pid), SIGTERM);  // negative pid -> whole group
         return;
     }

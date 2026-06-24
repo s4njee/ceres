@@ -24,7 +24,8 @@ class TransfersModel : public QAbstractListModel {
     Q_PROPERTY(int count READ rowCount NOTIFY countChanged)
     Q_PROPERTY(int activeCount READ activeCount NOTIFY activeCountChanged)
 public:
-    enum Status { Queued, Active, Done, Failed, Cancelled };
+    // Appended (not reordered) so existing integer checks in QML stay valid.
+    enum Status { Queued, Active, Done, Failed, Cancelled, Paused };
     Q_ENUM(Status)
 
     enum Roles {

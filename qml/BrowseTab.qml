@@ -29,6 +29,62 @@ Item {
     property string message: ""
     Timer { id: messageTimer; interval: 5000; onTriggered: tab.message = "" }
 
+    // ---- internal pane→pane drag ----
+    // Panes report drags in scene coords; we drive this floating proxy (the actual
+    // Drag source the DropAreas see) and convert to tab-local coords to position it.
+    function dragBeginAt(side, names, sx, sy) {
+        if (!names || names.length === 0)
+            return
+        var p = tab.mapFromItem(null, sx, sy)
+        dragProxy.dragSide = side
+        dragProxy.dragNames = names
+        dragProxy.x = p.x + 8
+        dragProxy.y = p.y + 8
+        dragProxy.Drag.active = true
+    }
+    function dragMoveAt(sx, sy) {
+        var p = tab.mapFromItem(null, sx, sy)
+        dragProxy.x = p.x + 8
+        dragProxy.y = p.y + 8
+    }
+    function dragEnd() {
+        dragProxy.Drag.drop()
+        dragProxy.Drag.active = false
+    }
+
+    function urlsToPaths(urls) {
+        var out = []
+        for (var i = 0; i < urls.length; ++i)
+            out.push(decodeURIComponent(("" + urls[i]).replace(/^file:\/\//, "")))
+        return out
+    }
+
+    Item {
+        id: dragProxy
+        parent: tab
+        z: 2000
+        width: 130
+        height: 26
+        visible: Drag.active
+        property var dragNames: []
+        property string dragSide: ""
+        Drag.active: false
+        Drag.keys: ["ceres-files"]
+        Drag.hotSpot: Qt.point(12, 13)
+        Rectangle {
+            anchors.fill: parent
+            radius: Theme.radius
+            color: Theme.accent
+            opacity: 0.92
+            Text {
+                anchors.centerIn: parent
+                text: dragProxy.dragNames.length + (dragProxy.dragNames.length === 1 ? " item" : " items")
+                color: Theme.textPrimary
+                font.pixelSize: 11
+            }
+        }
+    }
+
     RowLayout {
         anchors.fill: parent
         spacing: 0
@@ -105,7 +161,7 @@ Item {
                     }
                 }
 
-                FlatButton { label: "Disconnect"; Layout.fillWidth: true; active: browse.connected; onClicked: browse.disconnectHost() }
+                FlatButton { label: "Disconnect"; Layout.fillWidth: true; visible: browse.connected; danger: true; outline: true; onClicked: browse.disconnectHost() }
             }
         }
         Rectangle { Layout.preferredWidth: 1; Layout.fillHeight: true; color: Theme.border }
@@ -170,10 +226,18 @@ Item {
                     fileModel: browse.localFiles
                     path: browse.localPath
                     allowContext: true
+                    side: "local"
                     onUpRequested: browse.localUp()
                     onRefreshRequested: browse.localRefresh()
                     onOpenDir: function(name) { browse.localCd(name); clearSelection() }
                     onContextMenuRequested: localMenu.popup()
+                    onDragBegan: function(side, names, sx, sy) { tab.dragBeginAt(side, names, sx, sy) }
+                    onDragMoved: function(sx, sy) { tab.dragMoveAt(sx, sy) }
+                    onDragEnded: tab.dragEnd()
+                    // Dropping remote items here downloads them to the current local dir.
+                    onItemsDropped: function(fromSide, names) {
+                        if (fromSide === "remote") { browse.download(names); remotePane.clearSelection() }
+                    }
                 }
 
                 FileBrowserPane {
@@ -187,10 +251,20 @@ Item {
                     busy: browse.busy
                     enabledActions: browse.connected
                     allowContext: browse.connected
+                    side: "remote"
+                    acceptFileDrops: browse.connected
                     onUpRequested: browse.remoteUp()
                     onRefreshRequested: browse.remoteRefresh()
                     onOpenDir: function(name) { browse.remoteCd(name); clearSelection() }
                     onContextMenuRequested: remoteMenu.popup()
+                    onDragBegan: function(side, names, sx, sy) { tab.dragBeginAt(side, names, sx, sy) }
+                    onDragMoved: function(sx, sy) { tab.dragMoveAt(sx, sy) }
+                    onDragEnded: tab.dragEnd()
+                    // Dropping local items (or Finder files) here uploads to the current remote dir.
+                    onItemsDropped: function(fromSide, names) {
+                        if (fromSide === "local") { browse.upload(names); localPane.clearSelection() }
+                    }
+                    onFilesDropped: function(urls) { browse.uploadFiles(tab.urlsToPaths(urls)) }
                 }
             }
 
@@ -204,6 +278,7 @@ Item {
                 Item { Layout.fillWidth: true }
                 FlatButton {
                     label: "↑ Upload"
+                    primary: true
                     active: browse.connected && localPane.selected.length > 0
                     onClicked: { browse.upload(localPane.selected); localPane.clearSelection() }
                 }
@@ -402,7 +477,7 @@ Item {
                     Layout.fillWidth: true
                     Item { Layout.fillWidth: true }
                     FlatButton { label: "Cancel"; onClicked: promptDialog.open = false }
-                    FlatButton { label: "OK"; primary: true; onClicked: promptDialog.accept() }
+                    FlatButton { label: "OK"; onClicked: promptDialog.accept() }
                 }
             }
         }

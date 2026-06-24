@@ -15,12 +15,24 @@ ColumnLayout {
     property bool busy: false
     property bool enabledActions: true
     property bool allowContext: false
+    property string side: ""        // "local" or "remote" — identifies the drag origin
+    property bool acceptFileDrops: false  // accept external (Finder) file drops
     property var selected: []
+
+    property bool dropHighlight: false   // set while a compatible drag hovers this pane
 
     signal upRequested()
     signal refreshRequested()
     signal openDir(string name)
     signal contextMenuRequested()
+    // Drag of the current selection began/moved/ended; coords are scene-relative.
+    signal dragBegan(string side, var names, real sceneX, real sceneY)
+    signal dragMoved(real sceneX, real sceneY)
+    signal dragEnded()
+    // A drag from the other pane was dropped here.
+    signal itemsDropped(string fromSide, var names)
+    // External files (Finder) were dropped here; urls is a list of file URLs.
+    signal filesDropped(var urls)
 
     function clearSelection() { selected = [] }
     function isSelected(name) { return selected.indexOf(name) >= 0 }
@@ -63,8 +75,8 @@ ColumnLayout {
         Layout.fillHeight: true
         color: Theme.bgPrimary
         radius: Theme.radius
-        border.width: 1
-        border.color: Theme.border
+        border.width: pane.dropHighlight ? 2 : 1
+        border.color: pane.dropHighlight ? Theme.accent : Theme.border
 
         ListView {
             id: list
@@ -137,11 +149,65 @@ ColumnLayout {
                     anchors.fill: parent
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
+
+                    property real pressX: 0
+                    property real pressY: 0
+                    property bool dragging: false
+
+                    onPressed: function(mouse) {
+                        pressX = mouse.x
+                        pressY = mouse.y
+                        dragging = false
+                    }
+                    onPositionChanged: function(mouse) {
+                        if (!(mouse.buttons & Qt.LeftButton))
+                            return
+                        var sp = mapToItem(null, mouse.x, mouse.y)
+                        if (!dragging) {
+                            if (Math.abs(mouse.x - pressX) + Math.abs(mouse.y - pressY) <= 8)
+                                return
+                            dragging = true
+                            if (!pane.isSelected(row.name))
+                                pane.toggle(row.name, false)
+                            pane.dragBegan(pane.side, pane.selected, sp.x, sp.y)
+                        } else {
+                            pane.dragMoved(sp.x, sp.y)
+                        }
+                    }
+                    onReleased: {
+                        if (dragging) {
+                            dragging = false
+                            pane.dragEnded()
+                        }
+                    }
                     onClicked: function(mouse) {
+                        if (rowMouse.dragging)
+                            return  // the press was a drag, not a select
                         var additive = (mouse.modifiers & (Qt.ControlModifier | Qt.MetaModifier | Qt.ShiftModifier)) !== 0
                         pane.toggle(row.name, additive)
                     }
                     onDoubleClicked: { if (row.isDir) pane.openDir(row.name) }
+                }
+            }
+        }
+
+        // Accepts internal drags from the other pane and (optionally) external file
+        // drops from Finder. Doesn't interfere with normal clicks — a DropArea only
+        // reacts during an active drag.
+        DropArea {
+            anchors.fill: parent
+            keys: ["ceres-files", "text/uri-list"]
+            onEntered: function(drag) { pane.dropHighlight = true }
+            onExited: pane.dropHighlight = false
+            onDropped: function(drop) {
+                pane.dropHighlight = false
+                if (drop.hasUrls && pane.acceptFileDrops) {
+                    pane.filesDropped(drop.urls)
+                    drop.accept()
+                } else if (drop.source && drop.source.dragNames !== undefined) {
+                    if (drop.source.dragSide !== pane.side)
+                        pane.itemsDropped(drop.source.dragSide, drop.source.dragNames)
+                    drop.accept()
                 }
             }
         }

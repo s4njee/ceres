@@ -30,6 +30,12 @@ public:
     virtual void cancel() = 0;
     virtual bool isRunning() const = 0;
 
+    /// Suspend / resume a running transfer in place (no progress lost). Default
+    /// no-ops; RsyncProcessEngine implements them by stopping/continuing the
+    /// rsync+ssh process group. Used by the transfers queue's pause/resume.
+    virtual void pause() {}
+    virtual void resume() {}
+
 signals:
     void change(const ChangeItem &item);
     void progress(const ProgressInfo &info);

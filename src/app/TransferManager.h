@@ -3,8 +3,9 @@
 #include <functional>
 
 #include <QHash>
+#include <QList>
 #include <QObject>
-#include <QQueue>
+#include <QSet>
 #include <QString>
 
 #include "core/SyncJob.h"
@@ -58,6 +59,10 @@ public:
     QString enqueue(const SyncJob &job, const QString &direction, const QString &name);
 
     Q_INVOKABLE void cancel(const QString &id);
+    // Suspend/resume a transfer. An active transfer is stopped in place (keeps its
+    // slot); a queued one is held out of pump() until resumed.
+    Q_INVOKABLE void pause(const QString &id);
+    Q_INVOKABLE void resume(const QString &id);
     Q_INVOKABLE void clearCompleted() { m_model.clearCompleted(); }
 
 signals:
@@ -77,7 +82,8 @@ private:
 
     TransfersModel m_model;
     EngineFactory m_factory;
-    QQueue<Pending> m_queue;
-    QHash<QString, SyncEngine *> m_active;  // id -> running engine
+    QList<Pending> m_queue;                 // FIFO; paused entries are skipped by pump()
+    QHash<QString, SyncEngine *> m_active;  // id -> running engine (incl. paused ones)
+    QSet<QString> m_paused;                 // ids the user paused (queued or active)
     int m_maxConcurrent = 3;
 };

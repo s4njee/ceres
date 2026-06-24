@@ -322,3 +322,19 @@ void BrowseController::upload(const QStringList &names)
         m_transfers->enqueue(job, QStringLiteral("up"), name);
     }
 }
+
+void BrowseController::uploadFiles(const QStringList &paths)
+{
+    if (!m_connected || !m_transfers)
+        return;
+    const QString dest = m_target + QLatin1Char(':') + withTrailingSlash(m_remotePath);
+    for (const QString &path : paths) {
+        const QString clean = path.trimmed();
+        if (clean.isEmpty())
+            continue;
+        SyncJob job = transferJob();
+        job.source = clean;  // absolute local path from the drop
+        job.destination = dest;
+        m_transfers->enqueue(job, QStringLiteral("up"), QFileInfo(clean).fileName());
+    }
+}

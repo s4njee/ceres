@@ -75,6 +75,9 @@ public:
     // Transfers (each selected name becomes one queued rsync).
     Q_INVOKABLE void download(const QStringList &names);
     Q_INVOKABLE void upload(const QStringList &names);
+    // Upload arbitrary local files/folders (absolute paths, e.g. from a Finder drop)
+    // into the current remote directory.
+    Q_INVOKABLE void uploadFiles(const QStringList &paths);
 
 signals:
     void localPathChanged();

@@ -41,6 +41,8 @@ QVariant TransfersModel::data(const QModelIndex &index, int role) const
             return QStringLiteral("Failed");
         case Cancelled:
             return QStringLiteral("Cancelled");
+        case Paused:
+            return QStringLiteral("Paused");
         }
         return {};
     case PercentRole:

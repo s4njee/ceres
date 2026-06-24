@@ -11,7 +11,8 @@ QtObject {
     readonly property color textTertiary: "#6e737c"
     readonly property color border: "#2A2D35"
     readonly property color borderStrong: "#383C47"
-    readonly property color accent: "#e67353"
+    readonly property color accent: "#009a22"
+    readonly property color accentDisabled: "#00661a"  // darker, muted green for disabled primary controls
     readonly property color ok: "#3fb950"
     readonly property color info: "#58a6ff"
     readonly property color danger: "#f85149"

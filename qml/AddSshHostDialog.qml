@@ -81,7 +81,6 @@ Rectangle {
                 }
                 FlatButton {
                     label: "Add host"
-                    primary: true
                     onClicked: {
                         root.open = false
                         root.accepted()

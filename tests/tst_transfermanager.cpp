@@ -13,6 +13,8 @@ class FakeEngine : public SyncEngine {
 public:
     int starts = 0;
     int cancels = 0;
+    int pauses = 0;
+    int resumes = 0;
     bool running = false;
     SyncJob lastJob;
 
@@ -30,6 +32,9 @@ public:
         ++cancels;
         running = false;
     }
+
+    void pause() override { ++pauses; }
+    void resume() override { ++resumes; }
 
     bool isRunning() const override { return running; }
 
@@ -72,6 +77,7 @@ private slots:
     void failureMarksFailed();
     void cancelQueuedAndActive();
     void enqueuedSignalFiresPerEnqueue();
+    void pauseAndResume();
 };
 
 static SyncJob jobN(int n)
@@ -201,6 +207,46 @@ void TransferManagerTest::enqueuedSignalFiresPerEnqueue()
     mgr.enqueue(jobN(1), QStringLiteral("up"), QStringLiteral("t1"));
     mgr.enqueue(jobN(2), QStringLiteral("up"), QStringLiteral("t2"));
     QCOMPARE(spy.count(), 3);
+}
+
+void TransferManagerTest::pauseAndResume()
+{
+    FakeEngineFactory factory;
+    TransferManager mgr(std::ref(factory));
+    mgr.setMaxConcurrent(1);
+    TransfersModel *model = mgr.model();
+
+    const QString a = mgr.enqueue(jobN(1), QStringLiteral("down"), QStringLiteral("a"));
+    const QString b = mgr.enqueue(jobN(2), QStringLiteral("down"), QStringLiteral("b"));
+    // a is Active (cap 1), b is Queued.
+    QCOMPARE(countStatus(model, TransfersModel::Active), 1);
+    QCOMPARE(countStatus(model, TransfersModel::Queued), 1);
+
+    // Pausing the active transfer suspends its engine and holds its slot: b stays
+    // queued (a paused-active transfer does not free the slot).
+    mgr.pause(a);
+    QCOMPARE(factory.created.at(0)->pauses, 1);
+    QCOMPARE(countStatus(model, TransfersModel::Paused), 1);
+    QCOMPARE(countStatus(model, TransfersModel::Queued), 1);
+    QCOMPARE(factory.created.size(), 1);  // b was NOT started
+
+    // Resuming continues the engine and frees nothing new (still 1 active).
+    mgr.resume(a);
+    QCOMPARE(factory.created.at(0)->resumes, 1);
+    QCOMPARE(countStatus(model, TransfersModel::Active), 1);
+
+    // Pausing a *queued* transfer holds it out of pump(): finishing a lets the queue
+    // advance, but the paused b must not start.
+    mgr.pause(b);
+    QCOMPARE(countStatus(model, TransfersModel::Paused), 1);
+    factory.created.at(0)->finish(0);  // a completes
+    QCOMPARE(countStatus(model, TransfersModel::Done), 1);
+    QCOMPARE(factory.created.size(), 1);  // b still not started (paused)
+
+    // Resuming b lets pump() start it.
+    mgr.resume(b);
+    QCOMPARE(factory.created.size(), 2);
+    QCOMPARE(countStatus(model, TransfersModel::Active), 1);
 }
 
 QTEST_MAIN(TransferManagerTest)

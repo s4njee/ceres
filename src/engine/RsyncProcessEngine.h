@@ -33,6 +33,8 @@ public:
     void start(const SyncJob &job, bool dryRun) override;
     void cancel() override;
     bool isRunning() const override;
+    void pause() override;
+    void resume() override;
 
     const RsyncCapabilities &capabilities() const { return m_caps; }
 

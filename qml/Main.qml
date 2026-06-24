@@ -42,7 +42,7 @@ ApplicationWindow {
     property bool confirmOpen: false
     property string scheduleKind: "manual"
     property int weekday: 0
-    property int currentTab: 0   // 0 = Sync editor, 1 = Browse
+    property int currentTab: 1   // 0 = Sync editor, 1 = Browse
 
     // SSH password auth state. Modal-driven (no always-visible field): held for the
     // session so subsequent manual runs reuse it; persisted to the keychain only when
@@ -678,7 +678,6 @@ ApplicationWindow {
                 }
                 FlatButton {
                     label: remoteBrowser.selectedIndex >= 0 ? "Choose selected" : "Choose this folder"
-                    primary: true
                     active: !remoteBrowser.loading
                     onClicked: remoteBrowser.chooseSelectedOrCurrent()
                 }

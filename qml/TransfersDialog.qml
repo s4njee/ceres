@@ -136,8 +136,18 @@ Rectangle {
                                 Layout.maximumWidth: 150
                             }
                             FlatButton {
+                                label: "❚❚"   // pause
+                                visible: tRow.status === 0 || tRow.status === 1   // Queued or Active
+                                onClicked: transfers.pause(tRow.id)
+                            }
+                            FlatButton {
+                                label: "▶"    // resume
+                                visible: tRow.status === 5   // Paused
+                                onClicked: transfers.resume(tRow.id)
+                            }
+                            FlatButton {
                                 label: "✕"
-                                active: tRow.status === 0 || tRow.status === 1   // Queued or Active
+                                visible: tRow.status === 0 || tRow.status === 1 || tRow.status === 5
                                 onClicked: transfers.cancel(tRow.id)
                             }
                         }
@@ -154,7 +164,9 @@ Rectangle {
                                 width: parent.width * Math.max(0, Math.min(100, tRow.percent)) / 100
                                 height: parent.height
                                 radius: 2
-                                color: tRow.status === 3 ? Theme.danger : (tRow.status === 2 ? Theme.ok : Theme.accent)
+                                color: tRow.status === 3 ? Theme.danger
+                                     : (tRow.status === 2 ? Theme.ok
+                                     : (tRow.status === 5 ? Theme.textTertiary : Theme.accent))
                             }
                         }
 
@@ -217,7 +229,7 @@ Rectangle {
                 Layout.fillWidth: true
                 FlatButton { label: "Clear finished"; onClicked: transfers.clearCompleted() }
                 Item { Layout.fillWidth: true }
-                FlatButton { label: "Close"; primary: true; onClicked: root.open = false }
+                FlatButton { label: "Close"; onClicked: root.open = false }
             }
         }
     }
