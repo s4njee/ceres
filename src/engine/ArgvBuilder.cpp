@@ -43,20 +43,19 @@ QString shellQuoteIfNeeded(QString s)
     return QStringLiteral("'") + s + QStringLiteral("'");
 }
 
-// Tilde-expand and (on Windows runtimes) rewrite a LOCAL endpoint to the form the
-// rsync runtime expects. Remote (ssh/daemon) specs pass through untouched.
-QString preparedEndpoint(const QString &raw, RsyncCapabilities::PathStyle style)
-{
-    const QString expanded = expandLocalTilde(raw);
-    if (EndpointParser::kind(raw) != EndpointKind::Local)
-        return expanded;
-    return ArgvBuilder::toRsyncLocalPath(expanded, style);
-}
 } // namespace
 
 bool ArgvBuilder::usesSsh(const SyncJob &job)
 {
     return EndpointParser::usesSsh(job);
+}
+
+QString ArgvBuilder::prepareEndpoint(const QString &raw, RsyncCapabilities::PathStyle style)
+{
+    const QString expanded = expandLocalTilde(raw);
+    if (EndpointParser::kind(raw) != EndpointKind::Local)
+        return expanded;
+    return toRsyncLocalPath(expanded, style);
 }
 
 QString ArgvBuilder::toRsyncLocalPath(const QString &path, RsyncCapabilities::PathStyle style)
@@ -91,6 +90,14 @@ QString ArgvBuilder::windowsSshDir()
 }
 
 QStringList ArgvBuilder::build(const SyncJob &job, const RsyncCapabilities &caps, bool dryRun)
+{
+    BuildOptions options;
+    options.dryRun = dryRun;
+    return build(job, caps, options);
+}
+
+QStringList ArgvBuilder::build(const SyncJob &job, const RsyncCapabilities &caps,
+                               BuildOptions options)
 {
     QStringList args;
 
@@ -130,7 +137,8 @@ QStringList ArgvBuilder::build(const SyncJob &job, const RsyncCapabilities &caps
         // fed via SSH_ASKPASS (see RsyncProcessEngine), never on the argv.
         QStringList ssh{QStringLiteral("ssh")};
         if (job.sshPassword.isEmpty()) {
-            ssh << QStringLiteral("-o") << QStringLiteral("BatchMode=yes");
+            if (!options.allowInteractiveSsh)
+                ssh << QStringLiteral("-o") << QStringLiteral("BatchMode=yes");
         } else {
             ssh << QStringLiteral("-o")
                 << QStringLiteral("PreferredAuthentications=password,keyboard-interactive")
@@ -159,7 +167,7 @@ QStringList ArgvBuilder::build(const SyncJob &job, const RsyncCapabilities &caps
         args << QStringLiteral("-e") << quoted.join(QLatin1Char(' '));
     }
 
-    if (dryRun)
+    if (options.dryRun)
         args << QStringLiteral("--dry-run");
 
     // Filter order is significant in rsync; preserve it.
@@ -168,7 +176,7 @@ QStringList ArgvBuilder::build(const SyncJob &job, const RsyncCapabilities &caps
 
     args.append(job.extraArgs);
 
-    args << preparedEndpoint(job.source, caps.pathStyle)
-         << preparedEndpoint(job.destination, caps.pathStyle);
+    args << prepareEndpoint(job.source, caps.pathStyle)
+         << prepareEndpoint(job.destination, caps.pathStyle);
     return args;
 }

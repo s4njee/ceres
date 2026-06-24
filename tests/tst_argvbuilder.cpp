@@ -50,6 +50,7 @@ private slots:
     void sourceAndDestComeLast();
     void localTargetHasNoSsh();
     void sshTargetGetsSafeOptions();
+    void interactiveSshOmitsBatchMode();
     void sshPasswordModeSwapsAuthOptions();
     void sshKeyAndPort();
     void sshKeyWithSpacesIsQuoted();
@@ -166,6 +167,22 @@ void ArgvBuilderTest::sshTargetGetsSafeOptions()
     QVERIFY(ssh.contains(QStringLiteral("ConnectTimeout=10")));
     // Never weaken host-key checking.
     QVERIFY(!ssh.contains(QStringLiteral("StrictHostKeyChecking=no")));
+}
+
+void ArgvBuilderTest::interactiveSshOmitsBatchMode()
+{
+    SyncJob job;
+    job.source = QStringLiteral("/tmp/a/");
+    job.destination = QStringLiteral("user@host:/backup/");
+
+    ArgvBuilder::BuildOptions options;
+    options.allowInteractiveSsh = true;
+    const QStringList args = ArgvBuilder::build(job, modern(), options);
+    const QString ssh = args.at(args.indexOf(QStringLiteral("-e")) + 1);
+
+    QVERIFY(!ssh.contains(QStringLiteral("BatchMode=yes")));
+    QVERIFY(ssh.contains(QStringLiteral("StrictHostKeyChecking=accept-new")));
+    QVERIFY(ssh.contains(QStringLiteral("ConnectTimeout=10")));
 }
 
 void ArgvBuilderTest::sshPasswordModeSwapsAuthOptions()

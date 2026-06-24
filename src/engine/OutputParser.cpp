@@ -49,6 +49,34 @@ bool isStatsLine(const QString &line)
     return false;
 }
 
+qint64 parseRsyncQuantity(QString text)
+{
+    text.remove(QLatin1Char(','));
+
+    bool ok = false;
+    const qint64 exact = text.toLongLong(&ok);
+    if (ok)
+        return exact;
+
+    static const QRegularExpression humanRe(QStringLiteral(R"(^(\d+(?:\.\d+)?)([KMGTPE]?)(?:B)?$)"));
+    const auto m = humanRe.match(text);
+    if (!m.hasMatch())
+        return 0;
+
+    const double value = m.captured(1).toDouble(&ok);
+    if (!ok)
+        return 0;
+
+    double multiplier = 1.0;
+    const QString suffix = m.captured(2);
+    static const QString suffixes = QStringLiteral("KMGTPE");
+    const int suffixIndex = suffixes.indexOf(suffix);
+    for (int i = 0; i <= suffixIndex; ++i)
+        multiplier *= 1024.0;
+
+    return static_cast<qint64>(value * multiplier + 0.5);
+}
+
 } // namespace
 
 OutputParser::OutputParser(QObject *parent) : QObject(parent) {}
@@ -157,14 +185,15 @@ bool OutputParser::tryParseProgress(const QString &text)
         return false;
 
     // e.g. "1,232,896 100%  117.55MB/s    0:00:00 (xfr#1, to-chk=4/6)"
+    // With -h, the first field can be human-readable, e.g. "1.23M".
     static const QRegularExpression re(QStringLiteral(
-        R"(^([\d,]+)\s+(\d+)%\s+(\S+)\s+(\d+:\d{2}:\d{2})(?:\s+\([^)]*(?:to-chk|ir-chk)=(\d+)/(\d+)[^)]*\))?)"));
+        R"(^(\S+)\s+(\d+)%\s+(\S+)\s+(\d+:\d{2}:\d{2})(?:\s+\([^)]*(?:to-chk|ir-chk)=(\d+)/(\d+)[^)]*\))?)"));
     const auto m = re.match(s);
     if (!m.hasMatch())
         return false;
 
     ProgressInfo p;
-    p.bytes = QString(m.captured(1)).remove(QLatin1Char(',')).toLongLong();
+    p.bytes = parseRsyncQuantity(m.captured(1));
     p.percent = m.captured(2).toInt();
     p.rate = m.captured(3);
     p.eta = m.captured(4);

@@ -16,6 +16,8 @@ ceres_add_test(OutputParser tst_outputparser tst_outputparser.cpp)
 
 ceres_add_test(ArgvBuilder tst_argvbuilder tst_argvbuilder.cpp)
 
+ceres_add_test(AdHocTransfer tst_adhoctransfer tst_adhoctransfer.cpp)
+
 ceres_add_test(Endpoint tst_endpoint tst_endpoint.cpp)
 
 ceres_add_test(BinaryLocator tst_binarylocator tst_binarylocator.cpp)
@@ -31,3 +33,9 @@ ceres_add_test(Scheduler tst_scheduler tst_scheduler.cpp)
 ceres_add_test(PathCompleter tst_pathcompleter tst_pathcompleter.cpp)
 
 ceres_add_test(JobController tst_jobcontroller tst_jobcontroller.cpp)
+
+ceres_add_test(FileListModel tst_filelistmodel tst_filelistmodel.cpp)
+
+ceres_add_test(RemoteFs tst_remotefs tst_remotefs.cpp)
+
+ceres_add_test(TransferManager tst_transfermanager tst_transfermanager.cpp)

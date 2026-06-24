@@ -10,6 +10,7 @@
 
 #include "core/Endpoint.h"
 #include "core/Peer.h"
+#include "core/SshHost.h"
 #include "core/SyncJob.h"
 #include "engine/RsyncProcessEngine.h"
 #include "net/DiscoveryService.h"
@@ -33,17 +34,19 @@ QStringList stringListFromVariant(const QVariant &value)
 
 JobController::JobController(QObject *parent)
     : JobController(BinaryLocator::locateRsync(), nullptr, ProfileStore{}, SecretStore{},
-                    Scheduler{}, true, parent)
+                    Scheduler{}, SshHostStore{}, true, parent)
 {
 }
 
 JobController::JobController(RsyncCapabilities caps, SyncEngine *engine, ProfileStore store,
-                             SecretStore secrets, Scheduler scheduler, bool startNetworkServices,
+                             SecretStore secrets, Scheduler scheduler, SshHostStore sshHostStore,
+                             bool startNetworkServices,
                              QObject *parent)
     : QObject(parent),
       m_caps(std::move(caps)),
       m_store(std::move(store)),
       m_secrets(std::move(secrets)),
+      m_sshHostStore(std::move(sshHostStore)),
       m_scheduler(std::move(scheduler))
 {
     m_hostName = QHostInfo::localHostName();
@@ -65,6 +68,7 @@ JobController::JobController(RsyncCapabilities caps, SyncEngine *engine, Profile
 
     const QList<SyncJob> loaded = m_store.loadAll();
     m_jobs.setJobs(loaded);
+    m_sshHosts.setHosts(m_sshHostStore.loadAll(), loaded);
     // Re-register only schedules whose OS unit went missing (e.g. deleted out of
     // band). Re-applying an already-registered job would reload its launchd agent
     // and reset a StartInterval countdown on every launch; saveJob() already
@@ -320,6 +324,19 @@ void JobController::startJob(const SyncJob &job, bool dryRun)
         if (saved.source == j.source && saved.destination == j.destination)
             j.sshPassword = m_secrets.get(m_currentId + QStringLiteral(".ssh"));
     }
+    if (EndpointParser::usesSsh(j)) {
+        const Endpoint e = EndpointParser::isSsh(j.source) ? EndpointParser::parse(j.source)
+                                                           : EndpointParser::parse(j.destination);
+        const SshHost savedHost = m_sshHostStore.load(e.sshTarget);
+        if (!savedHost.target.isEmpty()) {
+            if (j.sshKeyPath.isEmpty())
+                j.sshKeyPath = savedHost.sshKeyPath;
+            if (j.sshPort == 0)
+                j.sshPort = savedHost.sshPort;
+            if (j.sshPassword.isEmpty() && savedHost.hasPassword)
+                j.sshPassword = m_secrets.get(sshHostSecretKey(savedHost.target));
+        }
+    }
 
     m_activeUsedPassword = !j.sshPassword.isEmpty();
     m_activeRemote = EndpointParser::isSsh(j.source) ? j.source
@@ -354,10 +371,16 @@ void JobController::retryWithPassword(const QVariantMap &job, const QString &use
         j.destination = EndpointParser::withUser(j.destination, username);
     j.sshPassword = password;
 
-    // Persist only for a saved job the user opted to remember; the session keeps it
-    // in the editor regardless (QML holds it for subsequent manual runs).
-    if (remember && !m_currentId.isEmpty())
-        m_secrets.set(m_currentId + QStringLiteral(".ssh"), password);
+    // Persist for saved jobs as before, and also save the SSH target itself so an
+    // unsaved/manual credential can appear in the sidebar and be reused later.
+    if (remember) {
+        saveSshHost(j, true);
+        const SshHost host = sshHostFromJob(j, true);
+        if (!host.target.isEmpty())
+            m_secrets.set(sshHostSecretKey(host.target), password);
+        if (!m_currentId.isEmpty())
+            m_secrets.set(m_currentId + QStringLiteral(".ssh"), password);
+    }
 
     startJob(j, m_activeDryRun);  // repeat the failed run in the same mode
 }
@@ -393,6 +416,7 @@ void JobController::saveJob(const QVariantMap &jobMap)
         return;
     }
     m_jobs.upsert(job);
+    rebuildSshHosts();
     if (!job.daemonPassword.isEmpty())
         m_secrets.set(job.id, job.daemonPassword);  // keychain, never the profile JSON
     else if (!EndpointParser::usesDaemon(job))
@@ -421,6 +445,40 @@ void JobController::saveJob(const QVariantMap &jobMap)
     }
 }
 
+QString JobController::sshTargetForJob(const QVariantMap &jobMap) const
+{
+    const SshHost host = sshHostFromJob(jobFromMap(jobMap), false);
+    return host.target;
+}
+
+bool JobController::isSshHostSaved(const QString &target) const
+{
+    return !target.trimmed().isEmpty() && m_sshHostStore.contains(target.trimmed());
+}
+
+void JobController::saveSshHostForJob(const QVariantMap &jobMap)
+{
+    saveSshHost(jobFromMap(jobMap), false);
+}
+
+void JobController::saveSshHostPassword(const QString &endpoint, const QString &username,
+                                        const QString &password, const QString &sshKey,
+                                        int sshPort)
+{
+    if (password.isEmpty())
+        return;
+
+    SyncJob job;
+    job.destination = EndpointParser::withUser(endpoint, username);
+    job.sshKeyPath = sshKey.trimmed();
+    job.sshPort = qBound(0, sshPort, 65535);
+    saveSshHost(job, true);
+
+    const SshHost host = sshHostFromJob(job, true);
+    if (!host.target.isEmpty())
+        m_secrets.set(sshHostSecretKey(host.target), password);
+}
+
 void JobController::deleteJob(const QString &id)
 {
     m_scheduler.remove(id);  // drop any OS schedule first
@@ -428,6 +486,7 @@ void JobController::deleteJob(const QString &id)
     m_secrets.remove(id + QStringLiteral(".ssh"));  // and any remembered SSH password
     m_store.remove(id);
     m_jobs.removeById(id);
+    rebuildSshHosts();
     if (m_currentId == id)
         newJob();
 }
@@ -440,6 +499,62 @@ void JobController::setDiscoverable(bool on)
     if (m_discovery)
         m_discovery->setAdvertising(on);
     emit discoverableChanged();
+}
+
+void JobController::rebuildSshHosts()
+{
+    QList<SyncJob> jobs;
+    for (int row = 0; row < m_jobs.rowCount(); ++row) {
+        const QModelIndex idx = m_jobs.index(row);
+        const QString id = m_jobs.data(idx, JobListModel::IdRole).toString();
+        const SyncJob job = m_jobs.jobById(id);
+        if (!job.id.isEmpty())
+            jobs << job;
+    }
+    m_sshHosts.setHosts(m_sshHostStore.loadAll(), jobs);
+}
+
+QString JobController::sshHostSecretKey(const QString &target) const
+{
+    return QStringLiteral("ssh-host:") + target;
+}
+
+SshHost JobController::sshHostFromJob(const SyncJob &job, bool hasPassword) const
+{
+    const Endpoint e = EndpointParser::isSsh(job.source) ? EndpointParser::parse(job.source)
+        : (EndpointParser::isSsh(job.destination) ? EndpointParser::parse(job.destination)
+                                                  : Endpoint{});
+    if (e.kind != EndpointKind::Ssh || e.sshTarget.isEmpty())
+        return {};
+
+    SshHost host;
+    host.target = e.sshTarget;
+    const int at = e.sshTarget.lastIndexOf(QLatin1Char('@'));
+    host.user = at >= 0 ? e.sshTarget.left(at) : QString();
+    host.host = at >= 0 ? e.sshTarget.mid(at + 1) : e.sshTarget;
+    host.label = e.sshTarget;
+    host.sshKeyPath = job.sshKeyPath;
+    host.sshPort = job.sshPort;
+    host.hasPassword = hasPassword;
+    return host;
+}
+
+void JobController::saveSshHost(const SyncJob &job, bool hasPassword)
+{
+    SshHost host = sshHostFromJob(job, hasPassword);
+    if (host.target.isEmpty())
+        return;
+
+    const SshHost existing = m_sshHostStore.load(host.target);
+    if (!existing.target.isEmpty()) {
+        if (host.sshKeyPath.isEmpty())
+            host.sshKeyPath = existing.sshKeyPath;
+        if (host.sshPort == 0)
+            host.sshPort = existing.sshPort;
+        host.hasPassword = hasPassword || existing.hasPassword;
+    }
+    if (m_sshHostStore.upsert(host))
+        rebuildSshHosts();
 }
 
 void JobController::addPeerByHost(const QString &host)

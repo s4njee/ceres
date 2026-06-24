@@ -16,6 +16,8 @@
 
 #include <cstdio>
 
+#include <QByteArray>
+#include <QCoreApplication>
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
@@ -23,15 +25,44 @@
 #include <QUrl>
 #include <QtQml>
 
+#include "cli/AdHocTransfer.h"
+#include "app/BrowseController.h"
 #include "app/JobController.h"
 #include "app/PathCompleter.h"
+#include "app/TransferManager.h"
 #include "core/ProfileStore.h"
 #include "core/SecretStore.h"
+#include "core/SshHostStore.h"
 #include "engine/BinaryLocator.h"
 #include "models/ChangeListModel.h"
+#include "models/FileListModel.h"
 #include "models/JobListModel.h"
 #include "models/PeerModel.h"
+#include "models/SshHostListModel.h"
+#include "models/TransfersModel.h"
 #include "sched/Scheduler.h"
+
+namespace {
+
+bool isHelpArg(const char *arg)
+{
+    const QByteArray a(arg);
+    return a == QByteArrayLiteral("-h") || a == QByteArrayLiteral("--help");
+}
+
+bool isMacProcessSerialArg(const char *arg)
+{
+    return QByteArray(arg).startsWith("-psn_");
+}
+
+void printUsage(FILE *stream)
+{
+    fputs("usage:\n", stream);
+    fputs("  ceres                         launch the GUI\n", stream);
+    fputs("  ceres <source> <destination>  run rsync -axh with a terminal progress bar\n", stream);
+}
+
+} // namespace
 
 int main(int argc, char *argv[])
 {
@@ -42,6 +73,24 @@ int main(int argc, char *argv[])
         fputs(qgetenv("CERES_SSH_PASSWORD").constData(), stdout);
         fputc('\n', stdout);
         return 0;
+    }
+
+    if (argc == 2 && isHelpArg(argv[1])) {
+        printUsage(stdout);
+        return 0;
+    }
+
+    if (argc == 3) {
+        QCoreApplication app(argc, argv);
+        QCoreApplication::setApplicationName(QStringLiteral("Ceres"));
+        QCoreApplication::setOrganizationName(QStringLiteral("Ceres"));
+        return AdHocTransfer::run(QString::fromLocal8Bit(argv[1]),
+                                  QString::fromLocal8Bit(argv[2]));
+    }
+
+    if (argc > 1 && !(argc == 2 && isMacProcessSerialArg(argv[1]))) {
+        printUsage(stderr);
+        return 64;
     }
 
     QGuiApplication app(argc, argv);
@@ -58,17 +107,34 @@ int main(int argc, char *argv[])
     qmlRegisterUncreatableType<JobListModel>(
         "CeresUi", 1, 0, "JobListModel",
         QStringLiteral("JobListModel is provided by the controller"));
+    qmlRegisterUncreatableType<SshHostListModel>(
+        "CeresUi", 1, 0, "SshHostListModel",
+        QStringLiteral("SshHostListModel is provided by the controller"));
     qmlRegisterUncreatableType<PeerModel>(
         "CeresUi", 1, 0, "PeerModel",
         QStringLiteral("PeerModel is provided by the controller"));
+    qmlRegisterUncreatableType<FileListModel>(
+        "CeresUi", 1, 0, "FileListModel",
+        QStringLiteral("FileListModel is provided by the browse controller"));
+    qmlRegisterUncreatableType<TransfersModel>(
+        "CeresUi", 1, 0, "TransfersModel",
+        QStringLiteral("TransfersModel is provided by the transfer manager"));
 
     const RsyncCapabilities caps = BinaryLocator::locateRsync();
-    JobController controller(caps, nullptr, ProfileStore{}, SecretStore{}, Scheduler{}, true);
+    JobController controller(caps, nullptr, ProfileStore{}, SecretStore{}, Scheduler{},
+                             SshHostStore{}, true);
     PathCompleter completer(caps);
+    TransferManager transfers(caps);
+    BrowseController browse(caps, SshHostStore{}, SecretStore{}, &transfers);
+    // A host saved from the browse tab should appear in the sidebar immediately.
+    QObject::connect(&browse, &BrowseController::hostsChanged,
+                     &controller, &JobController::reloadSshHosts);
 
     QQmlApplicationEngine engine;
     engine.rootContext()->setContextProperty(QStringLiteral("controller"), &controller);
     engine.rootContext()->setContextProperty(QStringLiteral("completer"), &completer);
+    engine.rootContext()->setContextProperty(QStringLiteral("browse"), &browse);
+    engine.rootContext()->setContextProperty(QStringLiteral("transfers"), &transfers);
 
     QObject::connect(
         &engine, &QQmlApplicationEngine::objectCreationFailed, &app,

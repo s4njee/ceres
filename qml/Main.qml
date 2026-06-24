@@ -7,8 +7,8 @@
 //   │ Sidebar  │ Main editor panel                │
 //   │ (210px)  │  - Job name + Save button        │
 //   │          │  - From/To path fields + Browse  │
-//   │ JOBS     │  - Option chips (archive, etc.)  │
-//   │ list     │  - Schedule selector             │
+//   │ SSH      │  - Option chips (archive, etc.)  │
+//   │ hosts    │  - Schedule selector             │
 //   │          │  - Preview / Run / Cancel buttons │
 //   │ NETWORK  │  - SplitView: preview + log      │
 //   │ peers    │  - Progress bar + status          │
@@ -42,6 +42,7 @@ ApplicationWindow {
     property bool confirmOpen: false
     property string scheduleKind: "manual"
     property int weekday: 0
+    property int currentTab: 0   // 0 = Sync editor, 1 = Browse
 
     // SSH password auth state. Modal-driven (no always-visible field): held for the
     // session so subsequent manual runs reuse it; persisted to the keychain only when
@@ -51,6 +52,7 @@ ApplicationWindow {
     // Which flow opened the auth modal: "run" (a sync) or "browse" (remote folder picker).
     property string authContext: "run"
     property string authBrowseInput: ""
+    property string pendingHostAction: ""
 
     // Advanced options (supported in backend/argv/fingerprint/storage but not yet
     // exposed in the form UI; round-tripped here so loads/previews/runs/saves
@@ -73,6 +75,22 @@ ApplicationWindow {
     function setPathField(field, path) {
         field.text = path
         field.cursorPosition = path.length
+    }
+
+    function toggleSavedHostTarget(target) {
+        var endpoint = target + ":"
+        if (toField.text === endpoint) {
+            root.setPathField(toField, "")
+            root.setPathField(fromField, endpoint)
+            fromField.forceActiveFocus()
+        } else if (fromField.text === endpoint) {
+            root.setPathField(fromField, "")
+            root.setPathField(toField, endpoint)
+            toField.forceActiveFocus()
+        } else {
+            root.setPathField(toField, endpoint)
+            toField.forceActiveFocus()
+        }
     }
 
     // Inject/replace the login user in an SSH endpoint string ("host:/p" ->
@@ -191,26 +209,58 @@ ApplicationWindow {
         }
     }
 
+    function unknownSshTarget() {
+        var target = controller.sshTargetForJob(root.jobMap())
+        if (target && target.length > 0 && !controller.isSshHostSaved(target))
+            return target
+        return ""
+    }
+
+    function continueHostAction(action) {
+        if (action === "save") {
+            controller.saveJob(root.jobMap())
+        } else if (action === "preview") {
+            if (!controller.running && fromField.text.length > 0 && toField.text.length > 0)
+                controller.preview(root.jobMap())
+        } else if (action === "run") {
+            if (!controller.running && fromField.text.length > 0 && toField.text.length > 0) {
+                if (root.deleteOn)
+                    root.confirmOpen = true
+                else
+                    controller.run(root.jobMap())
+            }
+        } else if (action === "new") {
+            controller.newJob()
+        }
+    }
+
+    function runWithHostPrompt(action) {
+        var target = root.unknownSshTarget()
+        if (target.length > 0) {
+            root.pendingHostAction = action
+            addSshHostDialog.show(target)
+            return
+        }
+        root.continueHostAction(action)
+    }
+
     // Basic keyboard shortcuts (Ctrl maps to Cmd on macOS).
     Shortcut {
         sequence: "Ctrl+S"
-        onActivated: controller.saveJob(root.jobMap())
+        onActivated: root.runWithHostPrompt("save")
     }
     Shortcut {
         sequence: "Ctrl+Return"
         onActivated: {
             if (!controller.running && fromField.text.length > 0 && toField.text.length > 0)
-                controller.preview(root.jobMap())
+                root.runWithHostPrompt("preview")
         }
     }
     Shortcut {
         sequence: "Ctrl+Shift+Return"
         onActivated: {
             if (!controller.running && fromField.text.length > 0 && toField.text.length > 0) {
-                if (root.deleteOn)
-                    root.confirmOpen = true
-                else
-                    controller.run(root.jobMap())
+                root.runWithHostPrompt("run")
             }
         }
     }
@@ -651,6 +701,26 @@ ApplicationWindow {
                 anchors.rightMargin: 12
                 spacing: 8
                 Text { text: "ceres"; color: Theme.textPrimary; font.family: Theme.mono; font.pixelSize: 14; font.bold: true }
+                Item { width: 8 }
+                Repeater {
+                    model: ["Sync", "Browse"]
+                    delegate: Rectangle {
+                        required property int index
+                        required property string modelData
+                        radius: Theme.radius
+                        color: root.currentTab === index ? Theme.bgTertiary : "transparent"
+                        implicitHeight: 24
+                        implicitWidth: tabLbl.implicitWidth + 20
+                        Text {
+                            id: tabLbl
+                            anchors.centerIn: parent
+                            text: modelData
+                            color: root.currentTab === index ? Theme.textPrimary : Theme.textSecondary
+                            font.pixelSize: 12
+                        }
+                        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.currentTab = index }
+                    }
+                }
                 Item { Layout.fillWidth: true }
                 Rectangle {
                     radius: Theme.radius
@@ -676,7 +746,13 @@ ApplicationWindow {
         }
         Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: Theme.border }
 
-        // ---------- body ----------
+        // ---------- body (tabbed: Sync | Browse) ----------
+        StackLayout {
+            id: bodyStack
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            currentIndex: root.currentTab
+
         RowLayout {
             Layout.fillWidth: true
             Layout.fillHeight: true
@@ -692,21 +768,21 @@ ApplicationWindow {
                     anchors.margins: 10
                     spacing: 6
 
-                    Text { text: "JOBS"; color: Theme.textTertiary; font.pixelSize: 11; font.letterSpacing: 1 }
+                    Text { text: "SAVED SSH HOSTS"; color: Theme.textTertiary; font.pixelSize: 11; font.letterSpacing: 1 }
 
                     ListView {
-                        id: jobsList
+                        id: hostsList
                         Layout.fillWidth: true
                         Layout.fillHeight: true
                         clip: true
                         spacing: 2
-                        model: controller.jobs
+                        model: controller.sshHosts
                         ScrollBar.vertical: ScrollBar {}
 
                         Text {
                             anchors.centerIn: parent
-                            visible: controller.jobs.count === 0
-                            text: "Ø  No saved jobs yet"
+                            visible: controller.sshHosts.count === 0
+                            text: "Ø  No saved SSH hosts"
                             color: Theme.textTertiary
                             font.pixelSize: 12
                         }
@@ -715,49 +791,33 @@ ApplicationWindow {
                             width: ListView.view.width
                             height: 42
                             radius: Theme.radius
-                            color: (id === controller.currentId) ? Theme.bgTertiary : "transparent"
-                            border.width: (id === controller.currentId) ? 1 : 0
-                            border.color: Theme.borderStrong
-
-                            Rectangle {
-                                width: 3
-                                height: parent.height
-                                radius: 1.5
-                                color: Theme.accent
-                                visible: id === controller.currentId
-                            }
+                            color: hostMouse.containsMouse ? Theme.bgTertiary : "transparent"
 
                             MouseArea {
+                                id: hostMouse
                                 anchors.fill: parent
+                                hoverEnabled: true
                                 cursorShape: Qt.PointingHandCursor
-                                onClicked: controller.loadJob(id)
+                                onClicked: root.toggleSavedHostTarget(target)
                             }
                             RowLayout {
                                 anchors.fill: parent
                                 anchors.leftMargin: 8
-                                anchors.rightMargin: 4
+                                anchors.rightMargin: 8
                                 spacing: 8
                                 Rectangle { width: 7; height: 7; radius: 4; color: Theme.ok; Layout.alignment: Qt.AlignVCenter }
                                 ColumnLayout {
                                     Layout.fillWidth: true
                                     spacing: 0
-                                    Text { text: name; color: Theme.textPrimary; font.pixelSize: 12; elide: Text.ElideRight; Layout.fillWidth: true }
-                                    Text { text: summary; color: Theme.textTertiary; font.family: Theme.mono; font.pixelSize: 10; elide: Text.ElideMiddle; Layout.fillWidth: true }
+                                    Text { text: target; color: Theme.textPrimary; font.family: Theme.mono; font.pixelSize: 12; elide: Text.ElideRight; Layout.fillWidth: true }
+                                    Text { text: summary; color: Theme.textTertiary; font.pixelSize: 10; elide: Text.ElideMiddle; Layout.fillWidth: true }
                                 }
-                                Item {
-                                    implicitWidth: 20
-                                    implicitHeight: 20
-                                    Layout.alignment: Qt.AlignVCenter
-                                    Accessible.role: Accessible.Button
-                                    Accessible.name: "Delete job"
-                                    Text { anchors.centerIn: parent; text: "×"; color: Theme.textTertiary; font.pixelSize: 15 }
-                                    MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: controller.deleteJob(id) }
-                                }
+                                Text { text: jobCount; visible: jobCount > 1; color: Theme.textTertiary; font.pixelSize: 10 }
                             }
                         }
                     }
 
-                    FlatButton { Layout.fillWidth: true; label: "+  New sync"; onClicked: controller.newJob() }
+                    FlatButton { Layout.fillWidth: true; label: "+  New sync"; onClicked: root.runWithHostPrompt("new") }
 
                     Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: Theme.border; Layout.topMargin: 4 }
 
@@ -890,7 +950,7 @@ ApplicationWindow {
                     }
                     FlatButton {
                         label: "Save job"
-                        onClicked: controller.saveJob(root.jobMap())
+                        onClicked: root.runWithHostPrompt("save")
                     }
                 }
 
@@ -1228,6 +1288,12 @@ ApplicationWindow {
                 }
             }
         }
+        // Browse tab (page 1)
+        BrowseTab {
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+        }
+        }
     }
 
     DeleteConfirmDialog {
@@ -1249,6 +1315,11 @@ ApplicationWindow {
             root.sshPassword = password
             root.rememberSshPassword = remember
             if (root.authContext === "browse") {
+                if (remember) {
+                    controller.saveSshHostPassword(root.authBrowseInput, user, password,
+                                                   sshKeyField.text,
+                                                   parseInt(sshPortField.text) || 0)
+                }
                 // Reopen the folder picker and re-list with the new credentials. The
                 // username is folded into the browse target so chosen paths carry it.
                 remoteBrowser.open()
@@ -1258,6 +1329,21 @@ ApplicationWindow {
                 root.applyUserToSshField(toField, user)
                 controller.retryWithPassword(root.jobMap(), user, password, remember)
             }
+        }
+    }
+
+    AddSshHostDialog {
+        id: addSshHostDialog
+        onAccepted: {
+            controller.saveSshHostForJob(root.jobMap())
+            var action = root.pendingHostAction
+            root.pendingHostAction = ""
+            root.continueHostAction(action)
+        }
+        onSkipped: {
+            var action = root.pendingHostAction
+            root.pendingHostAction = ""
+            root.continueHostAction(action)
         }
     }
 }

@@ -49,6 +49,8 @@ private slots:
     void progressSpeedIsExposedAndReset();
     void realSyncProgressSetsTransferringStatus();
     void sshKeyFailurePromptsThenRetriesWithPassword();
+    void savedSshHostsFollowSavedJobs();
+    void explicitSshHostCanBeSavedWithoutJob();
 };
 
 static RsyncCapabilities fakeCaps()
@@ -74,6 +76,11 @@ static QVariantMap deleteJob()
     };
 }
 
+static SshHostStore tempHostStore(const QTemporaryDir &tmp)
+{
+    return SshHostStore(tmp.path() + QStringLiteral("/ssh-hosts.json"));
+}
+
 void JobControllerTest::deleteRunRequiresMatchingSuccessfulPreview()
 {
     QTemporaryDir tmp;
@@ -81,7 +88,7 @@ void JobControllerTest::deleteRunRequiresMatchingSuccessfulPreview()
 
     FakeEngine engine;
     JobController controller(fakeCaps(), &engine, ProfileStore(tmp.path()), SecretStore{},
-                             Scheduler{}, false);
+                             Scheduler{}, tempHostStore(tmp), false);
 
     QVariantMap job = deleteJob();
     controller.run(job);
@@ -117,7 +124,7 @@ void JobControllerTest::progressSpeedIsExposedAndReset()
 
     FakeEngine engine;
     JobController controller(fakeCaps(), &engine, ProfileStore(tmp.path()), SecretStore{},
-                             Scheduler{}, false);
+                             Scheduler{}, tempHostStore(tmp), false);
 
     QVariantMap job = {
         {QStringLiteral("source"), QStringLiteral("/tmp/source/")},
@@ -146,7 +153,7 @@ void JobControllerTest::realSyncProgressSetsTransferringStatus()
 
     FakeEngine engine;
     JobController controller(fakeCaps(), &engine, ProfileStore(tmp.path()), SecretStore{},
-                             Scheduler{}, false);
+                             Scheduler{}, tempHostStore(tmp), false);
 
     QVariantMap job = {
         {QStringLiteral("source"), QStringLiteral("/tmp/source/")},
@@ -167,7 +174,7 @@ void JobControllerTest::sshKeyFailurePromptsThenRetriesWithPassword()
 
     FakeEngine engine;
     JobController controller(fakeCaps(), &engine, ProfileStore(tmp.path()), SecretStore{},
-                             Scheduler{}, false);
+                             Scheduler{}, tempHostStore(tmp), false);
 
     QSignalSpy authSpy(&controller, &JobController::sshAuthRequired);
 
@@ -198,6 +205,77 @@ void JobControllerTest::sshKeyFailurePromptsThenRetriesWithPassword()
     engine.sendStderr(QStringLiteral("Permission denied (publickey,password)."));
     engine.finish(255);
     QCOMPARE(authSpy.count(), 1);
+}
+
+void JobControllerTest::savedSshHostsFollowSavedJobs()
+{
+    QTemporaryDir tmp;
+    QVERIFY(tmp.isValid());
+
+    FakeEngine engine;
+    JobController controller(fakeCaps(), &engine, ProfileStore(tmp.path()), SecretStore{},
+                             Scheduler{}, tempHostStore(tmp), false);
+
+    QVariantMap local = {
+        {QStringLiteral("name"), QStringLiteral("Local")},
+        {QStringLiteral("source"), QStringLiteral("/tmp/source/")},
+        {QStringLiteral("destination"), QStringLiteral("/tmp/dest/")},
+    };
+    controller.saveJob(local);
+    QCOMPARE(controller.sshHosts()->rowCount(), 0);
+
+    QVariantMap ssh = {
+        {QStringLiteral("name"), QStringLiteral("Remote")},
+        {QStringLiteral("source"), QStringLiteral("/tmp/source/")},
+        {QStringLiteral("destination"), QStringLiteral("alice@example.com:/backup/")},
+    };
+    controller.newJob();
+    controller.saveJob(ssh);
+
+    QCOMPARE(controller.sshHosts()->rowCount(), 1);
+    const QModelIndex hostIndex = controller.sshHosts()->index(0);
+    QCOMPARE(controller.sshHosts()->data(hostIndex, SshHostListModel::TargetRole).toString(),
+             QStringLiteral("alice@example.com"));
+    QCOMPARE(controller.sshHosts()->data(hostIndex, SshHostListModel::HostRole).toString(),
+             QStringLiteral("example.com"));
+    QCOMPARE(controller.sshHosts()->data(hostIndex, SshHostListModel::UserRole).toString(),
+             QStringLiteral("alice"));
+
+    const QString sshJobId =
+        controller.sshHosts()->data(hostIndex, SshHostListModel::FirstJobIdRole).toString();
+    controller.deleteJob(sshJobId);
+    QCOMPARE(controller.sshHosts()->rowCount(), 0);
+}
+
+void JobControllerTest::explicitSshHostCanBeSavedWithoutJob()
+{
+    QTemporaryDir tmp;
+    QVERIFY(tmp.isValid());
+
+    FakeEngine engine;
+    JobController controller(fakeCaps(), &engine, ProfileStore(tmp.path()), SecretStore{},
+                             Scheduler{}, tempHostStore(tmp), false);
+
+    QVariantMap ssh = {
+        {QStringLiteral("name"), QStringLiteral("Unsaved Remote")},
+        {QStringLiteral("source"), QStringLiteral("/tmp/source/")},
+        {QStringLiteral("destination"), QStringLiteral("alice@example.com:/backup/")},
+        {QStringLiteral("sshPort"), 2222},
+    };
+
+    QCOMPARE(controller.sshTargetForJob(ssh), QStringLiteral("alice@example.com"));
+    QVERIFY(!controller.isSshHostSaved(QStringLiteral("alice@example.com")));
+
+    controller.saveSshHostForJob(ssh);
+    QVERIFY(controller.isSshHostSaved(QStringLiteral("alice@example.com")));
+    QCOMPARE(controller.sshHosts()->rowCount(), 1);
+
+    const QModelIndex hostIndex = controller.sshHosts()->index(0);
+    QCOMPARE(controller.sshHosts()->data(hostIndex, SshHostListModel::TargetRole).toString(),
+             QStringLiteral("alice@example.com"));
+    QCOMPARE(controller.sshHosts()->data(hostIndex, SshHostListModel::SummaryRole).toString(),
+             QStringLiteral("saved host"));
+    QCOMPARE(controller.sshHosts()->data(hostIndex, SshHostListModel::JobCountRole).toInt(), 0);
 }
 
 QTEST_MAIN(JobControllerTest)

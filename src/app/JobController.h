@@ -9,10 +9,12 @@
 
 #include "core/ProfileStore.h"
 #include "core/SecretStore.h"
+#include "core/SshHostStore.h"
 #include "engine/BinaryLocator.h"
 #include "models/ChangeListModel.h"
 #include "models/JobListModel.h"
 #include "models/PeerModel.h"
+#include "models/SshHostListModel.h"
 #include "sched/Scheduler.h"
 
 class DiscoveryService;
@@ -53,6 +55,7 @@ class JobController : public QObject {
     Q_PROPERTY(QString hostName READ hostName CONSTANT)
     Q_PROPERTY(QString hostAddress READ hostAddress NOTIFY hostAddressChanged)
     Q_PROPERTY(JobListModel *jobs READ jobs CONSTANT)
+    Q_PROPERTY(SshHostListModel *sshHosts READ sshHosts CONSTANT)
     Q_PROPERTY(QString currentId READ currentId NOTIFY currentChanged)
     Q_PROPERTY(PeerModel *peers READ peers CONSTANT)
     Q_PROPERTY(bool discoverable READ discoverable WRITE setDiscoverable NOTIFY discoverableChanged)
@@ -65,11 +68,13 @@ public:
     /// a mock SyncEngine, in-memory stores, etc. Set startNetworkServices=false
     /// to skip UDP beacon setup in headless test environments.
     JobController(RsyncCapabilities caps, SyncEngine *engine, ProfileStore store,
-                  SecretStore secrets, Scheduler scheduler, bool startNetworkServices,
+                  SecretStore secrets, Scheduler scheduler, SshHostStore sshHostStore,
+                  bool startNetworkServices,
                   QObject *parent = nullptr);
 
     ChangeListModel *changes() { return &m_changes; }
     JobListModel *jobs() { return &m_jobs; }
+    SshHostListModel *sshHosts() { return &m_sshHosts; }
     QString currentId() const { return m_currentId; }
     PeerModel *peers() { return &m_peers; }
     bool discoverable() const { return m_discoverable; }
@@ -101,7 +106,7 @@ public:
     /// Called by the password modal that the `sshAuthRequired` signal triggers:
     /// `username` (if any) is folded into the remote endpoint, `password` is fed to
     /// ssh via SSH_ASKPASS, and the run repeats in the same preview/real mode. When
-    /// `remember` is set and the job is saved, the password is stored in the keychain.
+    /// `remember` is set, the password is stored for the SSH host in the keychain.
     Q_INVOKABLE void retryWithPassword(const QVariantMap &job, const QString &username,
                                        const QString &password, bool remember);
 
@@ -111,8 +116,20 @@ public:
     Q_INVOKABLE void saveJob(const QVariantMap &job);
     Q_INVOKABLE void deleteJob(const QString &id);
 
+    // Saved SSH hosts.
+    Q_INVOKABLE QString sshTargetForJob(const QVariantMap &job) const;
+    Q_INVOKABLE bool isSshHostSaved(const QString &target) const;
+    Q_INVOKABLE void saveSshHostForJob(const QVariantMap &job);
+    Q_INVOKABLE void saveSshHostPassword(const QString &endpoint, const QString &username,
+                                         const QString &password, const QString &sshKey,
+                                         int sshPort);
+
     // Discovery.
     Q_INVOKABLE void addPeerByHost(const QString &host);
+
+    /// Rebuild the saved-SSH-hosts sidebar model from disk. Called when another
+    /// component (e.g. the browse tab) saves a host out of band.
+    Q_INVOKABLE void reloadSshHosts() { rebuildSshHosts(); }
 
 signals:
     void runningChanged();
@@ -133,6 +150,10 @@ signals:
 
 private:
     void startJob(const SyncJob &job, bool dryRun);
+    void rebuildSshHosts();
+    void saveSshHost(const SyncJob &job, bool hasPassword);
+    SshHost sshHostFromJob(const SyncJob &job, bool hasPassword) const;
+    QString sshHostSecretKey(const QString &target) const;
     SyncJob jobFromMap(const QVariantMap &map) const;  ///< QML variant map → SyncJob struct
     QVariantMap mapFromJob(const SyncJob &job) const;  ///< SyncJob struct → QML variant map
     QByteArray syncFingerprint(const SyncJob &job) const; ///< SHA-256 of sync-relevant fields
@@ -145,7 +166,9 @@ private:
     ChangeListModel m_changes;
     ProfileStore m_store;
     SecretStore m_secrets;
+    SshHostStore m_sshHostStore;
     JobListModel m_jobs;
+    SshHostListModel m_sshHosts;
     QString m_currentId;
     PeerModel m_peers;
     DiscoveryService *m_discovery = nullptr;

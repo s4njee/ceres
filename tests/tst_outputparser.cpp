@@ -11,6 +11,7 @@ private slots:
     void parsesItemizeLines();
     void handlesChunkBoundaries();
     void parsesProgress2();
+    void parsesHumanReadableProgress2();
     void parsesProgress2WithoutToCheck();
     void routesStatsAndLog();
 };
@@ -87,6 +88,25 @@ void OutputParserTest::parsesProgress2()
     QCOMPARE(prog[1].xfr, 1);
     QCOMPARE(prog[1].toCheck, 4);
     QCOMPARE(prog[1].totalToCheck, 6);
+}
+
+void OutputParserTest::parsesHumanReadableProgress2()
+{
+    OutputParser p;
+    QList<ProgressInfo> prog;
+    connect(&p, &OutputParser::progress, this,
+            [&](const ProgressInfo &i) { prog.append(i); });
+
+    p.feed("          1.23M  42%   10.00MB/s    0:00:07 (xfr#2, to-chk=3/9)\r");
+    p.feed(" ");
+
+    QCOMPARE(prog.size(), 1);
+    QCOMPARE(prog[0].percent, 42);
+    QCOMPARE(prog[0].bytes, qint64(1289748));
+    QCOMPARE(prog[0].rate, QStringLiteral("10.00MB/s"));
+    QCOMPARE(prog[0].xfr, 2);
+    QCOMPARE(prog[0].toCheck, 3);
+    QCOMPARE(prog[0].totalToCheck, 9);
 }
 
 void OutputParserTest::parsesProgress2WithoutToCheck()

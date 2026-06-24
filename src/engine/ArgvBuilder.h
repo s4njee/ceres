@@ -12,11 +12,22 @@
 /// @ingroup engine
 class ArgvBuilder {
 public:
+    struct BuildOptions {
+        bool dryRun = false;
+        bool allowInteractiveSsh = false;
+    };
+
     static QStringList build(const SyncJob &job, const RsyncCapabilities &caps, bool dryRun);
+    static QStringList build(const SyncJob &job, const RsyncCapabilities &caps,
+                             BuildOptions options);
 
     /// True if either endpoint is a remote SSH spec (`user@host:path` / `host:path`),
     /// as opposed to local or an rsync:// daemon target.
     static bool usesSsh(const SyncJob &job);
+
+    /// Tilde-expand and, for Windows rsync runtimes, rewrite a LOCAL endpoint to
+    /// the form rsync expects. Remote (ssh/daemon) specs pass through untouched.
+    static QString prepareEndpoint(const QString &raw, RsyncCapabilities::PathStyle style);
 
     /// Rewrite a LOCAL path into the form the located rsync runtime expects. Native
     /// runtimes pass through unchanged; Cygwin/MSYS2 runtimes (Windows) get drive

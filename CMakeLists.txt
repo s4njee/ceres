@@ -20,10 +20,14 @@ set_source_files_properties(qml/Theme.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
 # controller behavior can be unit-tested headless.
 # ---------------------------------------------------------------------------
 add_library(ceres_core STATIC
+    src/cli/AdHocTransfer.h        src/cli/AdHocTransfer.cpp
     src/core/SyncJob.h
     src/core/Peer.h
+    src/core/FileEntry.h
     src/core/Endpoint.h            src/core/Endpoint.cpp
     src/core/JobId.h
+    src/core/SshHost.h
+    src/core/SshHostStore.h          src/core/SshHostStore.cpp
     src/core/ProfileStore.h          src/core/ProfileStore.cpp
     src/core/SecretStore.h           src/core/SecretStore.cpp
     src/engine/RsyncEvents.h
@@ -38,9 +42,15 @@ add_library(ceres_core STATIC
     src/sched/Scheduler.h            src/sched/Scheduler.cpp
     src/models/ChangeListModel.h     src/models/ChangeListModel.cpp
     src/models/JobListModel.h        src/models/JobListModel.cpp
+    src/models/SshHostListModel.h     src/models/SshHostListModel.cpp
+    src/models/FileListModel.h        src/models/FileListModel.cpp
+    src/models/TransfersModel.h       src/models/TransfersModel.cpp
     src/models/PeerModel.h           src/models/PeerModel.cpp
     src/app/JobController.h          src/app/JobController.cpp
     src/app/PathCompleter.h          src/app/PathCompleter.cpp
+    src/app/RemoteFs.h               src/app/RemoteFs.cpp
+    src/app/TransferManager.h        src/app/TransferManager.cpp
+    src/app/BrowseController.h       src/app/BrowseController.cpp
 )
 target_include_directories(ceres_core PUBLIC src)
 target_link_libraries(ceres_core PUBLIC Qt6::Core Qt6::Network)
@@ -67,6 +77,10 @@ qt_add_qml_module(ceres
         qml/Field.qml
         qml/DeleteConfirmDialog.qml
         qml/SshPasswordDialog.qml
+        qml/AddSshHostDialog.qml
+        qml/BrowseTab.qml
+        qml/TransfersDialog.qml
+        qml/FileBrowserPane.qml
 )
 target_link_libraries(ceres PRIVATE
     ceres_core

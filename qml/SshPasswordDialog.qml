@@ -4,8 +4,8 @@ import QtQuick.Layouts
 
 // Shown when an SSH sync fails public-key auth (controller.sshAuthRequired). Collects
 // a username/password to retry with; the password is fed to ssh via SSH_ASKPASS and,
-// if "remember" is set on a saved job, stored in the OS keychain. Modeled on
-// DeleteConfirmDialog: a full-screen scrim with a centered panel, Esc cancels.
+// if "remember" is set, stored in the OS keychain and attached to the saved SSH
+// host. Modeled on DeleteConfirmDialog: a full-screen scrim with a centered panel.
 Rectangle {
     id: root
 
