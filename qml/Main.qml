@@ -77,6 +77,15 @@ ApplicationWindow {
         field.cursorPosition = path.length
     }
 
+    // Turn a FolderDialog/FileDialog "file://" URL into a native path. On Windows the
+    // URL is file:///C:/..., so stripping the scheme leaves "/C:/..." — drop that
+    // leading slash before the drive letter so rsync gets a real "C:/..." path.
+    function fileUrlToPath(url) {
+        var p = ("" + url).replace(/^file:\/\//, "")
+        if (/^\/[A-Za-z]:/.test(p)) p = p.substring(1)
+        return decodeURIComponent(p)
+    }
+
     function toggleSavedHostTarget(target) {
         var endpoint = target + ":"
         if (toField.text === endpoint) {
@@ -329,8 +338,7 @@ ApplicationWindow {
         id: fromFolderDialog
         title: "Select Source Folder"
         onAccepted: {
-            var p = selectedFolder.toString();
-            if (p.startsWith("file://")) p = p.substring(7);
+            var p = root.fileUrlToPath(selectedFolder);
             fromField.text = p;
             fromField.cursorPosition = fromField.text.length;
         }
@@ -340,8 +348,7 @@ ApplicationWindow {
         id: toFolderDialog
         title: "Select Destination Folder"
         onAccepted: {
-            var p = selectedFolder.toString();
-            if (p.startsWith("file://")) p = p.substring(7);
+            var p = root.fileUrlToPath(selectedFolder);
             toField.text = p;
             toField.cursorPosition = toField.text.length;
         }

@@ -333,6 +333,13 @@ void ArgvBuilderTest::convertsWindowsLocalPaths()
     QCOMPARE(ArgvBuilder::toRsyncLocalPath(QStringLiteral("D:\\data"), PS::Msys),
              QStringLiteral("/cygdrive/d/data"));
 
+    // A file-URL path stripped to "/C:/..." (leading slash before the drive) is
+    // recovered, not passed through as a bogus POSIX path.
+    QCOMPARE(ArgvBuilder::toRsyncLocalPath(QStringLiteral("/C:/Users/me"), PS::Cygwin),
+             QStringLiteral("/cygdrive/c/Users/me"));
+    QCOMPARE(ArgvBuilder::toRsyncLocalPath(QStringLiteral("/D:/data"), PS::Msys),
+             QStringLiteral("/cygdrive/d/data"));
+
     // Non-drive paths only get their slashes normalised.
     QCOMPARE(ArgvBuilder::toRsyncLocalPath(QStringLiteral("/already/posix"), PS::Cygwin),
              QStringLiteral("/already/posix"));

@@ -54,8 +54,13 @@ Item {
 
     function urlsToPaths(urls) {
         var out = []
-        for (var i = 0; i < urls.length; ++i)
-            out.push(decodeURIComponent(("" + urls[i]).replace(/^file:\/\//, "")))
+        for (var i = 0; i < urls.length; ++i) {
+            // Strip "file://"; on Windows that leaves "/C:/..." so drop the leading
+            // slash before the drive letter to get a real "C:/..." path.
+            var p = ("" + urls[i]).replace(/^file:\/\//, "")
+            if (/^\/[A-Za-z]:/.test(p)) p = p.substring(1)
+            out.push(decodeURIComponent(p))
+        }
         return out
     }
 

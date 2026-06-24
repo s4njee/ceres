@@ -66,6 +66,14 @@ QString ArgvBuilder::toRsyncLocalPath(const QString &path, RsyncCapabilities::Pa
     QString p = path;
     p.replace(QLatin1Char('\\'), QLatin1Char('/'));  // rsync wants forward slashes
 
+    // A Windows file URL reduced to a path can arrive as "/C:/Users/..." (a leading
+    // slash before the drive, from naively stripping "file://"). Drop that slash so
+    // the drive mapping below recognises it instead of passing it through as a bogus
+    // POSIX path that rsync can't create ("/C:/...").
+    if (p.size() >= 3 && p.at(0) == QLatin1Char('/') && p.at(1).isLetter()
+        && p.at(2) == QLatin1Char(':'))
+        p = p.mid(1);
+
     // Map a drive path ("X:/rest" or bare "X:") onto the runtime's mount root.
     // Standalone Cygwin- AND MSYS2-based rsync builds both resolve Windows drives
     // under /cygdrive by default: that prefix is compiled into the runtime DLL.
