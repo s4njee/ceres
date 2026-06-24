@@ -17,6 +17,47 @@
 
 #ifdef Q_OS_WIN
 #  include <windows.h>
+
+namespace {
+// Suspend or resume every process assigned to `job` (rsync plus its ssh child).
+// Windows has no SIGSTOP, so we use ntdll's per-process suspend/resume — an
+// undocumented but long-stable API — on each PID in the Job Object. Pause/resume
+// calls are balanced 1:1 by TransferManager, so the kernel suspend count stays
+// in step. TerminateJobObject still works on a suspended tree, so cancel() needs
+// no special-casing.
+void suspendResumeJobProcesses(HANDLE job, bool suspend)
+{
+    if (!job)
+        return;
+
+    using ProcFn = LONG(NTAPI *)(HANDLE);
+    const HMODULE ntdll = ::GetModuleHandleW(L"ntdll.dll");
+    static const auto suspendFn =
+        reinterpret_cast<ProcFn>(::GetProcAddress(ntdll, "NtSuspendProcess"));
+    static const auto resumeFn =
+        reinterpret_cast<ProcFn>(::GetProcAddress(ntdll, "NtResumeProcess"));
+    const ProcFn fn = suspend ? suspendFn : resumeFn;
+    if (!fn)
+        return;
+
+    // A transfer spawns only rsync + ssh, but over-allocate generously so the
+    // query never truncates the PID list.
+    constexpr DWORD kMaxPids = 64;
+    BYTE buffer[sizeof(JOBOBJECT_BASIC_PROCESS_ID_LIST) + kMaxPids * sizeof(ULONG_PTR)]{};
+    if (!::QueryInformationJobObject(job, JobObjectBasicProcessIdList, buffer, sizeof(buffer),
+                                     nullptr))
+        return;
+
+    const auto *list = reinterpret_cast<const JOBOBJECT_BASIC_PROCESS_ID_LIST *>(buffer);
+    for (DWORD i = 0; i < list->NumberOfProcessIdsInList; ++i) {
+        if (HANDLE proc = ::OpenProcess(PROCESS_SUSPEND_RESUME, FALSE,
+                                        static_cast<DWORD>(list->ProcessIdList[i]))) {
+            fn(proc);
+            ::CloseHandle(proc);
+        }
+    }
+}
+}  // namespace
 #endif
 
 RsyncProcessEngine::RsyncProcessEngine(RsyncCapabilities caps, QObject *parent)
@@ -203,7 +244,9 @@ void RsyncProcessEngine::pause()
     if (pid > 0)
         ::kill(static_cast<pid_t>(-pid), SIGSTOP);  // suspend the rsync+ssh group
 #endif
-    // Windows has no portable SIGSTOP equivalent; pause is a no-op there for now.
+#ifdef Q_OS_WIN
+    suspendResumeJobProcesses(static_cast<HANDLE>(m_jobObject), /*suspend=*/true);
+#endif
 }
 
 void RsyncProcessEngine::resume()
@@ -214,6 +257,9 @@ void RsyncProcessEngine::resume()
     const qint64 pid = m_process->processId();
     if (pid > 0)
         ::kill(static_cast<pid_t>(-pid), SIGCONT);
+#endif
+#ifdef Q_OS_WIN
+    suspendResumeJobProcesses(static_cast<HANDLE>(m_jobObject), /*suspend=*/false);
 #endif
 }
 

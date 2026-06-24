@@ -60,6 +60,13 @@ After staging, `build/` should contain `ceres.exe`, `ceres-runner.exe`,
       teardown), and the result is reported as *interrupted/cancelled* — not
       "rsync exited with code 1".
 
+- [ ] **Pause/resume a Browse transfer.** In the Browse → Transfers list, pause a
+      running transfer: throughput drops to zero and the row shows *Paused*. In
+      Task Manager / Process Explorer the `rsync.exe` (and `ssh.exe`) threads are
+      *Suspended*. Resume: the transfer continues to completion. *(Windows uses
+      ntdll NtSuspendProcess/NtResumeProcess over the Job Object's processes,
+      since there is no SIGSTOP.)*
+
 - [ ] **Register a scheduled job.** Create an interval/daily/weekly schedule.
       Verify with `schtasks /query /tn "Ceres\<jobId>"` that the task exists and
       its action invokes `ceres-runner.exe --job <id>`.
