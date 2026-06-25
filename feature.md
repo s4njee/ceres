@@ -48,7 +48,7 @@ Legend: `[x]` already in Ceres · `[ ]` not yet · _(italic notes for caveats)_
 - [x] Local file pane (browse the local filesystem)
 - [x] Dual-pane (local ⇆ remote) layout
 - [t] Sort / filter local pane
-- [t] Open local item in system file manager
+- [x] Open local item in system file manager
 
 ## Transfers
 - [x] Download remote → local

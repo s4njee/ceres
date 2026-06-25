@@ -448,6 +448,11 @@ Item {
     CtxMenu {
         id: localMenu
         CtxItem {
+            text: "Reveal in file manager"
+            enabled: localPane.selected.length === 1
+            onTriggered: browse.revealLocal(localPane.selected[0])
+        }
+        CtxItem {
             text: "New folder"
             onTriggered: tab.promptInput("New folder name", "", function(v) { browse.mkdirLocal(v) })
         }

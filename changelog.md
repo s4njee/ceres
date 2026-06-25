@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Added a "Reveal in file manager" action to the local pane's context menu: opens the selected item in Finder (`open -R`) / Explorer (`/select`) / the freedesktop opener (`xdg-open`). Implemented with `QProcess` so `ceres_core` stays GUI-free.
 - Added a transfer-rate limit: a compact `limit … KB/s` field in the transfers dialog caps the rsync transfer rate (`--bwlimit`) for newly started transfers; blank/0 is unlimited. `TransferManager` stamps the cap onto each job as it starts.
 - Browse transfers now show the full file list up front at 0% instead of revealing one file at a time as rsync reaches it: each transfer's source is walked (locally via `QDirIterator` on a thread-pool worker, remotely via a recursive `find` over the existing `RemoteFs` ssh plumbing) and the paths seed `TransfersModel` immediately, with live rsync progress landing on the seeded rows. Both walks run asynchronously so they never delay the transfer or stutter the UI; symlinks are skipped (they appear live during the transfer instead), and files rsync skips as already-current are reconciled to an "up to date" state on a clean finish rather than left stuck at 0%. Covered by new `TransferManager` seeding/reconcile tests.
 - Removed the persistent saved-job system (`ProfileStore`, `JobListModel` sidebar, `Scheduler` OS-timer backends, the `ceres-runner` CLI, and `JobId`), pivoting to an interactive browse/transfer workflow. `JobController` and `SyncJob` were slimmed accordingly and their tests (`tst_profilestore`, `tst_scheduler`) dropped.

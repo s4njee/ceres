@@ -5,6 +5,7 @@
 #include <QDirIterator>
 #include <QFile>
 #include <QFileInfo>
+#include <QProcess>
 #include <QThreadPool>
 
 #include "app/TransferManager.h"
@@ -363,6 +364,29 @@ void BrowseController::renameLocal(const QString &from, const QString &to)
     if (!dir.rename(from, to.trimmed()))
         emit errorOccurred(QStringLiteral("Could not rename %1").arg(from));
     localRefresh();
+}
+
+void BrowseController::revealLocal(const QString &name)
+{
+    if (name.isEmpty())
+        return;
+    const QString path = QDir(m_localPath).filePath(name);
+    if (!QFileInfo::exists(path)) {
+        emit errorOccurred(QStringLiteral("No such item: %1").arg(name));
+        return;
+    }
+#if defined(Q_OS_MACOS)
+    // -R reveals (selects) the item in its containing Finder window.
+    QProcess::startDetached(QStringLiteral("open"), {QStringLiteral("-R"), path});
+#elif defined(Q_OS_WIN)
+    // explorer wants a single "/select,<native-path>" argument.
+    QProcess::startDetached(QStringLiteral("explorer.exe"),
+                            {QStringLiteral("/select,") + QDir::toNativeSeparators(path)});
+#else
+    // No portable "reveal and select" on Linux; open the containing folder with the
+    // freedesktop opener (keeps ceres_core free of any Qt GUI dependency).
+    QProcess::startDetached(QStringLiteral("xdg-open"), {QFileInfo(path).absolutePath()});
+#endif
 }
 
 SyncJob BrowseController::transferJob() const

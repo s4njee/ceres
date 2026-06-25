@@ -73,6 +73,8 @@ public:
     Q_INVOKABLE void mkdirLocal(const QString &name);
     Q_INVOKABLE void deleteLocal(const QStringList &names);
     Q_INVOKABLE void renameLocal(const QString &from, const QString &to);
+    // Reveal a local item in the OS file manager (Finder / Explorer / default).
+    Q_INVOKABLE void revealLocal(const QString &name);
 
     // Transfers (each selected name becomes one queued rsync).
     Q_INVOKABLE void download(const QStringList &names);
