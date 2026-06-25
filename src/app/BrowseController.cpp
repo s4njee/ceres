@@ -158,14 +158,6 @@ BrowseController::BrowseController(RsyncCapabilities caps, SshHostStore hostStor
                 else
                     emit infoOccurred(name + QStringLiteral(": ") + formatBytes(bytes));
             });
-    // A download's remote walk finished: seed the full file list at 0%. Best-effort —
-    // an enumeration error (auth/unreachable) just leaves the transfer to fill rows in
-    // live, so it's swallowed here (the transfer itself surfaces real failures).
-    connect(&m_remoteFs, &RemoteFs::enumerated, this,
-            [this](const QString &token, const QStringList &relPaths, const QString &error) {
-                if (error.isEmpty() && m_transfers && !relPaths.isEmpty())
-                    m_transfers->seedFiles(token, relPaths);
-            });
 
     // Quick-view / edit: act on the result of a fetch-to-temp transfer.
     if (m_transfers)
@@ -706,10 +698,10 @@ void BrowseController::download(const QStringList &names)
         SyncJob job = transferJob();
         job.source = m_target + QLatin1Char(':') + joinRemote(m_remotePath, name);
         job.destination = dest;
-        const QString id = m_transfers->enqueue(job, QStringLiteral("down"), name);
-        // Walk the remote tree so the whole file list shows at 0% immediately; the
-        // result arrives async (RemoteFs::enumerated) and never blocks the transfer.
-        m_remoteFs.enumerate(id, m_target, m_remotePath, name, m_sshKey, m_sshPort, m_sshPassword);
+        // No upfront seed walk for downloads: a remote `find` would double-crawl the
+        // tree (rsync's sender already crawls it), so the file list fills in live from
+        // rsync's per-file output instead. Uploads keep their cheap local seed walk.
+        m_transfers->enqueue(job, QStringLiteral("down"), name);
     }
 }
 

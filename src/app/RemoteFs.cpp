@@ -244,58 +244,6 @@ void RemoteFs::list(const QString &target, const QString &dir, const QString &ss
     proc->closeWriteChannel();
 }
 
-void RemoteFs::enumerate(const QString &token, const QString &target, const QString &dir,
-                         const QString &leaf, const QString &sshKey, int port,
-                         const QString &password)
-{
-    const Endpoint endpoint = endpointForTarget(target);
-    QStringList args = sshArgsFor(endpoint, sshKey, port, m_caps.pathStyle, !password.isEmpty());
-    args << QStringLiteral("/bin/sh");
-
-    // cd into the parent dir so `find` prints paths relative to it (leaf/sub/file),
-    // then list regular files only (`-type f`). Symlinks and special files are skipped
-    // — they just appear live during the transfer. `-type f` is portable across
-    // GNU/BSD/BusyBox find.
-    const QString script = QStringLiteral(
-                "cd -- %1 2>/dev/null || { printf '__CERES_ERROR__cannot open folder\\n'; exit 2; }; "
-                "find -- %2 -type f 2>/dev/null\n")
-                .arg(shellPathArg(dir), shellPathArg(leaf));
-
-    auto *proc = new QProcess(this);
-    proc->setProcessEnvironment(sshEnvironmentFor(m_caps, password));
-    connect(proc, &QProcess::finished, this, [this, proc, token](int, QProcess::ExitStatus) {
-        const QStringList lines =
-            QString::fromUtf8(proc->readAllStandardOutput()).split(QLatin1Char('\n'));
-        const QString errorOutput = QString::fromUtf8(proc->readAllStandardError()).trimmed();
-        const bool failed = proc->exitStatus() != QProcess::NormalExit || proc->exitCode() != 0;
-        proc->deleteLater();
-
-        QStringList relPaths;
-        QString error;
-        for (const QString &line : lines) {
-            if (line.startsWith(QLatin1String("__CERES_ERROR__"))) {
-                error = line.mid(QStringLiteral("__CERES_ERROR__").size());
-                continue;
-            }
-            if (!line.isEmpty())
-                relPaths << line;
-        }
-        // Enumeration is best-effort: on any failure just report the error with an
-        // empty list. The caller leaves the transfer to populate rows as it runs.
-        if (error.isEmpty() && failed)
-            error = errorOutput.isEmpty() ? QStringLiteral("Could not list folder") : errorOutput;
-        emit enumerated(token, error.isEmpty() ? relPaths : QStringList{}, error);
-    });
-    connect(proc, &QProcess::errorOccurred, this, [this, proc, token](QProcess::ProcessError) {
-        const QString reason = proc->errorString();
-        proc->deleteLater();
-        emit enumerated(token, {}, reason);
-    });
-    proc->start(sshProgramFor(m_caps), args);
-    proc->write(script.toUtf8());
-    proc->closeWriteChannel();
-}
-
 namespace {
 // Run a script over ssh and hand its trimmed stdout (or an error string) to `handler`.
 // Like runOpCommand but it captures stdout — used by the read-only scalar queries

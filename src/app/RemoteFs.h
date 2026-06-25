@@ -41,9 +41,6 @@ public:
     // the result to the right transfer. Failures (auth, unreachable) report a
     // non-empty error and an empty list — enumeration is best-effort and never
     // prompts; the transfer falls back to filling rows in as it goes.
-    void enumerate(const QString &token, const QString &target, const QString &dir,
-                   const QString &leaf, const QString &sshKey, int port, const QString &password);
-
     // Recursively size `dir`/`name` with `du -sk`; reports the total via diskUsageReady.
     void diskUsage(const QString &target, const QString &dir, const QString &name,
                    const QString &sshKey, int port, const QString &password);
@@ -67,9 +64,6 @@ signals:
                 const QString &error);
     // mkdir/remove/rename finished. `error` empty on success.
     void opFinished(const QString &error);
-    // enumerate() finished. `relPaths` are paths relative to the enumerated dir
-    // (prefixed with the leaf). On failure `error` is non-empty and the list empty.
-    void enumerated(const QString &token, const QStringList &relPaths, const QString &error);
     // diskUsage() finished: `bytes` is the total under `name`. Error non-empty on failure.
     void diskUsageReady(const QString &name, qint64 bytes, const QString &error);
     // freeSpace() finished: bytes available and total on the filesystem. Error on failure.
