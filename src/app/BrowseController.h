@@ -5,6 +5,7 @@
 #include <QString>
 #include <QStringList>
 
+#include "app/PathCompleter.h"
 #include "app/RemoteFs.h"
 #include "core/SecretStore.h"
 #include "core/SshHostStore.h"
@@ -74,6 +75,9 @@ public:
     Q_INVOKABLE void setRemotePath(const QString &path);
     Q_INVOKABLE void remoteUp();
     Q_INVOKABLE void remoteRefresh();
+    // Async path completion for the remote pane: lists "<partial>*" on the host and
+    // reports matching paths via remotePathCompleted (bare remote paths, no target:).
+    Q_INVOKABLE void completeRemotePath(const QString &partial);
     Q_INVOKABLE void mkdirRemote(const QString &name);
     Q_INVOKABLE void deleteRemote(const QStringList &names);
     Q_INVOKABLE void renameRemote(const QString &from, const QString &to);
@@ -122,6 +126,8 @@ signals:
     /// A non-error status result (e.g. a computed folder size) for the transient toast.
     void infoOccurred(const QString &message);
     void editorCommandChanged();
+    /// Remote path-completion results (bare remote paths) for the path field.
+    void remotePathCompleted(const QStringList &choices);
     /// The remote host key changed; UI should confirm before removing known_hosts.
     void hostKeyChanged(const QString &host);
     /// A host was saved/updated (so the sidebar's SshHostListModel can reload).
@@ -150,6 +156,7 @@ private:
     SecretStore m_secrets;
     TransferManager *m_transfers = nullptr;
     RemoteFs m_remoteFs;
+    PathCompleter m_completer;  // remote path completion (declared after m_caps)
 
     FileListModel m_local;
     FileListModel m_remote;

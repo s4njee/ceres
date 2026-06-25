@@ -36,6 +36,12 @@ ColumnLayout {
     // External files (Finder) were dropped here; urls is a list of file URLs.
     signal filesDropped(var urls)
 
+    // Path-field autocomplete: the parent fills completionItems in response to
+    // requestCompletion (sync for local, async for remote).
+    property var completionItems: []
+    property int completionIndex: 0
+    signal requestCompletion(string text)
+
     function clearSelection() { selected = [] }
     function isSelected(name) { return selected.indexOf(name) >= 0 }
 
@@ -103,8 +109,86 @@ ColumnLayout {
         text: pane.path
         enabled: pane.enabledActions && !pane.busy
         selectByMouse: true
-        onAccepted: pane.pathSubmitted(text)
-        onActiveFocusChanged: if (!activeFocus) text = pane.path
+        onAccepted: pane.pathSubmitted(text)   // only fires when no completion popup is open
+        onTextEdited: pane.completionItems = []  // typing invalidates stale suggestions
+        onActiveFocusChanged: if (!activeFocus) { pane.completionItems = []; text = pane.path }
+
+        // Tab requests completions; arrows navigate the popup; Enter accepts the
+        // highlighted choice (consuming the event so onAccepted doesn't double-fire).
+        Keys.onPressed: function(event) {
+            var n = pane.completionItems.length
+            if (event.key === Qt.Key_Tab) {
+                pane.requestCompletion(pathField.text)
+                event.accepted = true
+            } else if (n > 0 && event.key === Qt.Key_Down) {
+                pane.completionIndex = (pane.completionIndex + 1) % n
+                event.accepted = true
+            } else if (n > 0 && event.key === Qt.Key_Up) {
+                pane.completionIndex = (pane.completionIndex - 1 + n) % n
+                event.accepted = true
+            } else if (n > 0 && (event.key === Qt.Key_Return || event.key === Qt.Key_Enter)) {
+                pathField.text = pane.completionItems[pane.completionIndex]
+                pane.completionItems = []
+                pane.pathSubmitted(pathField.text)
+                event.accepted = true
+            } else if (n > 0 && event.key === Qt.Key_Escape) {
+                pane.completionItems = []
+                event.accepted = true
+            }
+        }
+
+        // Completion dropdown — a child of the field so it floats without taking layout space.
+        Rectangle {
+            visible: pane.completionItems.length > 0 && pathField.activeFocus
+            anchors.top: parent.bottom
+            anchors.left: parent.left
+            anchors.topMargin: 2
+            width: parent.width
+            height: Math.min(complList.contentHeight + 2, 180)
+            z: 1000
+            color: Theme.bgTertiary
+            radius: Theme.radius
+            border.width: 1
+            border.color: Theme.borderStrong
+
+            ListView {
+                id: complList
+                anchors.fill: parent
+                anchors.margins: 1
+                clip: true
+                model: pane.completionItems
+                ScrollBar.vertical: ScrollBar {}
+                delegate: Rectangle {
+                    required property string modelData
+                    required property int index
+                    width: ListView.view.width
+                    height: 24
+                    color: index === pane.completionIndex ? Theme.bgSecondary : "transparent"
+                    Text {
+                        anchors.fill: parent
+                        anchors.leftMargin: 8
+                        anchors.rightMargin: 8
+                        verticalAlignment: Text.AlignVCenter
+                        text: modelData
+                        color: Theme.textPrimary
+                        font.family: Theme.mono
+                        font.pixelSize: 11
+                        elide: Text.ElideMiddle
+                    }
+                    MouseArea {
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onEntered: pane.completionIndex = index
+                        onClicked: {
+                            pathField.text = modelData
+                            pane.completionItems = []
+                            pane.pathSubmitted(modelData)
+                        }
+                    }
+                }
+            }
+        }
     }
 
     // Breadcrumb: each path segment is clickable to jump straight to that ancestor.

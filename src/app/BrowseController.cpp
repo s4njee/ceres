@@ -110,8 +110,19 @@ BrowseController::BrowseController(RsyncCapabilities caps, SshHostStore hostStor
       m_hostStore(std::move(hostStore)),
       m_secrets(std::move(secrets)),
       m_transfers(transfers),
-      m_remoteFs(m_caps)
+      m_remoteFs(m_caps),
+      m_completer(m_caps)
 {
+    // Re-emit remote completion results as bare remote paths (strip the "target:" prefix).
+    connect(&m_completer, &PathCompleter::remoteCompleted, this,
+            [this](const QString &, const QString &, const QStringList &choices) {
+                const QString prefix = m_target + QLatin1Char(':');
+                QStringList bare;
+                bare.reserve(choices.size());
+                for (const QString &c : choices)
+                    bare << (c.startsWith(prefix) ? c.mid(prefix.size()) : c);
+                emit remotePathCompleted(bare);
+            });
     connect(&m_remoteFs, &RemoteFs::listed, this, &BrowseController::onListed);
     connect(&m_remoteFs, &RemoteFs::authRequired, this,
             [this](const QString &, const QString &host, const QString &user) {
@@ -338,6 +349,18 @@ void BrowseController::remoteUp()
 {
     if (m_connected)
         listRemote(joinRemote(m_remotePath, QStringLiteral("..")));  // pwd -P resolves it
+}
+
+void BrowseController::completeRemotePath(const QString &partial)
+{
+    if (!m_connected)
+        return;
+    // Resolve a relative fragment against the current directory; absolute/~ pass through.
+    const QString full = (partial.startsWith(QLatin1Char('/')) || partial.startsWith(QLatin1Char('~')))
+                             ? partial
+                             : joinRemote(m_remotePath, partial);
+    m_completer.completeRemote(m_target + QLatin1Char(':') + full, m_sshKey, m_sshPort,
+                               /*maxChoices=*/30, m_sshPassword);
 }
 
 void BrowseController::remoteRefresh()

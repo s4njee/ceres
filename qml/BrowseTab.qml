@@ -425,6 +425,11 @@ Item {
                     onUpRequested: browse.localUp()
                     onRefreshRequested: browse.localRefresh()
                     onPathSubmitted: function(path) { browse.setLocalPath(path); clearSelection() }
+                    // Local completion is synchronous against the filesystem.
+                    onRequestCompletion: function(text) {
+                        localPane.completionItems = completer.localChoices(text, 30)
+                        localPane.completionIndex = 0
+                    }
                     onOpenDir: function(name) { browse.localCd(name); clearSelection() }
                     onContextMenuRequested: localMenu.popup()
                     onDragBegan: function(side, names, sx, sy) { tab.dragBeginAt(side, names, sx, sy) }
@@ -453,6 +458,8 @@ Item {
                     onUpRequested: browse.remoteUp()
                     onRefreshRequested: browse.remoteRefresh()
                     onPathSubmitted: function(path) { browse.setRemotePath(path); clearSelection() }
+                    // Remote completion is async (ssh); results arrive via onRemotePathCompleted.
+                    onRequestCompletion: function(text) { browse.completeRemotePath(text) }
                     onOpenDir: function(name) { browse.remoteCd(name); clearSelection() }
                     onContextMenuRequested: remoteMenu.popup()
                     onDragBegan: function(side, names, sx, sy) { tab.dragBeginAt(side, names, sx, sy) }
@@ -592,6 +599,10 @@ Item {
         function onHostKeyChanged(host) { knownHostDialog.show(host) }
         function onErrorOccurred(msg) { tab.message = msg; messageTimer.restart() }
         function onInfoOccurred(msg) { tab.message = msg; messageTimer.restart() }
+        function onRemotePathCompleted(choices) {
+            remotePane.completionItems = choices
+            remotePane.completionIndex = 0
+        }
     }
     Connections {
         target: transfers
