@@ -4,11 +4,13 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QRegularExpression>
 #include <QSettings>
 #include <QUuid>
 
 #include "engine/RsyncProcessEngine.h"
 #include "engine/SyncEngine.h"
+#include "models/FileListModel.h"
 
 namespace {
 const QString kHistoryKey = QStringLiteral("transferHistory");
@@ -18,6 +20,26 @@ QSettings historySettings()
 {
     return QSettings(QSettings::IniFormat, QSettings::UserScope, QStringLiteral("Ceres"),
                      QStringLiteral("Ceres"));
+}
+
+// Turn rsync's "sent N bytes  received M bytes  R bytes/sec" stats line into a compact
+// human-readable summary; falls back to the trimmed original if it doesn't parse.
+QString humanizeStats(const QString &line)
+{
+    static const QRegularExpression re(
+        QStringLiteral("sent\\s+([\\d,]+)\\s+bytes\\s+received\\s+([\\d,]+)\\s+bytes\\s+"
+                       "([\\d,.]+)\\s+bytes/sec"));
+    const QRegularExpressionMatch m = re.match(line);
+    if (!m.hasMatch())
+        return line.trimmed();
+
+    const auto toLong = [](QString s) { return s.remove(QLatin1Char(',')).toLongLong(); };
+    const qint64 sent = toLong(m.captured(1));
+    const qint64 received = toLong(m.captured(2));
+    const qint64 rate = static_cast<qint64>(m.captured(3).remove(QLatin1Char(',')).toDouble());
+    return FileListModel::humanSize(sent) + QStringLiteral(" sent · ")
+            + FileListModel::humanSize(received) + QStringLiteral(" received · ")
+            + FileListModel::humanSize(rate) + QStringLiteral("/s");
 }
 }  // namespace
 
@@ -126,10 +148,11 @@ void TransferManager::pump()
         });
 
         // rsync --stats emits several summary lines; the one with the transfer rate is
-        // the throughput summary worth keeping ("sent … received … bytes/sec").
+        // the throughput summary worth keeping ("sent … received … bytes/sec"). Reformat
+        // its raw byte counts into human-readable units (B/KB/MB/GB).
         connect(e, &SyncEngine::stats, this, [this, id](const QString &line) {
             if (line.contains(QStringLiteral("bytes/sec")))
-                m_model.setSummary(id, line.trimmed());
+                m_model.setSummary(id, humanizeStats(line));
         });
 
         connect(e, &SyncEngine::fileProgress, this,
