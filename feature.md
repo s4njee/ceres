@@ -67,7 +67,7 @@ Legend: `[x]` already in Ceres · `[ ]` not yet · _(italic notes for caveats)_
 - [x] Bandwidth / transfer-rate limit
 - [t] Per-transfer ETA and overall throughput summary
 - [t] Transfer history / log of completed transfers
-- [t] Retry failed transfers
+- [x] Retry failed transfers
 - [t] Verify integrity after transfer (checksum compare)
 
 ## Remote file operations

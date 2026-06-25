@@ -97,6 +97,7 @@ private slots:
     void fileProgressBuildsTree();
     void seedShowsFilesUpfrontAndReconciles();
     void seedDoesNotResetLivePaths();
+    void retryResubmitsFailedTransfer();
 };
 
 // Find a file row (from the FilesRole tree) by its path, or an empty map if absent.
@@ -388,6 +389,32 @@ void TransferManagerTest::seedDoesNotResetLivePaths()
     QCOMPARE(fileByPath(model, 0, QStringLiteral("folder/b.txt"))
                  .value(QStringLiteral("percent")).toInt(), 0);
     QCOMPARE(model->data(model->index(0), TransfersModel::FileCountRole).toInt(), 2);
+}
+
+void TransferManagerTest::retryResubmitsFailedTransfer()
+{
+    FakeEngineFactory factory;
+    TransferManager mgr(std::ref(factory));
+    mgr.setMaxConcurrent(1);
+    TransfersModel *model = mgr.model();
+
+    const QString id = mgr.enqueue(jobN(0), QStringLiteral("up"), QStringLiteral("t0"));
+    factory.created.at(0)->finish(23);  // non-zero exit -> Failed
+    QCOMPARE(countStatus(model, TransfersModel::Failed), 1);
+
+    // Retrying re-runs the same row (a second engine starts) and it goes Active again.
+    mgr.retry(id);
+    QCOMPARE(factory.created.size(), 2);
+    QCOMPARE(countStatus(model, TransfersModel::Active), 1);
+    QCOMPARE(countStatus(model, TransfersModel::Failed), 0);
+
+    // The resubmitted run can complete normally.
+    factory.created.at(1)->finish(0);
+    QCOMPARE(countStatus(model, TransfersModel::Done), 1);
+
+    // A succeeded transfer drops its retained job: retrying it is a no-op.
+    mgr.retry(id);
+    QCOMPARE(factory.created.size(), 2);
 }
 
 QTEST_MAIN(TransferManagerTest)

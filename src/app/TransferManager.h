@@ -72,6 +72,9 @@ public:
     void seedFiles(const QString &id, const QStringList &paths) { m_model.seedFiles(id, paths); }
 
     Q_INVOKABLE void cancel(const QString &id);
+    // Re-run a finished-but-unsuccessful transfer (Failed/Cancelled) under its existing
+    // row. With --partial the rsync resumes from the partial file. No-op otherwise.
+    Q_INVOKABLE void retry(const QString &id);
     // Suspend/resume a transfer. An active transfer is stopped in place (keeps its
     // slot); a queued one is held out of pump() until resumed.
     Q_INVOKABLE void pause(const QString &id);
@@ -98,6 +101,7 @@ private:
     EngineFactory m_factory;
     QList<Pending> m_queue;                 // FIFO; paused entries are skipped by pump()
     QHash<QString, SyncEngine *> m_active;  // id -> running engine (incl. paused ones)
+    QHash<QString, SyncJob> m_jobs;         // id -> job, retained so retry() can resubmit
     QSet<QString> m_paused;                 // ids the user paused (queued or active)
     int m_maxConcurrent = 3;
     int m_rateLimitKBps = 0;

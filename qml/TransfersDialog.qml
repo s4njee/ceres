@@ -161,6 +161,11 @@ Rectangle {
                                 onClicked: transfers.resume(tRow.id)
                             }
                             FlatButton {
+                                label: "↻"    // retry
+                                visible: tRow.status === 3 || tRow.status === 4   // Failed or Cancelled
+                                onClicked: transfers.retry(tRow.id)
+                            }
+                            FlatButton {
                                 label: "✕"
                                 visible: tRow.status === 0 || tRow.status === 1 || tRow.status === 5
                                 onClicked: transfers.cancel(tRow.id)

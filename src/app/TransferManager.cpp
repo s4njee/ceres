@@ -50,6 +50,7 @@ QString TransferManager::enqueue(const SyncJob &job, const QString &direction, c
 {
     const QString id = QUuid::createUuid().toString(QUuid::WithoutBraces);
     m_model.add(id, name, direction, job.source, job.destination);
+    m_jobs.insert(id, job);  // retained so retry() can resubmit a failed/cancelled run
     m_queue.append(Pending{id, job});
     emit enqueued();
     pump();
@@ -102,8 +103,10 @@ void TransferManager::pump()
             // A clean run transferred every file that needed it; any seeded leaf still
             // at 0% was simply already up-to-date on the far side — flag it as such
             // rather than leaving it looking stalled.
-            if (!crashed && code == 0)
+            if (!crashed && code == 0) {
                 m_model.markUntouchedUpToDate(id);
+                m_jobs.remove(id);  // succeeded — nothing to retry
+            }
             m_model.setStatus(id, crashed ? TransfersModel::Cancelled
                                           : (code == 0 ? TransfersModel::Done
                                                        : TransfersModel::Failed));
@@ -146,6 +149,26 @@ void TransferManager::cancel(const QString &id)
             return;
         }
     }
+}
+
+void TransferManager::retry(const QString &id)
+{
+    // Only terminal-but-unsuccessful transfers can be retried: it must not be running,
+    // already queued, or unknown (a succeeded run drops its retained job).
+    if (m_active.contains(id))
+        return;
+    const auto it = m_jobs.constFind(id);
+    if (it == m_jobs.cend())
+        return;
+    for (const Pending &p : m_queue) {
+        if (p.id == id)
+            return;  // already waiting in the queue
+    }
+
+    m_paused.remove(id);
+    m_model.setStatus(id, TransfersModel::Queued);  // also clears the error text
+    m_queue.append(Pending{id, it.value()});
+    pump();
 }
 
 void TransferManager::pause(const QString &id)
