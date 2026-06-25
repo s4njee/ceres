@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- SSH connections now use keepalive (`ServerAliveInterval=15`, `ServerAliveCountMax=3`) on both the rsync transport and the browse plumbing, so long transfers and idle browse sessions survive a NAT timeout and a dead peer is detected in ~45s instead of hanging. Connect timeouts stay explicit (10s transport / 5s browse).
 - Credentials are now redacted from log output: the rsync engine scrubs any session ssh/daemon password from log, stats, and stderr lines before they reach the UI, replacing it with `***`. Defence in depth — secrets already travel via env, not argv.
 - Added a breadcrumb path bar under each pane's path field: every segment is clickable to jump straight to that ancestor directory. Handles POSIX and drive-rooted paths.
 - Symlinks in the browse panes now show their target inline ("link → /path/to/target"). The remote `ls` parser keeps the target it previously discarded, and the local pane reads it via `QFileInfo::symLinkTarget`. Covered by an updated parser test.

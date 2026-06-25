@@ -167,6 +167,8 @@ void ArgvBuilderTest::sshTargetGetsSafeOptions()
     QVERIFY(ssh.contains(QStringLiteral("BatchMode=yes")));
     QVERIFY(ssh.contains(QStringLiteral("StrictHostKeyChecking=accept-new")));
     QVERIFY(ssh.contains(QStringLiteral("ConnectTimeout=10")));
+    QVERIFY(ssh.contains(QStringLiteral("ServerAliveInterval=15")));   // keepalive
+    QVERIFY(ssh.contains(QStringLiteral("ServerAliveCountMax=3")));
     // Never weaken host-key checking.
     QVERIFY(!ssh.contains(QStringLiteral("StrictHostKeyChecking=no")));
 }

@@ -56,7 +56,11 @@ QStringList sshArgsFor(const Endpoint &endpoint, const QString &sshKey, int port
         args << QStringLiteral("-o") << QStringLiteral("BatchMode=yes");
     }
     args << QStringLiteral("-o") << QStringLiteral("StrictHostKeyChecking=accept-new")
-         << QStringLiteral("-o") << QStringLiteral("ConnectTimeout=5");
+         << QStringLiteral("-o") << QStringLiteral("ConnectTimeout=5")
+         // Keepalive so a browse session held open across an idle NAT isn't silently
+         // dropped, and a dead peer is detected (~45s) instead of hanging.
+         << QStringLiteral("-o") << QStringLiteral("ServerAliveInterval=15")
+         << QStringLiteral("-o") << QStringLiteral("ServerAliveCountMax=3");
     if (!sshKey.isEmpty())
         args << QStringLiteral("-i") << ArgvBuilder::toRsyncLocalPath(sshKey, pathStyle);
     if (port > 0)

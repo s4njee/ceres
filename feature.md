@@ -20,7 +20,7 @@ Legend: `[x]` already in Ceres · `[ ]` not yet · _(italic notes for caveats)_
 - [ ] Encrypted-key passphrase prompt (separate from login password)
 - [ ] SSH agent forwarding toggle
 - [ ] Jump host / `ProxyJump` (bastion) support
-- [t] Connection timeout / keepalive configuration
+- [x] Connection timeout / keepalive configuration
 - [t] Reconnect on dropped connection
 - [t] Import hosts from `~/.ssh/config`
 

@@ -165,7 +165,11 @@ QStringList ArgvBuilder::build(const SyncJob &job, const RsyncCapabilities &caps
                 << QStringLiteral("-o") << QStringLiteral("NumberOfPasswordPrompts=1");
         }
         ssh << QStringLiteral("-o") << QStringLiteral("StrictHostKeyChecking=accept-new")
-            << QStringLiteral("-o") << QStringLiteral("ConnectTimeout=10");
+            << QStringLiteral("-o") << QStringLiteral("ConnectTimeout=10")
+            // Keepalive: probe every 15s and give up after 3 missed replies (~45s), so a
+            // long transfer survives an idle NAT and a dead peer is detected promptly.
+            << QStringLiteral("-o") << QStringLiteral("ServerAliveInterval=15")
+            << QStringLiteral("-o") << QStringLiteral("ServerAliveCountMax=3");
         if (!job.sshKeyPath.isEmpty())
             ssh << QStringLiteral("-i") << toRsyncLocalPath(job.sshKeyPath, caps.pathStyle);
         if (job.sshPort > 0)
