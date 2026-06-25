@@ -81,9 +81,9 @@ Legend: `[x]` already in Ceres · `[ ]` not yet · _(italic notes for caveats)_
 - [x] Calculate remote folder size
 
 ## Editing & viewing
-- [t] Quick-view a remote file (text/image preview)
-- [t] Edit a remote file in place (download → edit → re-upload on save)
-- [t] Configurable external editor association
+- [x] Quick-view a remote file (text/image preview)
+- [x] Edit a remote file in place (download → edit → re-upload on save)
+- [x] Configurable external editor association
 
 ## Synchronization
 - [x] Mirror / `--delete` mode with a safety gate

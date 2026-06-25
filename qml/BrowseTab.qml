@@ -459,6 +459,21 @@ Item {
     CtxMenu {
         id: remoteMenu
         CtxItem {
+            text: "Quick view"
+            enabled: remotePane.selected.length === 1
+            onTriggered: browse.quickViewRemote(remotePane.selected[0])
+        }
+        CtxItem {
+            text: "Edit"
+            enabled: remotePane.selected.length === 1
+            onTriggered: browse.editRemote(remotePane.selected[0])
+        }
+        CtxItem {
+            text: "Set editor…"
+            onTriggered: tab.promptInput("Editor command (e.g. code -w)", browse.editorCommand,
+                                         function(v) { browse.editorCommand = v })
+        }
+        CtxItem {
             text: "Calculate size"
             enabled: remotePane.selected.length === 1
             onTriggered: browse.remoteFolderSize(remotePane.selected[0])

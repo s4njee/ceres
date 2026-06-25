@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QHash>
 #include <QObject>
 #include <QString>
 #include <QStringList>
@@ -12,6 +13,7 @@
 #include "models/FileListModel.h"
 
 class TransferManager;
+class QFileSystemWatcher;
 
 /// Backs the dual-pane (local ⇆ remote) browse tab.
 ///
@@ -37,6 +39,7 @@ class BrowseController : public QObject {
     Q_PROPERTY(bool busy READ busy NOTIFY busyChanged)
     Q_PROPERTY(QString remoteFree READ remoteFree NOTIFY remoteFreeChanged)
     Q_PROPERTY(QStringList bookmarks READ bookmarks NOTIFY bookmarksChanged)
+    Q_PROPERTY(QString editorCommand READ editorCommand WRITE setEditorCommand NOTIFY editorCommandChanged)
 public:
     BrowseController(RsyncCapabilities caps, SshHostStore hostStore, SecretStore secrets,
                      TransferManager *transfers, QObject *parent = nullptr);
@@ -76,6 +79,14 @@ public:
     Q_INVOKABLE void renameRemote(const QString &from, const QString &to);
     // Recursively compute the size of a remote folder/file; result arrives via infoOccurred.
     Q_INVOKABLE void remoteFolderSize(const QString &name);
+    // Download a remote file to a temp dir and open it: quickViewRemote with the OS
+    // default app, editRemote with the configured editor (or default) plus a watch that
+    // re-uploads on save.
+    Q_INVOKABLE void quickViewRemote(const QString &name);
+    Q_INVOKABLE void editRemote(const QString &name);
+
+    QString editorCommand() const { return m_editorCommand; }  // empty = OS default opener
+    void setEditorCommand(const QString &cmd);
 
     // Local navigation + ops (operate on the local filesystem; no ssh).
     Q_INVOKABLE void localCd(const QString &name);
@@ -110,6 +121,7 @@ signals:
     void errorOccurred(const QString &message);
     /// A non-error status result (e.g. a computed folder size) for the transient toast.
     void infoOccurred(const QString &message);
+    void editorCommandChanged();
     /// The remote host key changed; UI should confirm before removing known_hosts.
     void hostKeyChanged(const QString &host);
     /// A host was saved/updated (so the sidebar's SshHostListModel can reload).
@@ -122,6 +134,11 @@ private:
     void setBusy(bool busy);
     void setConnected(bool connected);
     void reloadBookmarks();  // refresh m_bookmarks for the current target from QSettings
+    // Download `name` into a temp dir via the transfer queue; on success the pending
+    // entry is opened (and, for edits, watched for re-upload).
+    void fetchForOpen(const QString &name, bool edit);
+    void onOpenFetched(const QString &id, bool success);
+    void onEditedFileChanged(const QString &localPath);
     SyncJob transferJob() const;  // a SyncJob carrying the current ssh credentials
     // Walk a local source off the UI thread and seed transfer `id`'s file tree with
     // the result (delivered back on the GUI thread). `topName` is the rsync-relative
@@ -144,6 +161,12 @@ private:
 
     QString m_remoteFree;   // free/total summary for the connected remote filesystem
     QStringList m_bookmarks;  // favorite paths for the current target (from QSettings)
+
+    QString m_editorCommand;  // external editor command (empty = OS default opener)
+    struct PendingOpen { QString localPath; bool edit = false; QString remoteDir; };
+    QHash<QString, PendingOpen> m_pendingOpens;  // transfer id -> file to open when done
+    QHash<QString, QString> m_editTargets;       // watched localPath -> remote upload dir
+    QFileSystemWatcher *m_editWatcher = nullptr;
 
     QString m_localPath;
     QString m_remotePath;   // resolved absolute remote dir (trailing slash)

@@ -157,6 +157,7 @@ void TransferManager::pump()
             recordHistory(id, crashed ? QStringLiteral("Cancelled")
                                       : (code == 0 ? QStringLiteral("Done")
                                                    : QStringLiteral("Failed")));
+            emit transferFinished(id, !crashed && code == 0);
             m_active.remove(id);
             m_paused.remove(id);
             e->deleteLater();

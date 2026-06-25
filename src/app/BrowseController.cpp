@@ -5,9 +5,12 @@
 #include <QDirIterator>
 #include <QFile>
 #include <QFileInfo>
+#include <QFileSystemWatcher>
 #include <QProcess>
 #include <QSettings>
+#include <QStandardPaths>
 #include <QThreadPool>
+#include <QUuid>
 
 #include "app/TransferManager.h"
 #include "core/SshKnownHosts.h"
@@ -47,6 +50,13 @@ QString joinRemote(const QString &dir, const QString &name)
 QString withTrailingSlash(const QString &p)
 {
     return p.endsWith(QLatin1Char('/')) ? p : p + QLatin1Char('/');
+}
+
+// One settings store (favorites, editor command), independent of app-wide QCoreApplication setup.
+QSettings bookmarkSettings()
+{
+    return QSettings(QSettings::IniFormat, QSettings::UserScope, QStringLiteral("Ceres"),
+                     QStringLiteral("Ceres"));
 }
 
 // Human-readable byte count (e.g. "1.4 GB"), for toast messages.
@@ -144,6 +154,15 @@ BrowseController::BrowseController(RsyncCapabilities caps, SshHostStore hostStor
                 if (error.isEmpty() && m_transfers && !relPaths.isEmpty())
                     m_transfers->seedFiles(token, relPaths);
             });
+
+    // Quick-view / edit: act on the result of a fetch-to-temp transfer.
+    if (m_transfers)
+        connect(m_transfers, &TransferManager::transferFinished, this,
+                &BrowseController::onOpenFetched);
+    m_editWatcher = new QFileSystemWatcher(this);
+    connect(m_editWatcher, &QFileSystemWatcher::fileChanged, this,
+            &BrowseController::onEditedFileChanged);
+    m_editorCommand = bookmarkSettings().value(QStringLiteral("editorCommand")).toString();
 
     m_localPath = QDir::homePath();
     localRefresh();
@@ -431,15 +450,6 @@ void BrowseController::renameLocal(const QString &from, const QString &to)
     localRefresh();
 }
 
-namespace {
-// One settings store for favorites, independent of app-wide QCoreApplication setup.
-QSettings bookmarkSettings()
-{
-    return QSettings(QSettings::IniFormat, QSettings::UserScope, QStringLiteral("Ceres"),
-                     QStringLiteral("Ceres"));
-}
-}  // namespace
-
 void BrowseController::reloadBookmarks()
 {
     QStringList next;
@@ -495,6 +505,111 @@ void BrowseController::remoteFolderSize(const QString &name)
     if (!m_connected || name.isEmpty())
         return;
     m_remoteFs.diskUsage(m_target, m_remotePath, name, m_sshKey, m_sshPort, m_sshPassword);
+}
+
+namespace {
+// Open `path` with the configured editor command (split into program + args), or the
+// OS default opener when no editor is set.
+void openPath(const QString &editorCommand, const QString &path)
+{
+    if (!editorCommand.trimmed().isEmpty()) {
+        QStringList parts = QProcess::splitCommand(editorCommand);
+        if (!parts.isEmpty()) {
+            const QString prog = parts.takeFirst();
+            parts << path;
+            QProcess::startDetached(prog, parts);
+            return;
+        }
+    }
+#if defined(Q_OS_MACOS)
+    QProcess::startDetached(QStringLiteral("open"), {path});
+#elif defined(Q_OS_WIN)
+    QProcess::startDetached(QStringLiteral("cmd"),
+                            {QStringLiteral("/c"), QStringLiteral("start"), QString(),
+                             QDir::toNativeSeparators(path)});
+#else
+    QProcess::startDetached(QStringLiteral("xdg-open"), {path});
+#endif
+}
+}  // namespace
+
+void BrowseController::setEditorCommand(const QString &cmd)
+{
+    if (cmd == m_editorCommand)
+        return;
+    m_editorCommand = cmd;
+    bookmarkSettings().setValue(QStringLiteral("editorCommand"), cmd);
+    emit editorCommandChanged();
+}
+
+void BrowseController::quickViewRemote(const QString &name)
+{
+    fetchForOpen(name, /*edit=*/false);
+}
+
+void BrowseController::editRemote(const QString &name)
+{
+    fetchForOpen(name, /*edit=*/true);
+}
+
+void BrowseController::fetchForOpen(const QString &name, bool edit)
+{
+    if (!m_connected || !m_transfers || name.isEmpty())
+        return;
+    // Unique temp dir per open so concurrent views of same-named files don't collide.
+    const QString dir = QDir(QStandardPaths::writableLocation(QStandardPaths::TempLocation))
+                            .filePath(QStringLiteral("ceres-open-")
+                                      + QUuid::createUuid().toString(QUuid::WithoutBraces));
+    QDir().mkpath(dir);
+
+    SyncJob job = transferJob();
+    job.source = m_target + QLatin1Char(':') + joinRemote(m_remotePath, name);
+    job.destination = withTrailingSlash(dir);
+    const QString id = m_transfers->enqueue(job, QStringLiteral("down"), name);
+    m_pendingOpens.insert(id, PendingOpen{QDir(dir).filePath(name), edit,
+                                          m_target + QLatin1Char(':')
+                                              + withTrailingSlash(m_remotePath)});
+}
+
+void BrowseController::onOpenFetched(const QString &id, bool success)
+{
+    const auto it = m_pendingOpens.constFind(id);
+    if (it == m_pendingOpens.cend())
+        return;  // not one of ours
+    const PendingOpen pending = it.value();
+    m_pendingOpens.erase(it);
+
+    if (!success || !QFileInfo::exists(pending.localPath)) {
+        if (success)  // transfer "succeeded" but the file isn't there (e.g. a dir)
+            emit errorOccurred(QStringLiteral("Could not open the downloaded file"));
+        return;
+    }
+
+    if (pending.edit) {
+        // Watch the temp copy; a save re-uploads it to the original remote directory.
+        m_editTargets.insert(pending.localPath, pending.remoteDir);
+        m_editWatcher->addPath(pending.localPath);
+    }
+    openPath(pending.edit ? m_editorCommand : QString(), pending.localPath);
+}
+
+void BrowseController::onEditedFileChanged(const QString &localPath)
+{
+    const auto it = m_editTargets.constFind(localPath);
+    if (it == m_editTargets.cend() || !m_transfers)
+        return;
+    if (!QFileInfo::exists(localPath))
+        return;  // a transient delete during the editor's save-replace; wait for re-add
+
+    // Many editors save by replacing the file, which drops the watch — re-arm it.
+    if (!m_editWatcher->files().contains(localPath))
+        m_editWatcher->addPath(localPath);
+
+    SyncJob job = transferJob();
+    job.source = localPath;
+    job.destination = it.value();  // "target:/remote/dir/"
+    m_transfers->enqueue(job, QStringLiteral("up"), QFileInfo(localPath).fileName());
+    emit infoOccurred(QFileInfo(localPath).fileName() + QStringLiteral(" — uploading changes"));
 }
 
 void BrowseController::revealLocal(const QString &name)

@@ -112,6 +112,9 @@ signals:
     // `failed` is how many of the just-drained batch ended in failure/cancellation.
     void allTransfersComplete(int failed);
     void historyChanged();
+    // A single transfer reached a terminal state. Lets a caller act on the result of a
+    // specific enqueue() (e.g. open a just-downloaded file).
+    void transferFinished(const QString &id, bool success);
 
 private:
     // Start queued transfers up to maxConcurrent. Re-entrant: called on every
