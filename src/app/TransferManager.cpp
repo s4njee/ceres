@@ -46,6 +46,14 @@ void TransferManager::setRateLimitKBps(int n)
     emit rateLimitChanged();
 }
 
+void TransferManager::setVerifyChecksums(bool on)
+{
+    if (on == m_verifyChecksums)
+        return;
+    m_verifyChecksums = on;
+    emit verifyChanged();
+}
+
 QString TransferManager::enqueue(const SyncJob &job, const QString &direction, const QString &name)
 {
     const QString id = QUuid::createUuid().toString(QUuid::WithoutBraces);
@@ -74,7 +82,8 @@ void TransferManager::pump()
         const Pending pending = m_queue.takeAt(idx);
         const QString id = pending.id;
         SyncJob job = pending.job;
-        job.bwLimitKBps = m_rateLimitKBps;  // apply the current rate cap at start time
+        job.bwLimitKBps = m_rateLimitKBps;     // apply the current rate cap at start time
+        job.checksum = job.checksum || m_verifyChecksums;  // -c content verification
 
         SyncEngine *e = m_factory();
         e->setParent(this);

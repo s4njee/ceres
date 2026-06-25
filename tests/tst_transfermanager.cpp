@@ -99,6 +99,7 @@ private slots:
     void seedDoesNotResetLivePaths();
     void retryResubmitsFailedTransfer();
     void allCompleteFiresWhenQueueDrains();
+    void verifyStampsChecksumOnJob();
 };
 
 // Find a file row (from the FilesRole tree) by its path, or an empty map if absent.
@@ -436,6 +437,21 @@ void TransferManagerTest::allCompleteFiresWhenQueueDrains()
     factory.created.at(1)->finish(23);
     QCOMPARE(spy.count(), 1);
     QCOMPARE(spy.at(0).at(0).toInt(), 1);
+}
+
+void TransferManagerTest::verifyStampsChecksumOnJob()
+{
+    FakeEngineFactory factory;
+    TransferManager mgr(std::ref(factory));
+
+    // Off by default: the job runs without -c.
+    mgr.enqueue(jobN(0), QStringLiteral("up"), QStringLiteral("t0"));
+    QVERIFY(!factory.created.at(0)->lastJob.checksum);
+
+    // With verify on, the next started transfer carries checksum=true.
+    mgr.setVerifyChecksums(true);
+    mgr.enqueue(jobN(1), QStringLiteral("up"), QStringLiteral("t1"));
+    QVERIFY(factory.created.at(1)->lastJob.checksum);
 }
 
 QTEST_MAIN(TransferManagerTest)

@@ -68,7 +68,7 @@ Legend: `[x]` already in Ceres · `[ ]` not yet · _(italic notes for caveats)_
 - [t] Per-transfer ETA and overall throughput summary
 - [t] Transfer history / log of completed transfers
 - [x] Retry failed transfers
-- [t] Verify integrity after transfer (checksum compare)
+- [x] Verify integrity after transfer (checksum compare)
 
 ## Remote file operations
 - [x] Create folder

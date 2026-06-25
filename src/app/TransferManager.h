@@ -37,6 +37,7 @@ class TransferManager : public QObject {
     Q_PROPERTY(TransfersModel *model READ model CONSTANT)
     Q_PROPERTY(int maxConcurrent READ maxConcurrent WRITE setMaxConcurrent NOTIFY maxConcurrentChanged)
     Q_PROPERTY(int rateLimitKBps READ rateLimitKBps WRITE setRateLimitKBps NOTIFY rateLimitChanged)
+    Q_PROPERTY(bool verifyChecksums READ verifyChecksums WRITE setVerifyChecksums NOTIFY verifyChanged)
     Q_PROPERTY(int activeCount READ activeCount NOTIFY activeCountChanged)
 public:
     using EngineFactory = std::function<SyncEngine *()>;
@@ -57,6 +58,11 @@ public:
     // transfers, not ones already running.
     int rateLimitKBps() const { return m_rateLimitKBps; }
     void setRateLimitKBps(int n);
+
+    // When on, transfers compare by content checksum (rsync -c) so files are verified
+    // by hash rather than size+mtime. Stamped onto each job as it starts.
+    bool verifyChecksums() const { return m_verifyChecksums; }
+    void setVerifyChecksums(bool on);
 
     int activeCount() const { return m_active.size(); }
 
@@ -84,6 +90,7 @@ public:
 signals:
     void maxConcurrentChanged();
     void rateLimitChanged();
+    void verifyChanged();
     void activeCountChanged();
     void enqueued();  // emitted by enqueue() so the UI can auto-open the transfers modal
     // The last in-flight transfer finished and nothing is queued: the batch is done.
@@ -108,6 +115,7 @@ private:
     QSet<QString> m_paused;                 // ids the user paused (queued or active)
     int m_maxConcurrent = 3;
     int m_rateLimitKBps = 0;
+    bool m_verifyChecksums = false;
     int m_batchFailures = 0;  // failed/cancelled runs since the queue was last empty
 
     // Emit allTransfersComplete() when a finish leaves nothing active or queued.
