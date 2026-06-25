@@ -65,6 +65,10 @@ QVariant TransfersModel::data(const QModelIndex &index, int role) const
         return r.percent;
     case SpeedRole:
         return r.speed;
+    case EtaRole:
+        return r.eta;
+    case SummaryRole:
+        return r.summary;
     case ErrorRole:
         return r.error;
     case FileCountRole:
@@ -100,6 +104,8 @@ QHash<int, QByteArray> TransfersModel::roleNames() const
         {StatusTextRole, "statusText"},
         {PercentRole, "percent"},
         {SpeedRole, "speed"},
+        {EtaRole, "eta"},
+        {SummaryRole, "summary"},
         {ErrorRole, "error"},
         {FilesRole, "files"},
         {FileCountRole, "fileCount"},
@@ -151,7 +157,8 @@ void TransfersModel::setStatus(const QString &id, Status status, const QString &
     emit activeCountChanged();
 }
 
-void TransfersModel::updateProgress(const QString &id, int percent, const QString &speed)
+void TransfersModel::updateProgress(const QString &id, int percent, const QString &speed,
+                                    const QString &eta)
 {
     const int idx = indexOfId(id);
     if (idx < 0)
@@ -160,8 +167,22 @@ void TransfersModel::updateProgress(const QString &id, int percent, const QStrin
     Row &r = m_rows[idx];
     r.percent = percent;
     r.speed = speed;
+    r.eta = eta;
     const QModelIndex mi = index(idx);
     emit dataChanged(mi, mi);
+}
+
+void TransfersModel::setSummary(const QString &id, const QString &summary)
+{
+    const int idx = indexOfId(id);
+    if (idx < 0 || summary.isEmpty())
+        return;
+    Row &r = m_rows[idx];
+    if (r.summary == summary)
+        return;
+    r.summary = summary;
+    const QModelIndex mi = index(idx);
+    emit dataChanged(mi, mi, {SummaryRole});
 }
 
 void TransfersModel::updateFileProgress(const QString &id, const QString &path, int percent,

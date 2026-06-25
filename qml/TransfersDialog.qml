@@ -124,6 +124,8 @@ Rectangle {
                         required property int status
                         required property int percent
                         required property string speed
+                        required property string eta
+                        required property string summary
                         required property string statusText
                         required property string error
                         required property var files
@@ -175,13 +177,19 @@ Rectangle {
                                 font.pixelSize: 10
                             }
                             Text {
-                                text: tRow.error.length > 0 ? tRow.error
-                                      : (tRow.speed.length > 0 ? tRow.speed : tRow.statusText)
+                                // Error > done-summary > live speed+ETA > status text.
+                                text: {
+                                    if (tRow.error.length > 0) return tRow.error
+                                    if (tRow.status === 2 && tRow.summary.length > 0) return tRow.summary
+                                    if (tRow.status === 1 && tRow.speed.length > 0)
+                                        return tRow.speed + (tRow.eta.length > 0 ? " · ETA " + tRow.eta : "")
+                                    return tRow.statusText
+                                }
                                 color: tRow.status === 3 ? Theme.danger
                                                          : (tRow.status === 2 ? Theme.ok : Theme.textTertiary)
                                 font.pixelSize: 11
                                 elide: Text.ElideRight
-                                Layout.maximumWidth: 150
+                                Layout.maximumWidth: 200
                             }
                             FlatButton {
                                 label: "❚❚"   // pause

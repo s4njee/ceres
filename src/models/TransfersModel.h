@@ -38,6 +38,8 @@ public:
         StatusTextRole,
         PercentRole,
         SpeedRole,
+        EtaRole,        // live time-remaining string (e.g. "0:01:23"), empty when idle/done
+        SummaryRole,    // throughput summary from rsync --stats, shown on completion
         ErrorRole,
         FilesRole,      // QVariantList tree rows: { name, path, depth, isDir, percent, rate }
         FileCountRole,  // number of file rows recorded so far
@@ -53,7 +55,9 @@ public:
     void add(const QString &id, const QString &name, const QString &direction,
              const QString &source, const QString &destination);
     void setStatus(const QString &id, Status status, const QString &error = {});
-    void updateProgress(const QString &id, int percent, const QString &speed);
+    void updateProgress(const QString &id, int percent, const QString &speed, const QString &eta = {});
+    // Records the rsync --stats throughput line for a transfer, shown when it finishes.
+    void setSummary(const QString &id, const QString &summary);
     // Records/updates one transferred path. Parent folder rows are synthesized so
     // the UI can render a tree without a costly pre-transfer enumeration pass.
     void updateFileProgress(const QString &id, const QString &path, int percent,
@@ -88,7 +92,7 @@ private:
         bool upToDate = false;  // seeded but never transferred (already current / skipped)
     };
     struct Row {
-        QString id, name, direction, source, destination, speed, error;
+        QString id, name, direction, source, destination, speed, eta, summary, error;
         Status status = Queued;
         int percent = 0;
         QList<FileLine> files;

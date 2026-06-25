@@ -106,7 +106,14 @@ void TransferManager::pump()
         });
 
         connect(e, &SyncEngine::progress, this, [this, id](const ProgressInfo &info) {
-            m_model.updateProgress(id, info.percent, info.rate);
+            m_model.updateProgress(id, info.percent, info.rate, info.eta);
+        });
+
+        // rsync --stats emits several summary lines; the one with the transfer rate is
+        // the throughput summary worth keeping ("sent … received … bytes/sec").
+        connect(e, &SyncEngine::stats, this, [this, id](const QString &line) {
+            if (line.contains(QStringLiteral("bytes/sec")))
+                m_model.setSummary(id, line.trimmed());
         });
 
         connect(e, &SyncEngine::fileProgress, this,

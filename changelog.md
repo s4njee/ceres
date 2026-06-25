@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Transfers now show a live ETA and a final throughput summary: each row displays "speed · ETA h:mm:ss" while running and the rsync `--stats` line ("sent … received … bytes/sec") on completion. Surfaced via new `eta`/`summary` model roles fed from the parser's existing ETA field and stats output.
 - Added an overwrite policy to the transfers dialog: "On conflict" chooses overwrite (default), skip existing (`--ignore-existing`), or newer only (`--update`). `TransferManager` stamps the choice onto each job; `ArgvBuilder` emits the flags. Covered by a builder test.
 - Added bookmarks for favorite remote paths: a bookmarks bar in the browse tab lets you save the current remote folder and jump back to it with a click (✕ to remove). Favorites are stored per host via QSettings and load on connect. The `Chip` component gained optional removable support.
 - Added a "verify" toggle to the transfers dialog: when on, transfers compare by content checksum (rsync `-c`) rather than size+mtime, so files are verified by hash. `TransferManager` stamps it onto each job as it starts. Covered by a manager test.
