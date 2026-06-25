@@ -77,7 +77,7 @@ Legend: `[x]` already in Ceres · `[ ]` not yet · _(italic notes for caveats)_
 - [ ] Move / copy within the remote host
 - [ ] Duplicate
 - [ ] Multi-select batch operations
-- [t] Free-space / disk-usage display for the remote
+- [x] Free-space / disk-usage display for the remote
 - [x] Calculate remote folder size
 
 ## Editing & viewing

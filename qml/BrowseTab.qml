@@ -348,6 +348,7 @@ Item {
                     Layout.fillHeight: true
                     Layout.preferredWidth: 1   // equal share with the local pane
                     title: browse.connected ? "REMOTE · " + browse.target : "REMOTE"
+                    info: browse.remoteFree
                     fileModel: browse.remoteFiles
                     path: browse.remotePath
                     busy: browse.busy

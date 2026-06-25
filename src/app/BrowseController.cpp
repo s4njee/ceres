@@ -117,6 +117,17 @@ BrowseController::BrowseController(RsyncCapabilities caps, SshHostStore hostStor
             emit errorOccurred(error);
         remoteRefresh();  // reflect the mkdir/delete/rename either way
     });
+    connect(&m_remoteFs, &RemoteFs::freeSpaceReady, this,
+            [this](qint64 avail, qint64 total, const QString &error) {
+                // Best-effort: a df failure just leaves the indicator blank.
+                const QString text = error.isEmpty() && total > 0
+                        ? formatBytes(avail) + QStringLiteral(" free of ") + formatBytes(total)
+                        : QString();
+                if (text != m_remoteFree) {
+                    m_remoteFree = text;
+                    emit remoteFreeChanged();
+                }
+            });
     connect(&m_remoteFs, &RemoteFs::diskUsageReady, this,
             [this](const QString &name, qint64 bytes, const QString &error) {
                 if (!error.isEmpty())
@@ -208,6 +219,10 @@ void BrowseController::disconnectHost()
     m_remotePath.clear();
     m_pendingRemotePath.clear();
     m_remote.clear();
+    if (!m_remoteFree.isEmpty()) {
+        m_remoteFree.clear();
+        emit remoteFreeChanged();
+    }
     setConnected(false);
     emit targetChanged();
     emit remotePathChanged();
@@ -237,6 +252,8 @@ void BrowseController::onListed(const QString & /*target*/, const QString &path,
         emit remotePathChanged();
     }
     setConnected(true);
+    // Refresh the free-space indicator for the now-current directory (cheap df pass).
+    m_remoteFs.freeSpace(m_target, m_remotePath, m_sshKey, m_sshPort, m_sshPassword);
 }
 
 void BrowseController::remoteCd(const QString &name)

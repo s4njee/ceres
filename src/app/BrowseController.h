@@ -35,6 +35,7 @@ class BrowseController : public QObject {
     Q_PROPERTY(QString target READ target NOTIFY targetChanged)
     Q_PROPERTY(bool connected READ connected NOTIFY connectedChanged)
     Q_PROPERTY(bool busy READ busy NOTIFY busyChanged)
+    Q_PROPERTY(QString remoteFree READ remoteFree NOTIFY remoteFreeChanged)
 public:
     BrowseController(RsyncCapabilities caps, SshHostStore hostStore, SecretStore secrets,
                      TransferManager *transfers, QObject *parent = nullptr);
@@ -46,6 +47,7 @@ public:
     QString target() const { return m_target; }
     bool connected() const { return m_connected; }
     bool busy() const { return m_busy; }
+    QString remoteFree() const { return m_remoteFree; }  // "X free of Y" for the remote header
 
     // Connect to a saved or typed SSH target ("user@host" / "host"): resolves the
     // saved key/port/keychain password (if any), then lists the home directory.
@@ -91,6 +93,7 @@ signals:
     void targetChanged();
     void connectedChanged();
     void busyChanged();
+    void remoteFreeChanged();
     /// Key auth failed; the UI should prompt for a password (prefilled with `user`)
     /// and call connectWithPassword(). `host` is shown for context.
     void authRequired(const QString &host, const QString &user);
@@ -128,6 +131,8 @@ private:
     QString m_sshKey;       // resolved key path (may be empty)
     int m_sshPort = 0;
     QString m_sshPassword;  // session password (empty = key/agent auth)
+
+    QString m_remoteFree;   // free/total summary for the connected remote filesystem
 
     QString m_localPath;
     QString m_remotePath;   // resolved absolute remote dir (trailing slash)

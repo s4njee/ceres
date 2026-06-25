@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Added a remote free-space indicator: the remote pane header shows "X free of Y" for the current directory's filesystem, refreshed on each listing via `df -Pk` over SSH and cleared on disconnect.
 - Added "Calculate size" to the remote pane's context menu: recursively sizes the selected folder/file over SSH (`du -sk`) and reports the human-readable total in the transient toast. Adds a stdout-capturing query runner and an `infoOccurred` status signal.
 - Added a "Reveal in file manager" action to the local pane's context menu: opens the selected item in Finder (`open -R`) / Explorer (`/select`) / the freedesktop opener (`xdg-open`). Implemented with `QProcess` so `ceres_core` stays GUI-free.
 - Added a transfer-rate limit: a compact `limit … KB/s` field in the transfers dialog caps the rsync transfer rate (`--bwlimit`) for newly started transfers; blank/0 is unlimited. `TransferManager` stamps the cap onto each job as it starts.

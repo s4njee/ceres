@@ -10,6 +10,7 @@ ColumnLayout {
     id: pane
 
     property string title
+    property string info: ""   // optional right-aligned header note (e.g. free space)
     property var fileModel
     property string path
     property bool busy: false
@@ -58,6 +59,14 @@ ColumnLayout {
         spacing: 6
         Text { text: pane.title; color: Theme.textTertiary; font.pixelSize: 11; font.letterSpacing: 1 }
         Item { Layout.fillWidth: true }
+        Text {
+            visible: pane.info.length > 0
+            text: pane.info
+            color: Theme.textTertiary
+            font.pixelSize: 11
+            elide: Text.ElideLeft
+            Layout.maximumWidth: 180
+        }
         FlatButton { label: "Up"; active: pane.enabledActions && !pane.busy; onClicked: pane.upRequested() }
         FlatButton { label: "Refresh"; active: pane.enabledActions && !pane.busy; onClicked: pane.refreshRequested() }
     }
