@@ -58,6 +58,15 @@ public:
     // the UI can render a tree without a costly pre-transfer enumeration pass.
     void updateFileProgress(const QString &id, const QString &path, int percent,
                             const QString &rate);
+    // Seeds the file tree with the full set of relative paths the transfer will
+    // touch, each at 0%, so the user sees the whole list immediately rather than
+    // one row appearing per file as rsync reaches it. Paths already present (a live
+    // update can outrun the walk) are left untouched, never reset.
+    void seedFiles(const QString &id, const QStringList &paths);
+    // Called when a transfer finishes cleanly: any seeded leaf rsync never reported
+    // (already up-to-date / skipped) is flagged so the UI distinguishes "skipped"
+    // from "failed" instead of leaving it stuck at 0%.
+    void markUntouchedUpToDate(const QString &id);
 
     // Removes Done/Failed/Cancelled rows; leaves Queued/Active untouched.
     Q_INVOKABLE void clearCompleted();
@@ -76,6 +85,7 @@ private:
         bool isDir = false;
         int percent = 0;
         QString rate;
+        bool upToDate = false;  // seeded but never transferred (already current / skipped)
     };
     struct Row {
         QString id, name, direction, source, destination, speed, error;

@@ -95,7 +95,21 @@ private slots:
     void enqueuedSignalFiresPerEnqueue();
     void pauseAndResume();
     void fileProgressBuildsTree();
+    void seedShowsFilesUpfrontAndReconciles();
+    void seedDoesNotResetLivePaths();
 };
+
+// Find a file row (from the FilesRole tree) by its path, or an empty map if absent.
+static QVariantMap fileByPath(TransfersModel *m, int row, const QString &path)
+{
+    const QVariantList files = m->data(m->index(row), TransfersModel::FilesRole).toList();
+    for (const QVariant &v : files) {
+        const QVariantMap map = v.toMap();
+        if (map.value(QStringLiteral("path")).toString() == path)
+            return map;
+    }
+    return {};
+}
 
 static SyncJob jobN(int n)
 {
@@ -306,6 +320,74 @@ void TransferManagerTest::fileProgressBuildsTree()
     QCOMPARE(asMap(files.at(3)).value(QStringLiteral("isDir")).toBool(), false);
     QCOMPARE(asMap(files.at(3)).value(QStringLiteral("depth")).toInt(), 1);
     QCOMPARE(asMap(files.at(3)).value(QStringLiteral("percent")).toInt(), 100);
+}
+
+void TransferManagerTest::seedShowsFilesUpfrontAndReconciles()
+{
+    FakeEngineFactory factory;
+    TransferManager mgr(std::ref(factory));
+    mgr.setMaxConcurrent(1);
+    TransfersModel *model = mgr.model();
+
+    const QString id = mgr.enqueue(jobN(1), QStringLiteral("up"), QStringLiteral("folder"));
+
+    // Seed the full list a source-side walk would produce: the whole tree at 0%,
+    // before any byte moves.
+    mgr.seedFiles(id, {QStringLiteral("folder/a.txt"), QStringLiteral("folder/sub/b.txt"),
+                       QStringLiteral("folder/sub/c.txt")});
+
+    // All three leaves are present immediately, each at 0%, plus synthesized folders.
+    QCOMPARE(model->data(model->index(0), TransfersModel::FileCountRole).toInt(), 3);
+    QCOMPARE(fileByPath(model, 0, QStringLiteral("folder/a.txt"))
+                 .value(QStringLiteral("percent")).toInt(), 0);
+    QVERIFY(!fileByPath(model, 0, QStringLiteral("folder/sub/")).isEmpty());  // folder row exists
+
+    // The real run transfers two of the three; c.txt is already current, so rsync
+    // never reports it.
+    factory.created.at(0)->sendFileProgress(QStringLiteral("folder/a.txt"), 100,
+                                            QStringLiteral("9.00kB/s"));
+    factory.created.at(0)->sendFileProgress(QStringLiteral("folder/sub/b.txt"), 60,
+                                            QStringLiteral("3.00kB/s"));
+    QCOMPARE(fileByPath(model, 0, QStringLiteral("folder/sub/b.txt"))
+                 .value(QStringLiteral("percent")).toInt(), 60);
+
+    // No new rows were created by the live updates — they landed on the seeded rows.
+    QCOMPARE(model->data(model->index(0), TransfersModel::FileCountRole).toInt(), 3);
+
+    // A clean finish reconciles the untouched leaf to "up to date" rather than
+    // leaving it stuck at 0%.
+    factory.created.at(0)->finish(0);
+    const QVariantMap c = fileByPath(model, 0, QStringLiteral("folder/sub/c.txt"));
+    QCOMPARE(c.value(QStringLiteral("upToDate")).toBool(), true);
+    QCOMPARE(c.value(QStringLiteral("percent")).toInt(), 100);
+
+    // A transferred leaf is not flagged up-to-date.
+    QCOMPARE(fileByPath(model, 0, QStringLiteral("folder/a.txt"))
+                 .value(QStringLiteral("upToDate")).toBool(), false);
+}
+
+void TransferManagerTest::seedDoesNotResetLivePaths()
+{
+    FakeEngineFactory factory;
+    TransferManager mgr(std::ref(factory));
+    mgr.setMaxConcurrent(1);
+    TransfersModel *model = mgr.model();
+
+    const QString id = mgr.enqueue(jobN(1), QStringLiteral("up"), QStringLiteral("folder"));
+
+    // The transfer outruns the walk: a live update creates a row at 50% first.
+    factory.created.at(0)->sendFileProgress(QStringLiteral("folder/a.txt"), 50,
+                                            QStringLiteral("5.00kB/s"));
+    QCOMPARE(fileByPath(model, 0, QStringLiteral("folder/a.txt"))
+                 .value(QStringLiteral("percent")).toInt(), 50);
+
+    // Seeding arrives late and includes that same path — it must not reset it to 0%.
+    mgr.seedFiles(id, {QStringLiteral("folder/a.txt"), QStringLiteral("folder/b.txt")});
+    QCOMPARE(fileByPath(model, 0, QStringLiteral("folder/a.txt"))
+                 .value(QStringLiteral("percent")).toInt(), 50);
+    QCOMPARE(fileByPath(model, 0, QStringLiteral("folder/b.txt"))
+                 .value(QStringLiteral("percent")).toInt(), 0);
+    QCOMPARE(model->data(model->index(0), TransfersModel::FileCountRole).toInt(), 2);
 }
 
 QTEST_MAIN(TransferManagerTest)

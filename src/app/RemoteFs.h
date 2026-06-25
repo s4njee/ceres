@@ -34,6 +34,16 @@ public:
     void rename(const QString &target, const QString &dir, const QString &from, const QString &to,
                 const QString &sshKey, int port, const QString &password);
 
+    // Recursively list every non-directory entry under `dir`/`leaf` and report them
+    // as paths relative to `dir` (i.e. prefixed with `leaf`), matching the form rsync
+    // itemizes when copying `leaf` into a destination. Used to seed a transfer's file
+    // tree up-front. `token` is echoed back on `enumerated` so the caller can route
+    // the result to the right transfer. Failures (auth, unreachable) report a
+    // non-empty error and an empty list — enumeration is best-effort and never
+    // prompts; the transfer falls back to filling rows in as it goes.
+    void enumerate(const QString &token, const QString &target, const QString &dir,
+                   const QString &leaf, const QString &sshKey, int port, const QString &password);
+
     // Pure, unit-testable: parse the body of `ls -lA` output into entries.
     static QList<FileEntry> parseLsList(const QString &lsOutput);
 
@@ -44,6 +54,9 @@ signals:
                 const QString &error);
     // mkdir/remove/rename finished. `error` empty on success.
     void opFinished(const QString &error);
+    // enumerate() finished. `relPaths` are paths relative to the enumerated dir
+    // (prefixed with the leaf). On failure `error` is non-empty and the list empty.
+    void enumerated(const QString &token, const QStringList &relPaths, const QString &error);
     // A command failed public-key auth; UI should prompt for a password and retry.
     void authRequired(const QString &target, const QString &host, const QString &user);
     // SSH found a changed known_hosts entry; UI should ask before removing it.

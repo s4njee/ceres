@@ -104,6 +104,10 @@ private:
     void setBusy(bool busy);
     void setConnected(bool connected);
     SyncJob transferJob() const;  // a SyncJob carrying the current ssh credentials
+    // Walk a local source off the UI thread and seed transfer `id`'s file tree with
+    // the result (delivered back on the GUI thread). `topName` is the rsync-relative
+    // prefix (the item's own name). For remote sources the walk is RemoteFs::enumerate.
+    void seedFromLocalWalk(const QString &id, const QString &absPath, const QString &topName);
 
     RsyncCapabilities m_caps;
     SshHostStore m_hostStore;

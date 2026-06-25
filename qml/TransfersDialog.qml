@@ -213,12 +213,13 @@ Rectangle {
                                             width: parent.width * Math.max(0, Math.min(100, modelData.percent)) / 100
                                             height: parent.height
                                             radius: 1.5
-                                            color: modelData.percent >= 100 ? Theme.ok : Theme.accent
+                                            // Muted bar for files rsync skipped (already current); ok-green for real transfers.
+                                            color: modelData.upToDate ? Theme.textTertiary : (modelData.percent >= 100 ? Theme.ok : Theme.accent)
                                         }
                                     }
                                     Text {
                                         visible: !modelData.isDir
-                                        text: modelData.percent + "%"
+                                        text: modelData.upToDate ? "" : modelData.percent + "%"
                                         color: Theme.textTertiary
                                         font.pixelSize: 10
                                         Layout.preferredWidth: 32
@@ -226,7 +227,7 @@ Rectangle {
                                     }
                                     Text {
                                         visible: !modelData.isDir
-                                        text: modelData.rate
+                                        text: modelData.upToDate ? "up to date" : modelData.rate
                                         color: Theme.textTertiary
                                         font.pixelSize: 10
                                         Layout.preferredWidth: 70

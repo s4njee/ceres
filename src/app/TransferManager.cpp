@@ -88,6 +88,11 @@ void TransferManager::pump()
         // zero exit is Done and anything else is Failed. Remove from the active
         // map *before* deleteLater and never touch `e` afterwards.
         connect(e, &SyncEngine::finished, this, [this, id, e](int code, bool crashed) {
+            // A clean run transferred every file that needed it; any seeded leaf still
+            // at 0% was simply already up-to-date on the far side — flag it as such
+            // rather than leaving it looking stalled.
+            if (!crashed && code == 0)
+                m_model.markUntouchedUpToDate(id);
             m_model.setStatus(id, crashed ? TransfersModel::Cancelled
                                           : (code == 0 ? TransfersModel::Done
                                                        : TransfersModel::Failed));

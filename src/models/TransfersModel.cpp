@@ -1,5 +1,7 @@
 #include "models/TransfersModel.h"
 
+#include <QSet>
+#include <QStringList>
 #include <QVariantList>
 #include <QVariantMap>
 
@@ -76,7 +78,8 @@ QVariant TransfersModel::data(const QModelIndex &index, int role) const
                                     {QStringLiteral("depth"), f.depth},
                                     {QStringLiteral("isDir"), f.isDir},
                                     {QStringLiteral("percent"), f.percent},
-                                    {QStringLiteral("rate"), f.rate}});
+                                    {QStringLiteral("rate"), f.rate},
+                                    {QStringLiteral("upToDate"), f.upToDate}});
         }
         return list;
     }
@@ -207,6 +210,80 @@ void TransfersModel::updateFileProgress(const QString &id, const QString &path, 
     const QModelIndex mi = index(idx);
     emit dataChanged(mi, mi, fileCount(r) == oldFileCount ? QList<int>{FilesRole}
                                                           : QList<int>{FilesRole, FileCountRole});
+}
+
+void TransfersModel::seedFiles(const QString &id, const QStringList &paths)
+{
+    const int idx = indexOfId(id);
+    if (idx < 0 || paths.isEmpty())
+        return;
+
+    Row &r = m_rows[idx];
+    const int oldFileCount = fileCount(r);
+
+    // Index existing paths so a live update that already created a row (the real
+    // transfer can outrun the walk) is neither duplicated nor reset to 0%.
+    QSet<QString> seen;
+    seen.reserve(r.files.size() + paths.size());
+    for (const FileLine &f : r.files)
+        seen.insert(f.path);
+
+    // Sort so ancestors precede their children and the tree renders in a stable order.
+    QStringList sorted = paths;
+    sorted.sort();
+
+    for (const QString &raw : sorted) {
+        const QString cleanPath = cleanTreePath(raw);
+        if (cleanPath.isEmpty())
+            continue;
+        const QStringList parts = cleanPath.split(QLatin1Char('/'), Qt::SkipEmptyParts);
+        if (parts.isEmpty())
+            continue;
+
+        QString prefix;
+        for (int i = 0; i < parts.size() - 1; ++i) {
+            if (!prefix.isEmpty())
+                prefix += QLatin1Char('/');
+            prefix += parts.at(i);
+            const QString folderPath = prefix + QLatin1Char('/');
+            if (!seen.contains(folderPath)) {
+                seen.insert(folderPath);
+                r.files.append(FileLine{parts.at(i), folderPath, i, true, 100, QString(), false});
+            }
+        }
+        if (!seen.contains(cleanPath)) {
+            seen.insert(cleanPath);
+            const int leafDepth = static_cast<int>(parts.size() - 1);
+            r.files.append(FileLine{parts.last(), cleanPath, leafDepth, false, 0, QString(), false});
+        }
+    }
+
+    const QModelIndex mi = index(idx);
+    emit dataChanged(mi, mi, fileCount(r) == oldFileCount ? QList<int>{FilesRole}
+                                                          : QList<int>{FilesRole, FileCountRole});
+}
+
+void TransfersModel::markUntouchedUpToDate(const QString &id)
+{
+    const int idx = indexOfId(id);
+    if (idx < 0)
+        return;
+
+    Row &r = m_rows[idx];
+    bool changed = false;
+    for (FileLine &f : r.files) {
+        // A leaf still at 0% after a clean finish was never sent — rsync skipped it
+        // because the destination copy is already current. Show that, don't fail it.
+        if (!f.isDir && !f.upToDate && f.percent == 0) {
+            f.upToDate = true;
+            f.percent = 100;
+            changed = true;
+        }
+    }
+    if (changed) {
+        const QModelIndex mi = index(idx);
+        emit dataChanged(mi, mi, {FilesRole});
+    }
 }
 
 void TransfersModel::clearCompleted()

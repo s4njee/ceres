@@ -2,8 +2,10 @@
 
 #include <QDateTime>
 #include <QDir>
+#include <QDirIterator>
 #include <QFile>
 #include <QFileInfo>
+#include <QThreadPool>
 
 #include "app/TransferManager.h"
 #include "core/SshKnownHosts.h"
@@ -45,6 +47,34 @@ QString withTrailingSlash(const QString &p)
     return p.endsWith(QLatin1Char('/')) ? p : p + QLatin1Char('/');
 }
 
+// Walk a local file or directory and return paths relative to its parent — each
+// prefixed with `topName` — matching the form rsync itemizes when copying the item
+// into a destination. A plain file yields just { topName }. Symlinks are skipped
+// (NoSymLinks): such entries simply appear live during the transfer instead.
+//
+// Runs on a worker thread (see seedFromLocalWalk), so it must stay free of any
+// shared mutable state — it only touches the filesystem and returns a value.
+QStringList walkLocal(const QString &absPath, const QString &topName)
+{
+    const QFileInfo info(absPath);
+    if (!info.exists())
+        return {};
+    if (!info.isDir())
+        return {topName};
+
+    const QString base = info.absoluteFilePath();
+    const int strip = base.size() + 1;  // drop "base/" to get the path within
+    QStringList rels;
+    QDirIterator it(base, QDir::Files | QDir::Hidden | QDir::NoSymLinks,
+                    QDirIterator::Subdirectories);
+    while (it.hasNext()) {
+        const QString within = it.next().mid(strip);
+        if (!within.isEmpty())
+            rels << topName + QLatin1Char('/') + within;
+    }
+    return rels;
+}
+
 } // namespace
 
 BrowseController::BrowseController(RsyncCapabilities caps, SshHostStore hostStore,
@@ -72,6 +102,14 @@ BrowseController::BrowseController(RsyncCapabilities caps, SshHostStore hostStor
             emit errorOccurred(error);
         remoteRefresh();  // reflect the mkdir/delete/rename either way
     });
+    // A download's remote walk finished: seed the full file list at 0%. Best-effort —
+    // an enumeration error (auth/unreachable) just leaves the transfer to fill rows in
+    // live, so it's swallowed here (the transfer itself surfaces real failures).
+    connect(&m_remoteFs, &RemoteFs::enumerated, this,
+            [this](const QString &token, const QStringList &relPaths, const QString &error) {
+                if (error.isEmpty() && m_transfers && !relPaths.isEmpty())
+                    m_transfers->seedFiles(token, relPaths);
+            });
 
     m_localPath = QDir::homePath();
     localRefresh();
@@ -337,6 +375,21 @@ SyncJob BrowseController::transferJob() const
     return job;
 }
 
+void BrowseController::seedFromLocalWalk(const QString &id, const QString &absPath,
+                                         const QString &topName)
+{
+    // Walk on a pool thread so a large drop never stutters the UI, then hop back to
+    // the GUI thread to mutate the model. invokeMethod with `this` as context drops
+    // the call safely if the controller is gone by the time the walk finishes.
+    QThreadPool::globalInstance()->start([this, id, absPath, topName] {
+        const QStringList rels = walkLocal(absPath, topName);
+        QMetaObject::invokeMethod(this, [this, id, rels] {
+            if (m_transfers && !rels.isEmpty())
+                m_transfers->seedFiles(id, rels);
+        }, Qt::QueuedConnection);
+    });
+}
+
 void BrowseController::download(const QStringList &names)
 {
     if (!m_connected || !m_transfers)
@@ -348,7 +401,10 @@ void BrowseController::download(const QStringList &names)
         SyncJob job = transferJob();
         job.source = m_target + QLatin1Char(':') + joinRemote(m_remotePath, name);
         job.destination = dest;
-        m_transfers->enqueue(job, QStringLiteral("down"), name);
+        const QString id = m_transfers->enqueue(job, QStringLiteral("down"), name);
+        // Walk the remote tree so the whole file list shows at 0% immediately; the
+        // result arrives async (RemoteFs::enumerated) and never blocks the transfer.
+        m_remoteFs.enumerate(id, m_target, m_remotePath, name, m_sshKey, m_sshPort, m_sshPassword);
     }
 }
 
@@ -363,7 +419,9 @@ void BrowseController::upload(const QStringList &names)
         SyncJob job = transferJob();
         job.source = QDir(m_localPath).filePath(name);
         job.destination = dest;
-        m_transfers->enqueue(job, QStringLiteral("up"), name);
+        const QString id = m_transfers->enqueue(job, QStringLiteral("up"), name);
+        // Local source: walk off-thread and seed the file list when it returns.
+        seedFromLocalWalk(id, job.source, name);
     }
 }
 
@@ -379,6 +437,8 @@ void BrowseController::uploadFiles(const QStringList &paths)
         SyncJob job = transferJob();
         job.source = clean;  // absolute local path from the drop
         job.destination = dest;
-        m_transfers->enqueue(job, QStringLiteral("up"), QFileInfo(clean).fileName());
+        const QString display = QFileInfo(clean).fileName();
+        const QString id = m_transfers->enqueue(job, QStringLiteral("up"), display);
+        seedFromLocalWalk(id, clean, display);
     }
 }

@@ -58,6 +58,12 @@ public:
     // pumps the queue (so it may start immediately if under the cap).
     QString enqueue(const SyncJob &job, const QString &direction, const QString &name);
 
+    // Seed a transfer's file tree with the full list of relative paths it will touch
+    // (from a source-side directory walk), each shown at 0% until the live run fills
+    // in progress. Safe to call after the transfer has already started; the model
+    // skips paths a live update has already created.
+    void seedFiles(const QString &id, const QStringList &paths) { m_model.seedFiles(id, paths); }
+
     Q_INVOKABLE void cancel(const QString &id);
     // Suspend/resume a transfer. An active transfer is stopped in place (keeps its
     // slot); a queued one is held out of pump() until resumed.
