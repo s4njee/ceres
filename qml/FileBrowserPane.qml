@@ -39,9 +39,14 @@ ColumnLayout {
     function clearSelection() { selected = [] }
     function isSelected(name) { return selected.indexOf(name) >= 0 }
 
-    // Clear the name filter when the directory changes, so a stale filter doesn't hide
-    // everything in the folder you just opened.
-    onPathChanged: { filterField.text = ""; if (fileModel) fileModel.filter = "" }
+    // When the directory actually changes: re-sync the path field (typing into it broke
+    // its `text: pane.path` binding, and the remote path resolves asynchronously), and
+    // clear the name filter so a stale filter doesn't hide the new folder's contents.
+    onPathChanged: {
+        pathField.text = pane.path
+        filterField.text = ""
+        if (fileModel) fileModel.filter = ""
+    }
 
     function toggle(name, additive) {
         if (additive) {

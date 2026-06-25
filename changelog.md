@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Fixed the browse path field not updating after typing a path and pressing Enter (both panes): typing broke the field's `text: path` binding and the remote path resolves asynchronously, so the field/breadcrumb stayed stale. The field now re-syncs to the canonical path whenever the directory actually changes.
 - Fixed the browse window widening after connecting: the remote pane title ("REMOTE · user@host") and the session tab labels now elide instead of growing to fit the target, so a long host name no longer stretches the layout.
 - Added tabbed, simultaneous host sessions: a new `BrowseSessions` manager owns multiple independent `BrowseController` connections, and the browse tab gains a session tab strip (+ to add, ✕ to close, click to switch). Each tab keeps its own SSH connection, local/remote paths, and bookmarks; all share the one transfer queue. The pane binds to the active session, so switching tabs re-points the whole UI.
 - Added remote file quick-view and edit-in-place: the remote context menu gains "Quick view" (download to a temp dir and open with the OS default app), "Edit" (open in the configured editor and re-upload automatically on every save via a file watcher), and "Set editor…" to configure the editor command (persisted; empty = OS default). Downloads/uploads run through the normal transfer queue, so auth and progress are handled.
