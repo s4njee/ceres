@@ -305,6 +305,9 @@ Item {
                                 color: parent.parent.isCurrent ? Theme.textPrimary : Theme.textSecondary
                                 font.pixelSize: 12
                                 anchors.verticalCenter: parent.verticalCenter
+                                // Cap the tab width so a long target doesn't widen the strip.
+                                elide: Text.ElideRight
+                                width: Math.min(implicitWidth, 200)
                             }
                             Text {
                                 visible: sessions.count > 1

@@ -61,8 +61,16 @@ ColumnLayout {
     RowLayout {
         Layout.fillWidth: true
         spacing: 6
-        Text { text: pane.title; color: Theme.textTertiary; font.pixelSize: 11; font.letterSpacing: 1 }
-        Item { Layout.fillWidth: true }
+        // fillWidth + elide so a long "REMOTE · user@host" title shrinks instead of
+        // forcing the pane (and the whole window) wider.
+        Text {
+            text: pane.title
+            color: Theme.textTertiary
+            font.pixelSize: 11
+            font.letterSpacing: 1
+            elide: Text.ElideRight
+            Layout.fillWidth: true
+        }
         Text {
             visible: pane.info.length > 0
             text: pane.info
