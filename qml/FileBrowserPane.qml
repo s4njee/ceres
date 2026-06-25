@@ -94,6 +94,66 @@ ColumnLayout {
         onActiveFocusChanged: if (!activeFocus) text = pane.path
     }
 
+    // Breadcrumb: each path segment is clickable to jump straight to that ancestor.
+    // Handles both POSIX ("/home/user") and drive-rooted ("C:/Users") paths.
+    readonly property bool pathIsPosix: ("" + pane.path).charAt(0) === "/"
+    function crumbParts(p) {
+        p = ("" + p).replace(/\\/g, "/")
+        var parts = p.split("/").filter(function(s) { return s.length > 0 })
+        var posix = p.charAt(0) === "/"
+        var out = []
+        var acc = ""
+        for (var i = 0; i < parts.length; i++) {
+            acc += (posix || i > 0 ? "/" : "") + parts[i]
+            out.push({ label: parts[i], path: acc + "/" })
+        }
+        return out
+    }
+
+    Flow {
+        Layout.fillWidth: true
+        spacing: 3
+        visible: pane.path.length > 0
+        // Root crumb (POSIX), and the only crumb when the path is just "/".
+        Text {
+            visible: pane.pathIsPosix
+            text: "/"
+            color: Theme.textTertiary
+            font.pixelSize: 11
+            MouseArea {
+                anchors.fill: parent
+                enabled: pane.enabledActions && !pane.busy
+                cursorShape: Qt.PointingHandCursor
+                onClicked: pane.pathSubmitted("/")
+            }
+        }
+        Repeater {
+            model: pane.crumbParts(pane.path)
+            delegate: Row {
+                required property var modelData
+                required property int index
+                spacing: 3
+                Text {
+                    visible: index > 0 || !pane.pathIsPosix
+                    text: "/"
+                    color: Theme.textTertiary
+                    font.pixelSize: 11
+                }
+                Text {
+                    text: modelData.label
+                    color: Theme.textSecondary
+                    font.pixelSize: 11
+                    MouseArea {
+                        anchors.fill: parent
+                        enabled: pane.enabledActions && !pane.busy
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: pane.pathSubmitted(modelData.path)
+                    }
+                }
+            }
+        }
+    }
+
     // Clicking a column sorts by it; clicking the active column toggles direction.
     function applySort(key) {
         if (pane.fileModel.sortKey === key)

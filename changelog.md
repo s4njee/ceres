@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Added a breadcrumb path bar under each pane's path field: every segment is clickable to jump straight to that ancestor directory. Handles POSIX and drive-rooted paths.
 - Symlinks in the browse panes now show their target inline ("link → /path/to/target"). The remote `ls` parser keeps the target it previously discarded, and the local pane reads it via `QFileInfo::symLinkTarget`. Covered by an updated parser test.
 - Added a retry action (↻) to failed/cancelled transfers in the transfers dialog. `TransferManager` retains each job so it can resubmit under the same row; combined with `--partial` the rsync resumes from the partial file. Covered by a new manager test.
 - Browse transfers now pass rsync `--partial`, so an interrupted transfer keeps its partial file and a retry resumes instead of resending from scratch. Scoped to the per-file transfer path; the preview/sync path is unaffected.
