@@ -109,7 +109,7 @@ Legend: `[x]` already in Ceres · `[ ]` not yet · _(italic notes for caveats)_
 - [x] Transfer notifications (system notification on completion)
 - [ ] Drag a remote file out to the desktop to download
 - [t] Tabbed / multiple simultaneous host sessions
-- [t] Error toasts with actionable detail
+- [x] Error toasts with actionable detail
 - [ ] Localization / i18n
 
 ## Advanced / power-user

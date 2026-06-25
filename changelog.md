@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Browse error toasts now carry an actionable hint: a `RemoteFs::friendlyError` mapper recognizes common ssh/rsync failures (auth, connection refused, unreachable, DNS, host-key mismatch, missing path) and appends a short suggestion. Covered by a unit test.
 - The browse tab now auto-reconnects on a dropped connection: if an established session's listing fails with a connection-drop error (reset, timeout, broken pipe, closed by remote), it transparently retries the listing once so ssh re-establishes, instead of surfacing the error immediately.
 - Added native desktop notifications when a batch of transfers finishes: `TransferManager` emits `allTransfersComplete(failed)` when the queue drains, and a new `Notifier` posts a system notification (osascript on macOS, notify-send on Linux; no-op elsewhere) — GUI-free via QProcess. Covered by a manager test.
 - Added "Import config": pulls concrete hosts from `~/.ssh/config` (HostName / User / Port / IdentityFile, skipping wildcard patterns) into the saved-host sidebar, leaving existing entries untouched. New `SshConfigImport` parser in core with unit tests.

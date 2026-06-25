@@ -55,6 +55,11 @@ public:
     // Pure, unit-testable: parse the body of `ls -lA` output into entries.
     static QList<FileEntry> parseLsList(const QString &lsOutput);
 
+    // Append a short, actionable hint to a raw ssh/rsync error when the cause is
+    // recognizable (auth, refused, unreachable, DNS, host key, missing path). Returns
+    // the input unchanged when nothing matches. Pure and unit-testable.
+    static QString friendlyError(const QString &raw);
+
 signals:
     // Directory listing finished. `path` is the resolved absolute dir (from pwd -P,
     // trailing slash). On failure `error` is non-empty and `entries` empty.

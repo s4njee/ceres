@@ -458,6 +458,39 @@ void RemoteFs::rename(const QString &target, const QString &dir, const QString &
     runOpCommand(this, m_caps, target, sshKey, port, password, script);
 }
 
+QString RemoteFs::friendlyError(const QString &raw)
+{
+    struct Rule {
+        const char *needle;
+        const char *hint;
+    };
+    // First matching rule wins; ordered most-specific first.
+    static const Rule rules[] = {
+        {"Host key verification failed", "the host key didn't match — review known hosts"},
+        {"Permission denied", "check your username, key, or password"},
+        {"Authentication failed", "check your username, key, or password"},
+        {"Connection refused", "is the SSH server running on that port?"},
+        {"Connection timed out", "the host didn't respond — check the address and firewall"},
+        {"Operation timed out", "the host didn't respond — check the address and firewall"},
+        {"No route to host", "the host is unreachable — check the address and network"},
+        {"Network is unreachable", "check your network connection"},
+        {"Could not resolve", "couldn't resolve the hostname"},
+        {"Name or service not known", "couldn't resolve the hostname"},
+        {"nodename nor servname", "couldn't resolve the hostname"},
+        {"No such file or directory", "that path doesn't exist on the remote"},
+    };
+    for (const Rule &r : rules) {
+        const QString hint = QLatin1String(r.hint);
+        if (raw.contains(QLatin1String(r.needle), Qt::CaseInsensitive)) {
+            // Don't double-append if the raw text already reads like the hint.
+            if (raw.contains(hint, Qt::CaseInsensitive))
+                return raw;
+            return raw.trimmed() + QStringLiteral(" — ") + hint;
+        }
+    }
+    return raw;
+}
+
 QList<FileEntry> RemoteFs::parseLsList(const QString &lsOutput)
 {
     QList<FileEntry> entries;

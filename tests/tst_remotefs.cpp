@@ -8,6 +8,7 @@ private slots:
     void parsesGnuListing();
     void parsesBsdListing();
     void emptyInputs();
+    void friendlyErrorAddsHints();
 };
 
 void RemoteFsTest::parsesGnuListing()
@@ -83,6 +84,21 @@ void RemoteFsTest::emptyInputs()
     QVERIFY(RemoteFs::parseLsList(QStringLiteral("")).isEmpty());
     // A directory with no entries still emits the byte-total header and nothing else.
     QVERIFY(RemoteFs::parseLsList(QStringLiteral("total 0\n")).isEmpty());
+}
+
+void RemoteFsTest::friendlyErrorAddsHints()
+{
+    // Recognized causes get an actionable hint appended.
+    QVERIFY(RemoteFs::friendlyError(QStringLiteral("ssh: connect to host x port 22: Connection refused"))
+                .contains(QStringLiteral("SSH server")));
+    QVERIFY(RemoteFs::friendlyError(QStringLiteral("Permission denied (publickey,password)."))
+                .contains(QStringLiteral("username, key, or password")));
+    QVERIFY(RemoteFs::friendlyError(QStringLiteral("ssh: Could not resolve hostname nope"))
+                .contains(QStringLiteral("resolve")));
+
+    // Unrecognized text is returned unchanged.
+    const QString odd = QStringLiteral("some unrecognized failure");
+    QCOMPARE(RemoteFs::friendlyError(odd), odd);
 }
 
 QTEST_MAIN(RemoteFsTest)

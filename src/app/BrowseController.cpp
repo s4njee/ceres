@@ -114,7 +114,7 @@ BrowseController::BrowseController(RsyncCapabilities caps, SshHostStore hostStor
             });
     connect(&m_remoteFs, &RemoteFs::opFinished, this, [this](const QString &error) {
         if (!error.isEmpty())
-            emit errorOccurred(error);
+            emit errorOccurred(RemoteFs::friendlyError(error));
         remoteRefresh();  // reflect the mkdir/delete/rename either way
     });
     connect(&m_remoteFs, &RemoteFs::freeSpaceReady, this,
@@ -259,7 +259,7 @@ void BrowseController::onListed(const QString & /*target*/, const QString &path,
             return;
         }
         m_reconnecting = false;
-        emit errorOccurred(error);
+        emit errorOccurred(RemoteFs::friendlyError(error));
         return;
     }
     m_reconnecting = false;  // a clean listing means the (re)connection is healthy
