@@ -17,6 +17,7 @@ class FileListModel : public QAbstractListModel {
     Q_PROPERTY(int count READ rowCount NOTIFY countChanged)
     Q_PROPERTY(int sortKey READ sortKey NOTIFY sortChanged)
     Q_PROPERTY(bool sortAscending READ sortAscending NOTIFY sortChanged)
+    Q_PROPERTY(QString filter READ filter WRITE setFilter NOTIFY filterChanged)
 public:
     enum Roles {
         NameRole = Qt::UserRole + 1,
@@ -46,6 +47,10 @@ public:
     // header twice (the QML pattern) toggles direction.
     Q_INVOKABLE void setSort(int key, bool ascending);
 
+    QString filter() const { return m_filter; }
+    // Case-insensitive substring filter on entry names; empty shows everything.
+    void setFilter(const QString &text);
+
     const FileEntry &entryAt(int row) const { return m_entries.at(row); }
     bool isDirAt(int row) const;
 
@@ -55,11 +60,15 @@ public:
 signals:
     void countChanged();
     void sortChanged();
+    void filterChanged();
 
 private:
-    void sortEntries();  // sort m_entries by the current key/direction (dirs first)
+    void sortSource();    // sort m_source by the current key/direction (dirs first)
+    void rebuildView();   // project m_source through the filter into m_entries
 
-    QList<FileEntry> m_entries;
+    QList<FileEntry> m_source;   // full directory listing (sorted)
+    QList<FileEntry> m_entries;  // filtered view actually exposed to the list
     int m_sortKey = ByName;
     bool m_sortAscending = true;
+    QString m_filter;
 };

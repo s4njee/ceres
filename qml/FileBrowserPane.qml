@@ -39,6 +39,10 @@ ColumnLayout {
     function clearSelection() { selected = [] }
     function isSelected(name) { return selected.indexOf(name) >= 0 }
 
+    // Clear the name filter when the directory changes, so a stale filter doesn't hide
+    // everything in the folder you just opened.
+    onPathChanged: { filterField.text = ""; if (fileModel) fileModel.filter = "" }
+
     function toggle(name, additive) {
         if (additive) {
             var copy = selected.slice()
@@ -65,7 +69,16 @@ ColumnLayout {
             color: Theme.textTertiary
             font.pixelSize: 11
             elide: Text.ElideLeft
-            Layout.maximumWidth: 180
+            Layout.maximumWidth: 160
+        }
+        Field {
+            id: filterField
+            Layout.preferredWidth: 120
+            implicitHeight: 24
+            placeholderText: "filter"
+            enabled: pane.enabledActions && !pane.busy
+            font.pixelSize: 12
+            onTextChanged: if (pane.fileModel) pane.fileModel.filter = text
         }
         FlatButton { label: "Up"; active: pane.enabledActions && !pane.busy; onClicked: pane.upRequested() }
         FlatButton { label: "Refresh"; active: pane.enabledActions && !pane.busy; onClicked: pane.refreshRequested() }

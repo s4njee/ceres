@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Added a name filter to both browse panes: a compact "filter" field does a live case-insensitive substring match against the current directory, and resets automatically when you navigate. `FileListModel` keeps the full listing separately and projects it through the filter. Covered by a new model test.
 - Added column sorting to both browse panes: clickable Type / Name / Size / Modified headers sort the file list, clicking the active column toggles direction, and directories always group first. `FileListModel` gained a `setSort` API and a sortable epoch `mtime` (populated for the local pane; remote `ls` dates aren't portably parseable, so remote date-sort is best-effort). Covered by new model tests.
 - Added a remote free-space indicator: the remote pane header shows "X free of Y" for the current directory's filesystem, refreshed on each listing via `df -Pk` over SSH and cleared on disconnect.
 - Added "Calculate size" to the remote pane's context menu: recursively sizes the selected folder/file over SSH (`du -sk`) and reports the human-readable total in the transient toast. Adds a stdout-capturing query runner and an `infoOccurred` status signal.

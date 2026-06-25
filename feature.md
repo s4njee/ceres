@@ -38,7 +38,7 @@ Legend: `[x]` already in Ceres · `[ ]` not yet · _(italic notes for caveats)_
 - [x] Tilde (`~`) home-directory expansion
 - [x] Show hidden (dotfiles) entries
 - [x] Sort by name / size / date / type
-- [t] Filter / search within a directory
+- [x] Filter / search within a directory
 - [t] Follow / display symlink targets
 - [ ] Show / edit POSIX permissions (chmod) and ownership (chown)
 - [t] Bookmarks / favorite remote paths
@@ -47,7 +47,7 @@ Legend: `[x]` already in Ceres · `[ ]` not yet · _(italic notes for caveats)_
 ## Local file browsing
 - [x] Local file pane (browse the local filesystem)
 - [x] Dual-pane (local ⇆ remote) layout
-- [t] Sort / filter local pane
+- [x] Sort / filter local pane
 - [x] Open local item in system file manager
 
 ## Transfers

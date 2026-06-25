@@ -54,11 +54,11 @@ QString extensionOf(const QString &name)
 }
 } // namespace
 
-void FileListModel::sortEntries()
+void FileListModel::sortSource()
 {
     const int key = m_sortKey;
     const bool asc = m_sortAscending;
-    std::sort(m_entries.begin(), m_entries.end(), [key, asc](const FileEntry &a, const FileEntry &b) {
+    std::sort(m_source.begin(), m_source.end(), [key, asc](const FileEntry &a, const FileEntry &b) {
         if (a.isDir != b.isDir)
             return a.isDir;  // directories always group first, independent of key/direction
 
@@ -83,6 +83,21 @@ void FileListModel::sortEntries()
     });
 }
 
+void FileListModel::rebuildView()
+{
+    // Caller wraps this in begin/endResetModel. Project the sorted source through the
+    // case-insensitive name filter (empty filter = everything).
+    if (m_filter.isEmpty()) {
+        m_entries = m_source;
+        return;
+    }
+    m_entries.clear();
+    for (const FileEntry &e : m_source) {
+        if (e.name.contains(m_filter, Qt::CaseInsensitive))
+            m_entries.append(e);
+    }
+}
+
 void FileListModel::setSort(int key, bool ascending)
 {
     if (key < ByName || key > ByType)
@@ -92,25 +107,40 @@ void FileListModel::setSort(int key, bool ascending)
     m_sortKey = key;
     m_sortAscending = ascending;
     beginResetModel();
-    sortEntries();
+    sortSource();
+    rebuildView();
     endResetModel();
     emit sortChanged();
+}
+
+void FileListModel::setFilter(const QString &text)
+{
+    if (text == m_filter)
+        return;
+    m_filter = text;
+    beginResetModel();
+    rebuildView();
+    endResetModel();
+    emit filterChanged();
+    emit countChanged();
 }
 
 void FileListModel::setEntries(QList<FileEntry> entries)
 {
     beginResetModel();
-    m_entries = std::move(entries);
-    sortEntries();
+    m_source = std::move(entries);
+    sortSource();
+    rebuildView();
     endResetModel();
     emit countChanged();
 }
 
 void FileListModel::clear()
 {
-    if (m_entries.isEmpty())
+    if (m_source.isEmpty() && m_entries.isEmpty())
         return;
     beginResetModel();
+    m_source.clear();
     m_entries.clear();
     endResetModel();
     emit countChanged();

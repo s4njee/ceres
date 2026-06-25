@@ -9,6 +9,7 @@ private slots:
     void sortsDirsFirstThenName();
     void sortBySizeAndDirection();
     void sortByDateUsesEpoch();
+    void filterMatchesNameSubstring();
     void rolesExposeEntryFields();
     void clearEmpties();
 };
@@ -92,6 +93,25 @@ void FileListModelTest::sortByDateUsesEpoch()
 
     m.setSort(FileListModel::ByDate, /*ascending=*/false);
     QCOMPARE(nameAt(0), QStringLiteral("newer.txt"));
+}
+
+void FileListModelTest::filterMatchesNameSubstring()
+{
+    FileListModel m;
+    m.setEntries({makeEntry("report.pdf", false), makeEntry("notes.txt", false),
+                  makeEntry("reports", true), makeEntry("image.png", false)});
+    QCOMPARE(m.rowCount(), 4);
+
+    m.setFilter(QStringLiteral("REP"));  // case-insensitive substring, applies to dirs too
+    QCOMPARE(m.rowCount(), 2);
+    const auto nameAt = [&](int row) {
+        return m.data(m.index(row), FileListModel::NameRole).toString();
+    };
+    QCOMPARE(nameAt(0), QStringLiteral("reports"));   // dir still groups first
+    QCOMPARE(nameAt(1), QStringLiteral("report.pdf"));
+
+    m.setFilter(QString());  // clearing restores the full listing
+    QCOMPARE(m.rowCount(), 4);
 }
 
 void FileListModelTest::rolesExposeEntryFields()
