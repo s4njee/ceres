@@ -7,6 +7,8 @@ class FileListModelTest : public QObject {
 private slots:
     void humanSizeFormats();
     void sortsDirsFirstThenName();
+    void sortBySizeAndDirection();
+    void sortByDateUsesEpoch();
     void rolesExposeEntryFields();
     void clearEmpties();
 };
@@ -48,6 +50,48 @@ void FileListModelTest::sortsDirsFirstThenName()
     QCOMPARE(nameAt(3), QStringLiteral("zeta.txt"));
     QVERIFY(m.isDirAt(0));
     QVERIFY(!m.isDirAt(2));
+}
+
+void FileListModelTest::sortBySizeAndDirection()
+{
+    FileListModel m;
+    m.setEntries({makeEntry("big.bin", false, 9000), makeEntry("small.txt", false, 10),
+                  makeEntry("mid.dat", false, 500), makeEntry("dir", true)});
+    const auto nameAt = [&](int row) {
+        return m.data(m.index(row), FileListModel::NameRole).toString();
+    };
+
+    m.setSort(FileListModel::BySize, /*ascending=*/true);
+    QCOMPARE(nameAt(0), QStringLiteral("dir"));        // dirs stay grouped first
+    QCOMPARE(nameAt(1), QStringLiteral("small.txt"));  // then files ascending by size
+    QCOMPARE(nameAt(2), QStringLiteral("mid.dat"));
+    QCOMPARE(nameAt(3), QStringLiteral("big.bin"));
+
+    m.setSort(FileListModel::BySize, /*ascending=*/false);
+    QCOMPARE(nameAt(0), QStringLiteral("dir"));        // dirs still first, independent of direction
+    QCOMPARE(nameAt(1), QStringLiteral("big.bin"));
+    QCOMPARE(nameAt(3), QStringLiteral("small.txt"));
+}
+
+void FileListModelTest::sortByDateUsesEpoch()
+{
+    FileEntry older = makeEntry("older.txt", false);
+    older.mtime = 1000;
+    FileEntry newer = makeEntry("newer.txt", false);
+    newer.mtime = 2000;
+
+    FileListModel m;
+    m.setEntries({older, newer});
+    const auto nameAt = [&](int row) {
+        return m.data(m.index(row), FileListModel::NameRole).toString();
+    };
+
+    m.setSort(FileListModel::ByDate, /*ascending=*/true);
+    QCOMPARE(nameAt(0), QStringLiteral("older.txt"));
+    QCOMPARE(nameAt(1), QStringLiteral("newer.txt"));
+
+    m.setSort(FileListModel::ByDate, /*ascending=*/false);
+    QCOMPARE(nameAt(0), QStringLiteral("newer.txt"));
 }
 
 void FileListModelTest::rolesExposeEntryFields()

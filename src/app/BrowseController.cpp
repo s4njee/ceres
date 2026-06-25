@@ -364,6 +364,7 @@ void BrowseController::localRefresh()
         e.isSymlink = fi.isSymLink();
         e.size = fi.isDir() ? 0 : fi.size();
         e.mtimeText = fi.lastModified().toString(QStringLiteral("MMM d  HH:mm"));
+        e.mtime = fi.lastModified().toSecsSinceEpoch();
         entries.append(e);
     }
     m_local.setEntries(entries);

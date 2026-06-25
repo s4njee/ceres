@@ -45,15 +45,63 @@ QHash<int, QByteArray> FileListModel::roleNames() const
     };
 }
 
+namespace {
+// File-type key: the lowercase extension, so same-type files group together.
+QString extensionOf(const QString &name)
+{
+    const int dot = name.lastIndexOf(QLatin1Char('.'));
+    return dot > 0 ? name.mid(dot + 1).toLower() : QString();
+}
+} // namespace
+
+void FileListModel::sortEntries()
+{
+    const int key = m_sortKey;
+    const bool asc = m_sortAscending;
+    std::sort(m_entries.begin(), m_entries.end(), [key, asc](const FileEntry &a, const FileEntry &b) {
+        if (a.isDir != b.isDir)
+            return a.isDir;  // directories always group first, independent of key/direction
+
+        int cmp = 0;
+        switch (key) {
+        case BySize:
+            cmp = a.size < b.size ? -1 : (a.size > b.size ? 1 : 0);
+            break;
+        case ByDate:
+            cmp = a.mtime < b.mtime ? -1 : (a.mtime > b.mtime ? 1 : 0);
+            break;
+        case ByType:
+            cmp = extensionOf(a.name).compare(extensionOf(b.name));
+            break;
+        case ByName:
+        default:
+            break;
+        }
+        if (cmp == 0)  // stable tiebreak (and the whole comparison for ByName)
+            cmp = a.name.compare(b.name, Qt::CaseInsensitive);
+        return asc ? cmp < 0 : cmp > 0;
+    });
+}
+
+void FileListModel::setSort(int key, bool ascending)
+{
+    if (key < ByName || key > ByType)
+        return;
+    if (m_sortKey == key && m_sortAscending == ascending)
+        return;
+    m_sortKey = key;
+    m_sortAscending = ascending;
+    beginResetModel();
+    sortEntries();
+    endResetModel();
+    emit sortChanged();
+}
+
 void FileListModel::setEntries(QList<FileEntry> entries)
 {
-    std::sort(entries.begin(), entries.end(), [](const FileEntry &a, const FileEntry &b) {
-        if (a.isDir != b.isDir)
-            return a.isDir;  // directories first
-        return a.name.compare(b.name, Qt::CaseInsensitive) < 0;
-    });
     beginResetModel();
     m_entries = std::move(entries);
+    sortEntries();
     endResetModel();
     emit countChanged();
 }

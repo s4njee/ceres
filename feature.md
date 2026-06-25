@@ -37,7 +37,7 @@ Legend: `[x]` already in Ceres · `[ ]` not yet · _(italic notes for caveats)_
 - [x] Remote path auto-completion
 - [x] Tilde (`~`) home-directory expansion
 - [x] Show hidden (dotfiles) entries
-- [t] Sort by name / size / date / type
+- [x] Sort by name / size / date / type
 - [t] Filter / search within a directory
 - [t] Follow / display symlink targets
 - [ ] Show / edit POSIX permissions (chmod) and ownership (chown)

@@ -15,6 +15,8 @@
 class FileListModel : public QAbstractListModel {
     Q_OBJECT
     Q_PROPERTY(int count READ rowCount NOTIFY countChanged)
+    Q_PROPERTY(int sortKey READ sortKey NOTIFY sortChanged)
+    Q_PROPERTY(bool sortAscending READ sortAscending NOTIFY sortChanged)
 public:
     enum Roles {
         NameRole = Qt::UserRole + 1,
@@ -25,14 +27,24 @@ public:
         MtimeTextRole,
     };
 
+    // Sort column. Directories always group ahead of files regardless of key.
+    enum SortKey { ByName = 0, BySize, ByDate, ByType };
+    Q_ENUM(SortKey)
+
     using QAbstractListModel::QAbstractListModel;
 
     int rowCount(const QModelIndex &parent = QModelIndex()) const override;
     QVariant data(const QModelIndex &index, int role) const override;
     QHash<int, QByteArray> roleNames() const override;
 
-    void setEntries(QList<FileEntry> entries);  // sorts dirs-first, then by name
+    void setEntries(QList<FileEntry> entries);  // applies the current sort
     void clear();
+
+    int sortKey() const { return m_sortKey; }
+    bool sortAscending() const { return m_sortAscending; }
+    // Set the sort column/direction and re-sort in place. Clicking the same column
+    // header twice (the QML pattern) toggles direction.
+    Q_INVOKABLE void setSort(int key, bool ascending);
 
     const FileEntry &entryAt(int row) const { return m_entries.at(row); }
     bool isDirAt(int row) const;
@@ -42,7 +54,12 @@ public:
 
 signals:
     void countChanged();
+    void sortChanged();
 
 private:
+    void sortEntries();  // sort m_entries by the current key/direction (dirs first)
+
     QList<FileEntry> m_entries;
+    int m_sortKey = ByName;
+    bool m_sortAscending = true;
 };

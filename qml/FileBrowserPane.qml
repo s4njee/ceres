@@ -81,6 +81,40 @@ ColumnLayout {
         onActiveFocusChanged: if (!activeFocus) text = pane.path
     }
 
+    // Clicking a column sorts by it; clicking the active column toggles direction.
+    function applySort(key) {
+        if (pane.fileModel.sortKey === key)
+            pane.fileModel.setSort(key, !pane.fileModel.sortAscending)
+        else
+            pane.fileModel.setSort(key, true)
+    }
+
+    // Sortable column header. Mirrors the row delegate's column widths/margins.
+    component SortLabel: Text {
+        property int sortKey: 0
+        readonly property bool activeSort: pane.fileModel && pane.fileModel.sortKey === sortKey
+        color: activeSort ? Theme.textSecondary : Theme.textTertiary
+        font.pixelSize: 11
+        font.letterSpacing: 1
+        elide: Text.ElideRight
+        MouseArea {
+            anchors.fill: parent
+            cursorShape: Qt.PointingHandCursor
+            onClicked: pane.applySort(parent.sortKey)
+        }
+    }
+
+    RowLayout {
+        Layout.fillWidth: true
+        Layout.leftMargin: 12
+        Layout.rightMargin: 12
+        spacing: 8
+        SortLabel { sortKey: 3; text: "TYPE" + (activeSort ? (pane.fileModel.sortAscending ? " ▲" : " ▼") : ""); Layout.preferredWidth: 36 }
+        SortLabel { sortKey: 0; text: "NAME" + (activeSort ? (pane.fileModel.sortAscending ? " ▲" : " ▼") : ""); Layout.fillWidth: true }
+        SortLabel { sortKey: 1; text: "SIZE" + (activeSort ? (pane.fileModel.sortAscending ? " ▲" : " ▼") : ""); Layout.preferredWidth: 64; horizontalAlignment: Text.AlignRight }
+        SortLabel { sortKey: 2; text: "MODIFIED" + (activeSort ? (pane.fileModel.sortAscending ? " ▲" : " ▼") : ""); Layout.preferredWidth: 96 }
+    }
+
     Rectangle {
         Layout.fillWidth: true
         Layout.fillHeight: true

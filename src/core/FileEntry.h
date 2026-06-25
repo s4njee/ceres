@@ -14,4 +14,6 @@ struct FileEntry {
     bool isSymlink = false;  // listing showed a symlink (mode 'l')
     qint64 size = 0;         // bytes (0 for directories we don't size)
     QString mtimeText;       // human date as shown by the source, e.g. "Jun 22 10:30"
+    qint64 mtime = 0;        // epoch seconds for sorting (0 = unknown; remote ls isn't
+                             // portably parseable, so only the local pane sets this)
 };
