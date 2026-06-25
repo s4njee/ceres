@@ -367,6 +367,14 @@ Item {
                     elide: Text.ElideRight
                     Layout.maximumWidth: 260
                 }
+                // Verify by content checksum — here (not in the transfers modal) so it can
+                // be set before any transfer starts.
+                Chip {
+                    label: "verify"
+                    active: transfers.verifyChecksums
+                    tooltip: "Compare files by checksum (rsync -c) — slower but verifies integrity"
+                    onToggled: transfers.verifyChecksums = !transfers.verifyChecksums
+                }
                 FlatButton {
                     label: transfers.activeCount > 0 ? "Transfers (" + transfers.activeCount + ")" : "Transfers"
                     onClicked: transfersDialog.open = true

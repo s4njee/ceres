@@ -75,13 +75,6 @@ Rectangle {
                     onEditingFinished: transfers.rateLimitKBps = parseInt(text || "0")
                 }
                 Text { text: "KB/s"; color: Theme.textTertiary; font.pixelSize: 12 }
-                // Verify transfers by content checksum (rsync -c) instead of size+mtime.
-                Chip {
-                    label: "verify"
-                    active: transfers.verifyChecksums
-                    tooltip: "Compare files by checksum (rsync -c) — slower but verifies integrity"
-                    onToggled: transfers.verifyChecksums = !transfers.verifyChecksums
-                }
             }
 
             // Overwrite policy for files already present at the destination.

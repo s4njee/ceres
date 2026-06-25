@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Moved the "verify" (checksum) toggle from the transfers modal to the browse toolbar, so it can be enabled before any transfer starts rather than only once the modal has opened mid-run.
+
 - Added path autocomplete to the browse path fields (both panes): press Tab to complete, arrows to navigate the dropdown, Enter to accept. Local paths complete synchronously against the filesystem; remote paths complete over SSH via the session's credentials (`PathCompleter`), reusing the same machinery the Sync form uses.
 - Fixed the browse path field not updating after typing a path and pressing Enter (both panes): typing broke the field's `text: path` binding and the remote path resolves asynchronously, so the field/breadcrumb stayed stale. The field now re-syncs to the canonical path whenever the directory actually changes.
 - Fixed the browse window widening after connecting: the remote pane title ("REMOTE · user@host") and the session tab labels now elide instead of growing to fit the target, so a long host name no longer stretches the layout.
