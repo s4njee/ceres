@@ -120,6 +120,8 @@ QStringList ArgvBuilder::build(const SyncJob &job, const RsyncCapabilities &caps
         if (job.maxDelete > 0)  // abort instead of mass-deleting (e.g. an empty/unmounted source)
             args << (QStringLiteral("--max-delete=") + QString::number(job.maxDelete));
     }
+    if (job.bwLimitKBps > 0)  // cap transfer rate so a big sync doesn't saturate the link
+        args << (QStringLiteral("--bwlimit=") + QString::number(job.bwLimitKBps));
 
     // Always-on machine-readable output that drives the UI.
     args << QStringLiteral("--itemize-changes") << QStringLiteral("--stats");

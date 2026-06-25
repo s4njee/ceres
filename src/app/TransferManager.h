@@ -36,6 +36,7 @@ class TransferManager : public QObject {
     Q_OBJECT
     Q_PROPERTY(TransfersModel *model READ model CONSTANT)
     Q_PROPERTY(int maxConcurrent READ maxConcurrent WRITE setMaxConcurrent NOTIFY maxConcurrentChanged)
+    Q_PROPERTY(int rateLimitKBps READ rateLimitKBps WRITE setRateLimitKBps NOTIFY rateLimitChanged)
     Q_PROPERTY(int activeCount READ activeCount NOTIFY activeCountChanged)
 public:
     using EngineFactory = std::function<SyncEngine *()>;
@@ -50,6 +51,12 @@ public:
 
     int maxConcurrent() const { return m_maxConcurrent; }
     void setMaxConcurrent(int n);
+
+    // Transfer-rate cap in KB/s applied to every admitted transfer (0 = unlimited).
+    // Stamped onto each job as it starts, so changing it affects newly started
+    // transfers, not ones already running.
+    int rateLimitKBps() const { return m_rateLimitKBps; }
+    void setRateLimitKBps(int n);
 
     int activeCount() const { return m_active.size(); }
 
@@ -73,6 +80,7 @@ public:
 
 signals:
     void maxConcurrentChanged();
+    void rateLimitChanged();
     void activeCountChanged();
     void enqueued();  // emitted by enqueue() so the UI can auto-open the transfers modal
 
@@ -92,4 +100,5 @@ private:
     QHash<QString, SyncEngine *> m_active;  // id -> running engine (incl. paused ones)
     QSet<QString> m_paused;                 // ids the user paused (queued or active)
     int m_maxConcurrent = 3;
+    int m_rateLimitKBps = 0;
 };

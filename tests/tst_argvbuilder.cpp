@@ -57,6 +57,7 @@ private slots:
     void sshTargetsUseProtectedArgs();
     void daemonTargetHasNoSsh();
     void maxDeleteCap();
+    void bwLimit();
     void expandsLocalTilde();
     void convertsWindowsLocalPaths();
     void windowsBuildConvertsLocalEndpoints();
@@ -277,6 +278,22 @@ void ArgvBuilderTest::maxDeleteCap()
     const QStringList off = ArgvBuilder::build(job, modern(), false);
     QVERIFY(!off.contains(QStringLiteral("--delete")));
     QVERIFY(!off.contains(QStringLiteral("--max-delete=50")));
+}
+
+void ArgvBuilderTest::bwLimit()
+{
+    SyncJob job;
+    job.source = QStringLiteral("a/");
+    job.destination = QStringLiteral("b/");
+
+    job.bwLimitKBps = 500;
+    QVERIFY(ArgvBuilder::build(job, modern(), false).contains(QStringLiteral("--bwlimit=500")));
+
+    // No flag when unlimited (0) or negative.
+    job.bwLimitKBps = 0;
+    const QStringList none = ArgvBuilder::build(job, modern(), false);
+    QVERIFY(std::none_of(none.cbegin(), none.cend(),
+                         [](const QString &a) { return a.startsWith(QStringLiteral("--bwlimit")); }));
 }
 
 void ArgvBuilderTest::expandsLocalTilde()

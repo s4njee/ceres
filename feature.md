@@ -64,7 +64,7 @@ Legend: `[x]` already in Ceres · `[ ]` not yet · _(italic notes for caveats)_
 - [x] Preserve attributes / timestamps (archive mode)
 - [t] Resume an interrupted partial transfer (`--partial` / restart)
 - [t] Overwrite policy (skip / overwrite / rename / newer-only) prompts
-- [t] Bandwidth / transfer-rate limit
+- [x] Bandwidth / transfer-rate limit
 - [t] Per-transfer ETA and overall throughput summary
 - [t] Transfer history / log of completed transfers
 - [t] Retry failed transfers

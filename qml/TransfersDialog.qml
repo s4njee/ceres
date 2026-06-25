@@ -34,6 +34,7 @@ Rectangle {
 
             RowLayout {
                 Layout.fillWidth: true
+                spacing: 8
                 Text { text: "Transfers"; color: Theme.textPrimary; font.pixelSize: 15 }
                 Item { Layout.fillWidth: true }
                 Text {
@@ -41,6 +42,20 @@ Rectangle {
                     color: Theme.textTertiary
                     font.pixelSize: 12
                 }
+                // Transfer-rate cap. Blank/0 = unlimited; applied to newly started transfers.
+                Text { text: "limit"; color: Theme.textTertiary; font.pixelSize: 12 }
+                Field {
+                    id: limitField
+                    Layout.preferredWidth: 56
+                    implicitHeight: 24
+                    horizontalAlignment: TextInput.AlignRight
+                    placeholderText: "∞"
+                    text: transfers.rateLimitKBps > 0 ? transfers.rateLimitKBps : ""
+                    inputMethodHints: Qt.ImhDigitsOnly
+                    validator: IntValidator { bottom: 0; top: 1000000 }
+                    onEditingFinished: transfers.rateLimitKBps = parseInt(text || "0")
+                }
+                Text { text: "KB/s"; color: Theme.textTertiary; font.pixelSize: 12 }
             }
 
             Rectangle {
