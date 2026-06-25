@@ -21,7 +21,7 @@ Legend: `[x]` already in Ceres · `[ ]` not yet · _(italic notes for caveats)_
 - [ ] SSH agent forwarding toggle
 - [ ] Jump host / `ProxyJump` (bastion) support
 - [x] Connection timeout / keepalive configuration
-- [t] Reconnect on dropped connection
+- [x] Reconnect on dropped connection
 - [x] Import hosts from `~/.ssh/config`
 
 ## Host-key / trust management

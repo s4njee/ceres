@@ -139,4 +139,5 @@ private:
     QString m_pendingRemotePath;
     bool m_connected = false;
     bool m_busy = false;
+    bool m_reconnecting = false;  // a dropped-connection auto-retry is in flight (one shot)
 };

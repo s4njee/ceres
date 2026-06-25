@@ -242,9 +242,27 @@ void BrowseController::onListed(const QString & /*target*/, const QString &path,
 {
     setBusy(false);
     if (!error.isEmpty()) {
+        // If an established session's listing fails because the connection dropped
+        // (idle NAT, sleep, flaky link), transparently retry the same listing once —
+        // ssh will re-establish a fresh connection.
+        static const char *kDropMarkers[] = {"Connection closed", "Connection reset",
+                                             "Broken pipe", "Connection timed out",
+                                             "closed by remote host", "Connection refused"};
+        bool dropped = false;
+        for (const char *m : kDropMarkers)
+            dropped = dropped || error.contains(QLatin1String(m), Qt::CaseInsensitive);
+        if (m_connected && dropped && !m_reconnecting) {
+            m_reconnecting = true;
+            listRemote(m_pendingRemotePath.isEmpty()
+                           ? (m_remotePath.isEmpty() ? QStringLiteral(".") : m_remotePath)
+                           : m_pendingRemotePath);
+            return;
+        }
+        m_reconnecting = false;
         emit errorOccurred(error);
         return;
     }
+    m_reconnecting = false;  // a clean listing means the (re)connection is healthy
     m_remote.setEntries(entries);
     m_pendingRemotePath.clear();
     if (path != m_remotePath) {
