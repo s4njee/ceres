@@ -6,6 +6,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QProcess>
+#include <QSettings>
 #include <QThreadPool>
 
 #include "app/TransferManager.h"
@@ -223,6 +224,10 @@ void BrowseController::disconnectHost()
         m_remoteFree.clear();
         emit remoteFreeChanged();
     }
+    if (!m_bookmarks.isEmpty()) {
+        m_bookmarks.clear();
+        emit bookmarksChanged();
+    }
     setConnected(false);
     emit targetChanged();
     emit remotePathChanged();
@@ -270,6 +275,7 @@ void BrowseController::onListed(const QString & /*target*/, const QString &path,
         emit remotePathChanged();
     }
     setConnected(true);
+    reloadBookmarks();  // favorites are per-target; load them once connected
     // Refresh the free-space indicator for the now-current directory (cheap df pass).
     m_remoteFs.freeSpace(m_target, m_remotePath, m_sshKey, m_sshPort, m_sshPassword);
 }
@@ -423,6 +429,65 @@ void BrowseController::renameLocal(const QString &from, const QString &to)
     if (!dir.rename(from, to.trimmed()))
         emit errorOccurred(QStringLiteral("Could not rename %1").arg(from));
     localRefresh();
+}
+
+namespace {
+// One settings store for favorites, independent of app-wide QCoreApplication setup.
+QSettings bookmarkSettings()
+{
+    return QSettings(QSettings::IniFormat, QSettings::UserScope, QStringLiteral("Ceres"),
+                     QStringLiteral("Ceres"));
+}
+}  // namespace
+
+void BrowseController::reloadBookmarks()
+{
+    QStringList next;
+    if (!m_target.isEmpty()) {
+        QSettings s = bookmarkSettings();
+        s.beginGroup(QStringLiteral("bookmarks"));
+        next = s.value(m_target).toStringList();
+        s.endGroup();
+    }
+    if (next != m_bookmarks) {
+        m_bookmarks = next;
+        emit bookmarksChanged();
+    }
+}
+
+void BrowseController::addBookmark()
+{
+    if (!m_connected || m_target.isEmpty() || m_remotePath.isEmpty())
+        return;
+    QSettings s = bookmarkSettings();
+    s.beginGroup(QStringLiteral("bookmarks"));
+    QStringList list = s.value(m_target).toStringList();
+    if (!list.contains(m_remotePath)) {
+        list << m_remotePath;
+        list.sort();
+        s.setValue(m_target, list);
+    }
+    s.endGroup();
+    reloadBookmarks();
+}
+
+void BrowseController::removeBookmark(const QString &path)
+{
+    if (m_target.isEmpty())
+        return;
+    QSettings s = bookmarkSettings();
+    s.beginGroup(QStringLiteral("bookmarks"));
+    QStringList list = s.value(m_target).toStringList();
+    if (list.removeAll(path) > 0)
+        s.setValue(m_target, list);
+    s.endGroup();
+    reloadBookmarks();
+}
+
+void BrowseController::gotoBookmark(const QString &path)
+{
+    if (m_connected && !path.isEmpty())
+        listRemote(path);
 }
 
 void BrowseController::remoteFolderSize(const QString &name)

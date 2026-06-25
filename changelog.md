@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Added bookmarks for favorite remote paths: a bookmarks bar in the browse tab lets you save the current remote folder and jump back to it with a click (✕ to remove). Favorites are stored per host via QSettings and load on connect. The `Chip` component gained optional removable support.
 - Added a "verify" toggle to the transfers dialog: when on, transfers compare by content checksum (rsync `-c`) rather than size+mtime, so files are verified by hash. `TransferManager` stamps it onto each job as it starts. Covered by a manager test.
 - Browse error toasts now carry an actionable hint: a `RemoteFs::friendlyError` mapper recognizes common ssh/rsync failures (auth, connection refused, unreachable, DNS, host-key mismatch, missing path) and appends a short suggestion. Covered by a unit test.
 - The browse tab now auto-reconnects on a dropped connection: if an established session's listing fails with a connection-drop error (reset, timeout, broken pipe, closed by remote), it transparently retries the listing once so ssh re-establishes, instead of surfacing the error immediately.

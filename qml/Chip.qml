@@ -7,8 +7,10 @@ Rectangle {
     property string label
     property bool active: false
     property bool warn: false
+    property bool removable: false   // show a trailing ✕ that emits removed()
     property string tooltip: ""
     signal toggled()
+    signal removed()
 
     implicitHeight: 26
     implicitWidth: chipRow.implicitWidth + 18
@@ -36,6 +38,22 @@ Rectangle {
             font.pixelSize: 12
             color: root.active ? Theme.textPrimary : Theme.textSecondary
         }
+
+        Text {
+            visible: root.removable
+            text: "✕"
+            font.pixelSize: 11
+            color: removeMouse.containsMouse ? Theme.danger : Theme.textTertiary
+            anchors.verticalCenter: parent.verticalCenter
+            MouseArea {
+                id: removeMouse
+                anchors.fill: parent
+                anchors.margins: -3
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: root.removed()
+            }
+        }
     }
 
     MouseArea {
@@ -43,7 +61,9 @@ Rectangle {
         anchors.fill: parent
         hoverEnabled: true
         cursorShape: Qt.PointingHandCursor
+        // Let the remove ✕ handle its own clicks (it sits above this via the Row).
         onClicked: root.toggled()
+        z: -1
     }
 
     ToolTip.visible: chipMouse.containsMouse && root.tooltip.length > 0

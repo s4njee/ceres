@@ -41,7 +41,7 @@ Legend: `[x]` already in Ceres · `[ ]` not yet · _(italic notes for caveats)_
 - [x] Filter / search within a directory
 - [x] Follow / display symlink targets
 - [ ] Show / edit POSIX permissions (chmod) and ownership (chown)
-- [t] Bookmarks / favorite remote paths
+- [x] Bookmarks / favorite remote paths
 - [x] Breadcrumb path bar
 
 ## Local file browsing

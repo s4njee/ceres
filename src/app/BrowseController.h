@@ -36,6 +36,7 @@ class BrowseController : public QObject {
     Q_PROPERTY(bool connected READ connected NOTIFY connectedChanged)
     Q_PROPERTY(bool busy READ busy NOTIFY busyChanged)
     Q_PROPERTY(QString remoteFree READ remoteFree NOTIFY remoteFreeChanged)
+    Q_PROPERTY(QStringList bookmarks READ bookmarks NOTIFY bookmarksChanged)
 public:
     BrowseController(RsyncCapabilities caps, SshHostStore hostStore, SecretStore secrets,
                      TransferManager *transfers, QObject *parent = nullptr);
@@ -48,6 +49,13 @@ public:
     bool connected() const { return m_connected; }
     bool busy() const { return m_busy; }
     QString remoteFree() const { return m_remoteFree; }  // "X free of Y" for the remote header
+    QStringList bookmarks() const { return m_bookmarks; }  // saved paths for the connected host
+
+    // Favorite remote paths, persisted per host (QSettings). Add/remove the current
+    // directory; jump to a saved one.
+    Q_INVOKABLE void addBookmark();
+    Q_INVOKABLE void removeBookmark(const QString &path);
+    Q_INVOKABLE void gotoBookmark(const QString &path);
 
     // Connect to a saved or typed SSH target ("user@host" / "host"): resolves the
     // saved key/port/keychain password (if any), then lists the home directory.
@@ -94,6 +102,7 @@ signals:
     void connectedChanged();
     void busyChanged();
     void remoteFreeChanged();
+    void bookmarksChanged();
     /// Key auth failed; the UI should prompt for a password (prefilled with `user`)
     /// and call connectWithPassword(). `host` is shown for context.
     void authRequired(const QString &host, const QString &user);
@@ -112,6 +121,7 @@ private:
                   const QString &error);
     void setBusy(bool busy);
     void setConnected(bool connected);
+    void reloadBookmarks();  // refresh m_bookmarks for the current target from QSettings
     SyncJob transferJob() const;  // a SyncJob carrying the current ssh credentials
     // Walk a local source off the UI thread and seed transfer `id`'s file tree with
     // the result (delivered back on the GUI thread). `topName` is the rsync-relative
@@ -133,6 +143,7 @@ private:
     QString m_sshPassword;  // session password (empty = key/agent auth)
 
     QString m_remoteFree;   // free/total summary for the connected remote filesystem
+    QStringList m_bookmarks;  // favorite paths for the current target (from QSettings)
 
     QString m_localPath;
     QString m_remotePath;   // resolved absolute remote dir (trailing slash)

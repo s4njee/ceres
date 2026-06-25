@@ -310,6 +310,37 @@ Item {
                 }
             }
 
+            // bookmarks bar (favorite remote paths for the connected host)
+            Flow {
+                Layout.fillWidth: true
+                Layout.leftMargin: 12
+                Layout.rightMargin: 12
+                spacing: 6
+                visible: browse.connected
+                Text {
+                    text: "★"
+                    color: Theme.textTertiary
+                    font.pixelSize: 12
+                    height: 22
+                    verticalAlignment: Text.AlignVCenter
+                }
+                FlatButton {
+                    label: "Bookmark this folder"
+                    onClicked: browse.addBookmark()
+                }
+                Repeater {
+                    model: browse.bookmarks
+                    delegate: Chip {
+                        required property string modelData
+                        label: modelData
+                        // Left-click jumps to it; the ✕ removes it.
+                        onToggled: browse.gotoBookmark(modelData)
+                        removable: true
+                        onRemoved: browse.removeBookmark(modelData)
+                    }
+                }
+            }
+
             // dual panes (equal width + height)
             RowLayout {
                 Layout.fillWidth: true
