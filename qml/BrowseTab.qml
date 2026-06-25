@@ -388,16 +388,11 @@ Item {
                 Layout.rightMargin: 12
                 spacing: 6
                 visible: browse.connected
-                Text {
-                    text: "★"
-                    color: Theme.textTertiary
-                    font.pixelSize: 12
-                    height: 22
-                    verticalAlignment: Text.AlignVCenter
-                }
-                FlatButton {
-                    label: "Bookmark this folder"
-                    onClicked: browse.addBookmark()
+                // A Chip (not a FlatButton) so it's the same size as the bookmark pills.
+                Chip {
+                    label: "★ Bookmark this folder"
+                    tooltip: "Save the current remote folder"
+                    onToggled: browse.addBookmark()
                 }
                 Repeater {
                     model: browse.bookmarks
