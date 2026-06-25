@@ -82,14 +82,6 @@ ColumnLayout {
             elide: Text.ElideRight
             Layout.fillWidth: true
         }
-        Text {
-            visible: pane.info.length > 0
-            text: pane.info
-            color: Theme.textTertiary
-            font.pixelSize: 11
-            elide: Text.ElideLeft
-            Layout.maximumWidth: 160
-        }
         Field {
             id: filterField
             Layout.preferredWidth: 120
@@ -101,6 +93,16 @@ ColumnLayout {
         }
         FlatButton { label: "Up"; active: pane.enabledActions && !pane.busy; onClicked: pane.upRequested() }
         FlatButton { label: "Refresh"; active: pane.enabledActions && !pane.busy; onClicked: pane.refreshRequested() }
+    }
+
+    // Second line: optional info (e.g. remote free disk space), on its own row.
+    Text {
+        Layout.fillWidth: true
+        visible: pane.info.length > 0
+        text: pane.info
+        color: Theme.textTertiary
+        font.pixelSize: 11
+        elide: Text.ElideRight
     }
 
     Field {

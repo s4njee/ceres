@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Moved the remote free-space indicator onto its own line below the pane header (was sharing the header row with the title), so it has room to show "X free of Y" in full.
 - Moved the "verify" (checksum) toggle from the transfers modal to the browse toolbar, so it can be enabled before any transfer starts rather than only once the modal has opened mid-run.
 
 - Added path autocomplete to the browse path fields (both panes): press Tab to complete, arrows to navigate the dropdown, Enter to accept. Local paths complete synchronously against the filesystem; remote paths complete over SSH via the session's credentials (`PathCompleter`), reusing the same machinery the Sync form uses.
