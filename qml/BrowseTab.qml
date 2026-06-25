@@ -427,6 +427,11 @@ Item {
     CtxMenu {
         id: remoteMenu
         CtxItem {
+            text: "Calculate size"
+            enabled: remotePane.selected.length === 1
+            onTriggered: browse.remoteFolderSize(remotePane.selected[0])
+        }
+        CtxItem {
             text: "New folder"
             onTriggered: tab.promptInput("New folder name", "", function(v) { browse.mkdirRemote(v) })
         }
@@ -476,6 +481,7 @@ Item {
         function onAuthRequired(host, user) { sshAuthDialog.show(host, user) }
         function onHostKeyChanged(host) { knownHostDialog.show(host) }
         function onErrorOccurred(msg) { tab.message = msg; messageTimer.restart() }
+        function onInfoOccurred(msg) { tab.message = msg; messageTimer.restart() }
     }
     Connections {
         target: transfers

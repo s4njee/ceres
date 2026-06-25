@@ -7,6 +7,7 @@
 #include <QProcessEnvironment>
 #include <QRegularExpression>
 #include <QStringList>
+#include <functional>
 #include <utility>
 
 #include "core/Endpoint.h"
@@ -289,6 +290,89 @@ void RemoteFs::enumerate(const QString &token, const QString &target, const QStr
     proc->start(sshProgramFor(m_caps), args);
     proc->write(script.toUtf8());
     proc->closeWriteChannel();
+}
+
+namespace {
+// Run a script over ssh and hand its trimmed stdout (or an error string) to `handler`.
+// Like runOpCommand but it captures stdout — used by the read-only scalar queries
+// (du/df) that need the command's output, not just its exit status.
+void runQueryCommand(RemoteFs *self, const RsyncCapabilities &caps, const QString &target,
+                     const QString &sshKey, int port, const QString &password,
+                     const QString &script,
+                     std::function<void(const QString &out, const QString &error)> handler)
+{
+    const Endpoint endpoint = endpointForTarget(target);
+    QStringList args = sshArgsFor(endpoint, sshKey, port, caps.pathStyle, !password.isEmpty());
+    args << QStringLiteral("/bin/sh");
+
+    auto *proc = new QProcess(self);
+    proc->setProcessEnvironment(sshEnvironmentFor(caps, password));
+    QObject::connect(proc, &QProcess::finished, self,
+                     [proc, handler = std::move(handler)](int, QProcess::ExitStatus) {
+        const QString out = QString::fromUtf8(proc->readAllStandardOutput()).trimmed();
+        const QString errOut = QString::fromUtf8(proc->readAllStandardError()).trimmed();
+        const bool failed = proc->exitStatus() != QProcess::NormalExit || proc->exitCode() != 0;
+        proc->deleteLater();
+        handler(out, failed ? (errOut.isEmpty() ? QStringLiteral("Command failed") : errOut)
+                            : QString());
+    });
+    QObject::connect(proc, &QProcess::errorOccurred, self,
+                     [proc, handler](QProcess::ProcessError) {
+        const QString reason = proc->errorString();
+        proc->deleteLater();
+        handler(QString(), reason);
+    });
+    proc->start(sshProgramFor(caps), args);
+    proc->write(script.toUtf8());
+    proc->closeWriteChannel();
+}
+}  // namespace
+
+void RemoteFs::diskUsage(const QString &target, const QString &dir, const QString &name,
+                         const QString &sshKey, int port, const QString &password)
+{
+    // `du -sk` prints "<kbytes>\t<path>"; we take the leading KB count.
+    const QString script = QStringLiteral("cd -- %1 2>/dev/null && du -sk -- %2\n")
+                .arg(shellPathArg(dir), shellPathArg(name));
+    runQueryCommand(this, m_caps, target, sshKey, port, password, script,
+                    [this, name](const QString &out, const QString &error) {
+        if (!error.isEmpty()) {
+            emit diskUsageReady(name, 0, error);
+            return;
+        }
+        bool ok = false;
+        const qint64 kb = out.section(QRegularExpression(QStringLiteral("\\s+")), 0, 0).toLongLong(&ok);
+        emit diskUsageReady(name, ok ? kb * 1024 : 0,
+                            ok ? QString() : QStringLiteral("Could not read folder size"));
+    });
+}
+
+void RemoteFs::freeSpace(const QString &target, const QString &dir, const QString &sshKey, int port,
+                         const QString &password)
+{
+    // `df -Pk .` (POSIX format) keeps one line per filesystem: Filesystem, 1024-blocks,
+    // Used, Available, Capacity, Mounted-on. We read total (col 2) and available (col 4).
+    const QString script = QStringLiteral("cd -- %1 2>/dev/null && df -Pk .\n").arg(shellPathArg(dir));
+    runQueryCommand(this, m_caps, target, sshKey, port, password, script,
+                    [this](const QString &out, const QString &error) {
+        if (!error.isEmpty()) {
+            emit freeSpaceReady(0, 0, error);
+            return;
+        }
+        const QStringList lines = out.split(QLatin1Char('\n'), Qt::SkipEmptyParts);
+        for (const QString &line : lines) {
+            if (line.startsWith(QLatin1String("Filesystem")))
+                continue;  // header
+            const QStringList cols = line.split(QRegularExpression(QStringLiteral("\\s+")),
+                                                Qt::SkipEmptyParts);
+            if (cols.size() >= 4) {
+                emit freeSpaceReady(cols.at(3).toLongLong() * 1024, cols.at(1).toLongLong() * 1024,
+                                    QString());
+                return;
+            }
+        }
+        emit freeSpaceReady(0, 0, QStringLiteral("Could not read free space"));
+    });
 }
 
 namespace {

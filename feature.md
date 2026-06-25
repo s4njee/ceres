@@ -78,7 +78,7 @@ Legend: `[x]` already in Ceres · `[ ]` not yet · _(italic notes for caveats)_
 - [ ] Duplicate
 - [ ] Multi-select batch operations
 - [t] Free-space / disk-usage display for the remote
-- [t] Calculate remote folder size
+- [x] Calculate remote folder size
 
 ## Editing & viewing
 - [t] Quick-view a remote file (text/image preview)

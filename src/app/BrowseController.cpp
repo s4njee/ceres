@@ -48,6 +48,20 @@ QString withTrailingSlash(const QString &p)
     return p.endsWith(QLatin1Char('/')) ? p : p + QLatin1Char('/');
 }
 
+// Human-readable byte count (e.g. "1.4 GB"), for toast messages.
+QString formatBytes(qint64 bytes)
+{
+    static const char *units[] = {"B", "KB", "MB", "GB", "TB", "PB"};
+    double v = static_cast<double>(bytes);
+    int u = 0;
+    while (v >= 1024.0 && u < 5) {
+        v /= 1024.0;
+        ++u;
+    }
+    return QString::number(v, 'f', u == 0 ? 0 : 1) + QLatin1Char(' ')
+            + QLatin1String(units[u]);
+}
+
 // Walk a local file or directory and return paths relative to its parent — each
 // prefixed with `topName` — matching the form rsync itemizes when copying the item
 // into a destination. A plain file yields just { topName }. Symlinks are skipped
@@ -103,6 +117,13 @@ BrowseController::BrowseController(RsyncCapabilities caps, SshHostStore hostStor
             emit errorOccurred(error);
         remoteRefresh();  // reflect the mkdir/delete/rename either way
     });
+    connect(&m_remoteFs, &RemoteFs::diskUsageReady, this,
+            [this](const QString &name, qint64 bytes, const QString &error) {
+                if (!error.isEmpty())
+                    emit errorOccurred(error);
+                else
+                    emit infoOccurred(name + QStringLiteral(": ") + formatBytes(bytes));
+            });
     // A download's remote walk finished: seed the full file list at 0%. Best-effort —
     // an enumeration error (auth/unreachable) just leaves the transfer to fill rows in
     // live, so it's swallowed here (the transfer itself surfaces real failures).
@@ -364,6 +385,13 @@ void BrowseController::renameLocal(const QString &from, const QString &to)
     if (!dir.rename(from, to.trimmed()))
         emit errorOccurred(QStringLiteral("Could not rename %1").arg(from));
     localRefresh();
+}
+
+void BrowseController::remoteFolderSize(const QString &name)
+{
+    if (!m_connected || name.isEmpty())
+        return;
+    m_remoteFs.diskUsage(m_target, m_remotePath, name, m_sshKey, m_sshPort, m_sshPassword);
 }
 
 void BrowseController::revealLocal(const QString &name)

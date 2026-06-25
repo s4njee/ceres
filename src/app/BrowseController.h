@@ -64,6 +64,8 @@ public:
     Q_INVOKABLE void mkdirRemote(const QString &name);
     Q_INVOKABLE void deleteRemote(const QStringList &names);
     Q_INVOKABLE void renameRemote(const QString &from, const QString &to);
+    // Recursively compute the size of a remote folder/file; result arrives via infoOccurred.
+    Q_INVOKABLE void remoteFolderSize(const QString &name);
 
     // Local navigation + ops (operate on the local filesystem; no ssh).
     Q_INVOKABLE void localCd(const QString &name);
@@ -94,6 +96,8 @@ signals:
     void authRequired(const QString &host, const QString &user);
     /// A remote op or listing failed; carries a human-readable message for a toast.
     void errorOccurred(const QString &message);
+    /// A non-error status result (e.g. a computed folder size) for the transient toast.
+    void infoOccurred(const QString &message);
     /// The remote host key changed; UI should confirm before removing known_hosts.
     void hostKeyChanged(const QString &host);
     /// A host was saved/updated (so the sidebar's SshHostListModel can reload).

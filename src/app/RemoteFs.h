@@ -44,6 +44,14 @@ public:
     void enumerate(const QString &token, const QString &target, const QString &dir,
                    const QString &leaf, const QString &sshKey, int port, const QString &password);
 
+    // Recursively size `dir`/`name` with `du -sk`; reports the total via diskUsageReady.
+    void diskUsage(const QString &target, const QString &dir, const QString &name,
+                   const QString &sshKey, int port, const QString &password);
+    // Query free/total space on the filesystem holding `dir` with `df -Pk`; reports
+    // via freeSpaceReady. Cheap enough to run alongside each directory listing.
+    void freeSpace(const QString &target, const QString &dir, const QString &sshKey, int port,
+                   const QString &password);
+
     // Pure, unit-testable: parse the body of `ls -lA` output into entries.
     static QList<FileEntry> parseLsList(const QString &lsOutput);
 
@@ -57,6 +65,10 @@ signals:
     // enumerate() finished. `relPaths` are paths relative to the enumerated dir
     // (prefixed with the leaf). On failure `error` is non-empty and the list empty.
     void enumerated(const QString &token, const QStringList &relPaths, const QString &error);
+    // diskUsage() finished: `bytes` is the total under `name`. Error non-empty on failure.
+    void diskUsageReady(const QString &name, qint64 bytes, const QString &error);
+    // freeSpace() finished: bytes available and total on the filesystem. Error on failure.
+    void freeSpaceReady(qint64 availableBytes, qint64 totalBytes, const QString &error);
     // A command failed public-key auth; UI should prompt for a password and retry.
     void authRequired(const QString &target, const QString &host, const QString &user);
     // SSH found a changed known_hosts entry; UI should ask before removing it.
