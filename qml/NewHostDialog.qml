@@ -12,6 +12,7 @@ Rectangle {
 
     function show() {
         hostField.text = ""
+        labelField.text = ""
         keyField.text = ""
         portField.text = ""
         open = true
@@ -31,6 +32,7 @@ Rectangle {
             t += "~/"
         controller.saveSshHostForJob({
             destination: t,
+            name: labelField.text.trim(),   // optional friendly label (empty = use target)
             sshKey: keyField.text.trim(),
             sshPort: parseInt(portField.text) || 0
         })
@@ -83,6 +85,18 @@ Rectangle {
                     id: hostField
                     Layout.fillWidth: true
                     placeholderText: "user@host"
+                    onAccepted: root.save()
+                }
+            }
+
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: 4
+                Text { text: "Label (optional)"; color: Theme.textSecondary; font.pixelSize: 11 }
+                Field {
+                    id: labelField
+                    Layout.fillWidth: true
+                    placeholderText: "Friendly name for the sidebar"
                     onAccepted: root.save()
                 }
             }

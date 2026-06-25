@@ -448,7 +448,8 @@ SshHost JobController::sshHostFromJob(const SyncJob &job, bool hasPassword) cons
     const int at = e.sshTarget.lastIndexOf(QLatin1Char('@'));
     host.user = at >= 0 ? e.sshTarget.left(at) : QString();
     host.host = at >= 0 ? e.sshTarget.mid(at + 1) : e.sshTarget;
-    host.label = e.sshTarget;
+    // A friendly label if the caller supplied one (SyncJob.name), else the target.
+    host.label = job.name.trimmed().isEmpty() ? e.sshTarget : job.name.trimmed();
     host.sshKeyPath = job.sshKeyPath;
     host.sshPort = job.sshPort;
     host.hasPassword = hasPassword;
@@ -467,6 +468,9 @@ void JobController::saveSshHost(const SyncJob &job, bool hasPassword)
             host.sshKeyPath = existing.sshKeyPath;
         if (host.sshPort == 0)
             host.sshPort = existing.sshPort;
+        // Don't clobber a previously-set friendly label with the default (the target).
+        if (host.label == host.target && existing.label != existing.target)
+            host.label = existing.label;
         host.hasPassword = hasPassword || existing.hasPassword;
     }
     if (m_sshHostStore.upsert(host))

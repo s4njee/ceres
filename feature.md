@@ -16,7 +16,7 @@ Legend: `[x]` already in Ceres · `[ ]` not yet · _(italic notes for caveats)_
 - [x] Password / keyboard-interactive authentication
 - [x] Save hosts for quick reconnect
 - [x] Store passwords in the OS keychain (macOS Keychain / Windows Credential Manager)
-- [t] Per-host saved username, key, and port as a connection profile
+- [x] Per-host saved username, key, and port as a connection profile
 - [ ] Encrypted-key passphrase prompt (separate from login password)
 - [ ] SSH agent forwarding toggle
 - [ ] Jump host / `ProxyJump` (bastion) support
