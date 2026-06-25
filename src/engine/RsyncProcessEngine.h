@@ -50,6 +50,10 @@ public:
 private:
     void ensureProcess();
     void launch(bool dryRun);  // configure + start m_process
+    // Replace any session secret (ssh/daemon password) that leaks into an output line
+    // with "***" before it reaches the UI log. Defence in depth — secrets go via env,
+    // not argv, but ssh/daemon error text could still echo a credential.
+    QString redact(const QString &line) const;
 
     RsyncCapabilities m_caps;
     bool m_perFileProgress = false;

@@ -63,12 +63,25 @@ void suspendResumeJobProcesses(HANDLE job, bool suspend)
 RsyncProcessEngine::RsyncProcessEngine(RsyncCapabilities caps, QObject *parent)
     : SyncEngine(parent), m_caps(std::move(caps))
 {
-    // Forward parser output straight through as engine signals.
+    // Forward parser output straight through as engine signals. Text-carrying signals
+    // (log, stats) are scrubbed of any session secret before they leave the engine.
     connect(&m_parser, &OutputParser::change, this, &SyncEngine::change);
     connect(&m_parser, &OutputParser::progress, this, &SyncEngine::progress);
     connect(&m_parser, &OutputParser::fileProgress, this, &SyncEngine::fileProgress);
-    connect(&m_parser, &OutputParser::stats, this, &SyncEngine::stats);
-    connect(&m_parser, &OutputParser::log, this, &SyncEngine::log);
+    connect(&m_parser, &OutputParser::stats, this,
+            [this](const QString &l) { emit stats(redact(l)); });
+    connect(&m_parser, &OutputParser::log, this,
+            [this](const QString &l) { emit log(redact(l)); });
+}
+
+QString RsyncProcessEngine::redact(const QString &line) const
+{
+    QString out = line;
+    for (const QString &secret : {m_job.sshPassword, m_job.daemonPassword}) {
+        if (!secret.isEmpty())
+            out.replace(secret, QStringLiteral("***"));
+    }
+    return out;
 }
 
 void RsyncProcessEngine::ensureProcess()
@@ -86,7 +99,7 @@ void RsyncProcessEngine::ensureProcess()
         const QString err = QString::fromUtf8(m_process->readAllStandardError());
         const auto lines = err.split(QLatin1Char('\n'), Qt::SkipEmptyParts);
         for (const QString &line : lines)
-            emit errorOutput(line);
+            emit errorOutput(redact(line));
     });
 
     connect(m_process, &QProcess::finished, this,

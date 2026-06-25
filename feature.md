@@ -99,7 +99,7 @@ Legend: `[x]` already in Ceres · `[ ]` not yet · _(italic notes for caveats)_
 - [x] Strict host-key checking with explicit trust-on-first-use
 - [ ] Optional master password to unlock saved credentials
 - [ ] Configurable ciphers / KEX / MAC algorithms
-- [t] Redact credentials from logs
+- [x] Redact credentials from logs
 
 ## UX & quality of life
 - [x] LAN peer discovery
