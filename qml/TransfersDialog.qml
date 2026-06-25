@@ -9,6 +9,16 @@ import QtQuick.Layouts
 Rectangle {
     id: root
     property bool open: false
+    property bool historyMode: false
+    property var historyItems: []
+
+    function refreshHistory() { historyItems = transfers.history() }
+    onOpenChanged: if (open && historyMode) refreshHistory()
+
+    Connections {
+        target: transfers
+        function onHistoryChanged() { if (root.historyMode) root.refreshHistory() }
+    }
 
     anchors.fill: parent
     visible: open
@@ -35,7 +45,16 @@ Rectangle {
             RowLayout {
                 Layout.fillWidth: true
                 spacing: 8
-                Text { text: "Transfers"; color: Theme.textPrimary; font.pixelSize: 15 }
+                Text { text: root.historyMode ? "History" : "Transfers"; color: Theme.textPrimary; font.pixelSize: 15 }
+                FlatButton {
+                    label: root.historyMode ? "Active" : "History"
+                    onClicked: { root.historyMode = !root.historyMode; if (root.historyMode) root.refreshHistory() }
+                }
+                FlatButton {
+                    label: "Clear"
+                    visible: root.historyMode
+                    onClicked: transfers.clearHistory()
+                }
                 Item { Layout.fillWidth: true }
                 Text {
                     text: transfers.activeCount > 0 ? transfers.activeCount + " active" : ""
@@ -99,11 +118,64 @@ Rectangle {
                 border.width: 1
                 border.color: Theme.border
 
+                // Persistent log of finished transfers (most-recent first).
+                ListView {
+                    id: historyList
+                    anchors.fill: parent
+                    anchors.margins: 4
+                    clip: true
+                    visible: root.historyMode
+                    model: root.historyItems
+                    spacing: 2
+                    ScrollBar.vertical: ScrollBar {}
+
+                    Text {
+                        anchors.centerIn: parent
+                        visible: historyList.count === 0
+                        text: "No past transfers"
+                        color: Theme.textTertiary
+                        font.pixelSize: 12
+                    }
+
+                    delegate: RowLayout {
+                        required property var modelData
+                        width: ListView.view.width
+                        spacing: 8
+                        Text {
+                            text: modelData.direction === "up" ? "↑" : "↓"
+                            color: Theme.accent
+                            font.pixelSize: 12
+                        }
+                        Text {
+                            Layout.fillWidth: true
+                            text: modelData.name
+                            color: Theme.textPrimary
+                            font.family: Theme.mono
+                            font.pixelSize: 11
+                            elide: Text.ElideMiddle
+                        }
+                        Text {
+                            text: modelData.status
+                            color: modelData.status === "Done" ? Theme.ok
+                                  : (modelData.status === "Failed" ? Theme.danger : Theme.textTertiary)
+                            font.pixelSize: 11
+                        }
+                        Text {
+                            text: (modelData.time || "").replace("T", " ").slice(0, 16)
+                            color: Theme.textTertiary
+                            font.pixelSize: 10
+                            Layout.preferredWidth: 104
+                            horizontalAlignment: Text.AlignRight
+                        }
+                    }
+                }
+
                 ListView {
                     id: list
                     anchors.fill: parent
                     anchors.margins: 4
                     clip: true
+                    visible: !root.historyMode
                     model: transfers.model
                     spacing: 2
                     ScrollBar.vertical: ScrollBar {}

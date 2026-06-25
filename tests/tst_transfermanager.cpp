@@ -1,6 +1,8 @@
 #include <QtTest>
 
+#include <QDir>
 #include <QList>
+#include <QSettings>
 #include <QVariantList>
 #include <QVariantMap>
 
@@ -88,6 +90,14 @@ public:
 class TransferManagerTest : public QObject {
     Q_OBJECT
 private slots:
+    // Redirect QSettings (history persistence) to a temp dir so tests don't touch the
+    // developer's real Ceres settings.
+    void initTestCase()
+    {
+        QSettings::setPath(QSettings::IniFormat, QSettings::UserScope,
+                           QDir::tempPath() + QStringLiteral("/ceres-tm-test"));
+    }
+
     void capRespected();
     void queueDrains();
     void failureMarksFailed();
@@ -100,6 +110,7 @@ private slots:
     void retryResubmitsFailedTransfer();
     void allCompleteFiresWhenQueueDrains();
     void verifyStampsChecksumOnJob();
+    void recordsHistoryOnFinish();
 };
 
 // Find a file row (from the FilesRole tree) by its path, or an empty map if absent.
@@ -452,6 +463,28 @@ void TransferManagerTest::verifyStampsChecksumOnJob()
     mgr.setVerifyChecksums(true);
     mgr.enqueue(jobN(1), QStringLiteral("up"), QStringLiteral("t1"));
     QVERIFY(factory.created.at(1)->lastJob.checksum);
+}
+
+void TransferManagerTest::recordsHistoryOnFinish()
+{
+    FakeEngineFactory factory;
+    TransferManager mgr(std::ref(factory));
+    mgr.clearHistory();  // isolate from records left by earlier tests
+    QCOMPARE(mgr.history().size(), 0);
+
+    mgr.enqueue(jobN(0), QStringLiteral("up"), QStringLiteral("t0"));
+    factory.created.at(0)->finish(0);
+
+    const QVariantList h = mgr.history();
+    QCOMPARE(h.size(), 1);
+    const QVariantMap rec = h.at(0).toMap();
+    QCOMPARE(rec.value(QStringLiteral("name")).toString(), QStringLiteral("t0"));
+    QCOMPARE(rec.value(QStringLiteral("direction")).toString(), QStringLiteral("up"));
+    QCOMPARE(rec.value(QStringLiteral("status")).toString(), QStringLiteral("Done"));
+    QVERIFY(!rec.value(QStringLiteral("time")).toString().isEmpty());
+
+    mgr.clearHistory();
+    QCOMPARE(mgr.history().size(), 0);
 }
 
 QTEST_MAIN(TransferManagerTest)

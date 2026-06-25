@@ -96,6 +96,11 @@ public:
     Q_INVOKABLE void resume(const QString &id);
     Q_INVOKABLE void clearCompleted() { m_model.clearCompleted(); }
 
+    // Persistent log of finished transfers (most-recent first), survives restarts.
+    // Each entry is a map: { name, direction, destination, status, time }.
+    Q_INVOKABLE QVariantList history() const;
+    Q_INVOKABLE void clearHistory();
+
 signals:
     void maxConcurrentChanged();
     void rateLimitChanged();
@@ -106,6 +111,7 @@ signals:
     // The last in-flight transfer finished and nothing is queued: the batch is done.
     // `failed` is how many of the just-drained batch ended in failure/cancellation.
     void allTransfersComplete(int failed);
+    void historyChanged();
 
 private:
     // Start queued transfers up to maxConcurrent. Re-entrant: called on every
@@ -131,4 +137,6 @@ private:
 
     // Emit allTransfersComplete() when a finish leaves nothing active or queued.
     void notifyIfDrained();
+    // Append a finished transfer to the persistent history (capped, most-recent first).
+    void recordHistory(const QString &id, const QString &status);
 };

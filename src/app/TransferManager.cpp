@@ -1,9 +1,25 @@
 #include "app/TransferManager.h"
 
+#include <QDateTime>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QSettings>
 #include <QUuid>
 
 #include "engine/RsyncProcessEngine.h"
 #include "engine/SyncEngine.h"
+
+namespace {
+const QString kHistoryKey = QStringLiteral("transferHistory");
+constexpr int kHistoryCap = 200;
+
+QSettings historySettings()
+{
+    return QSettings(QSettings::IniFormat, QSettings::UserScope, QStringLiteral("Ceres"),
+                     QStringLiteral("Ceres"));
+}
+}  // namespace
 
 TransferManager::TransferManager(RsyncCapabilities caps, QObject *parent)
     : QObject(parent)
@@ -138,6 +154,9 @@ void TransferManager::pump()
                                                        : TransfersModel::Failed));
             if (crashed || code != 0)
                 ++m_batchFailures;
+            recordHistory(id, crashed ? QStringLiteral("Cancelled")
+                                      : (code == 0 ? QStringLiteral("Done")
+                                                   : QStringLiteral("Failed")));
             m_active.remove(id);
             m_paused.remove(id);
             e->deleteLater();
@@ -148,6 +167,7 @@ void TransferManager::pump()
 
         connect(e, &SyncEngine::failedToStart, this, [this, id, e](const QString &reason) {
             m_model.setStatus(id, TransfersModel::Failed, reason);
+            recordHistory(id, QStringLiteral("Failed"));
             ++m_batchFailures;
             m_active.remove(id);
             m_paused.remove(id);
@@ -160,6 +180,55 @@ void TransferManager::pump()
         emit activeCountChanged();
         e->start(job, /*dryRun=*/false);
     }
+}
+
+void TransferManager::recordHistory(const QString &id, const QString &status)
+{
+    // Pull display fields from the live row (still present until clearCompleted).
+    QString name, direction, dest;
+    for (int i = 0; i < m_model.rowCount(); ++i) {
+        const QModelIndex mi = m_model.index(i);
+        if (m_model.data(mi, TransfersModel::IdRole).toString() == id) {
+            name = m_model.data(mi, TransfersModel::NameRole).toString();
+            direction = m_model.data(mi, TransfersModel::DirectionRole).toString();
+            dest = m_model.data(mi, TransfersModel::DestinationRole).toString();
+            break;
+        }
+    }
+    if (name.isEmpty())
+        return;
+
+    QSettings s = historySettings();
+    QJsonArray arr = QJsonDocument::fromJson(s.value(kHistoryKey).toByteArray()).array();
+    QJsonObject o;
+    o[QStringLiteral("name")] = name;
+    o[QStringLiteral("direction")] = direction;
+    o[QStringLiteral("destination")] = dest;
+    o[QStringLiteral("status")] = status;
+    o[QStringLiteral("time")] = QDateTime::currentDateTime().toString(Qt::ISODate);
+    arr.prepend(o);  // most-recent first
+    while (arr.size() > kHistoryCap)
+        arr.removeLast();
+    s.setValue(kHistoryKey, QJsonDocument(arr).toJson(QJsonDocument::Compact));
+    emit historyChanged();
+}
+
+QVariantList TransferManager::history() const
+{
+    QSettings s = historySettings();
+    const QJsonArray arr = QJsonDocument::fromJson(s.value(kHistoryKey).toByteArray()).array();
+    QVariantList out;
+    out.reserve(arr.size());
+    for (const QJsonValue &v : arr)
+        out << v.toObject().toVariantMap();
+    return out;
+}
+
+void TransferManager::clearHistory()
+{
+    QSettings s = historySettings();
+    s.remove(kHistoryKey);
+    emit historyChanged();
 }
 
 void TransferManager::notifyIfDrained()
@@ -188,6 +257,7 @@ void TransferManager::cancel(const QString &id)
         if (m_queue.at(i).id == id) {
             m_queue.removeAt(i);
             m_model.setStatus(id, TransfersModel::Cancelled);
+            recordHistory(id, QStringLiteral("Cancelled"));
             return;
         }
     }

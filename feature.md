@@ -66,7 +66,7 @@ Legend: `[x]` already in Ceres · `[ ]` not yet · _(italic notes for caveats)_
 - [x] Overwrite policy (skip / overwrite / rename / newer-only) prompts
 - [x] Bandwidth / transfer-rate limit
 - [x] Per-transfer ETA and overall throughput summary
-- [t] Transfer history / log of completed transfers
+- [x] Transfer history / log of completed transfers
 - [x] Retry failed transfers
 - [x] Verify integrity after transfer (checksum compare)
 
