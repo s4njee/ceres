@@ -23,6 +23,8 @@ struct SyncJob {
     bool deleteExtraneous = false;  // --delete
     int maxDelete = 0;              // --max-delete=N safety cap (0 = no limit)
     int bwLimitKBps = 0;            // --bwlimit=N transfer-rate cap in KB/s (0 = unlimited)
+    bool ignoreExisting = false;    // --ignore-existing (skip files already on the dest)
+    bool updateOnly = false;        // --update (skip files newer on the dest)
 
     QStringList excludes;           // order-significant -> --exclude=<pat>
     QStringList extraArgs;          // appended verbatim before SRC/DEST

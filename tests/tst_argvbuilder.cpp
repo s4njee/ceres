@@ -59,6 +59,7 @@ private slots:
     void maxDeleteCap();
     void bwLimit();
     void partialOnlyForPerFileTransfers();
+    void overwritePolicyFlags();
     void expandsLocalTilde();
     void convertsWindowsLocalPaths();
     void windowsBuildConvertsLocalEndpoints();
@@ -312,6 +313,25 @@ void ArgvBuilderTest::partialOnlyForPerFileTransfers()
     ArgvBuilder::BuildOptions options;
     options.perFileProgress = true;
     QVERIFY(ArgvBuilder::build(job, modern(), options).contains(QStringLiteral("--partial")));
+}
+
+void ArgvBuilderTest::overwritePolicyFlags()
+{
+    SyncJob job;
+    job.source = QStringLiteral("a/");
+    job.destination = QStringLiteral("b/");
+
+    // Default: neither flag (plain overwrite).
+    const QStringList plain = ArgvBuilder::build(job, modern(), false);
+    QVERIFY(!plain.contains(QStringLiteral("--ignore-existing")));
+    QVERIFY(!plain.contains(QStringLiteral("--update")));
+
+    job.ignoreExisting = true;
+    QVERIFY(ArgvBuilder::build(job, modern(), false).contains(QStringLiteral("--ignore-existing")));
+
+    job.ignoreExisting = false;
+    job.updateOnly = true;
+    QVERIFY(ArgvBuilder::build(job, modern(), false).contains(QStringLiteral("--update")));
 }
 
 void ArgvBuilderTest::expandsLocalTilde()

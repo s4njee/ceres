@@ -122,6 +122,12 @@ QStringList ArgvBuilder::build(const SyncJob &job, const RsyncCapabilities &caps
     }
     if (job.bwLimitKBps > 0)  // cap transfer rate so a big sync doesn't saturate the link
         args << (QStringLiteral("--bwlimit=") + QString::number(job.bwLimitKBps));
+    // Overwrite policy (mutually exclusive in the UI): skip files already present, or
+    // only replace when the source is newer. Default (neither) overwrites.
+    if (job.ignoreExisting)
+        args << QStringLiteral("--ignore-existing");
+    if (job.updateOnly)
+        args << QStringLiteral("--update");
 
     // Always-on machine-readable output that drives the UI.
     args << QStringLiteral("--itemize-changes") << QStringLiteral("--stats");

@@ -54,6 +54,14 @@ void TransferManager::setVerifyChecksums(bool on)
     emit verifyChanged();
 }
 
+void TransferManager::setOverwritePolicy(int policy)
+{
+    if (policy < Overwrite || policy > NewerOnly || policy == m_overwritePolicy)
+        return;
+    m_overwritePolicy = policy;
+    emit overwritePolicyChanged();
+}
+
 QString TransferManager::enqueue(const SyncJob &job, const QString &direction, const QString &name)
 {
     const QString id = QUuid::createUuid().toString(QUuid::WithoutBraces);
@@ -84,6 +92,8 @@ void TransferManager::pump()
         SyncJob job = pending.job;
         job.bwLimitKBps = m_rateLimitKBps;     // apply the current rate cap at start time
         job.checksum = job.checksum || m_verifyChecksums;  // -c content verification
+        job.ignoreExisting = (m_overwritePolicy == SkipExisting);
+        job.updateOnly = (m_overwritePolicy == NewerOnly);
 
         SyncEngine *e = m_factory();
         e->setParent(this);

@@ -65,6 +65,32 @@ Rectangle {
                 }
             }
 
+            // Overwrite policy for files already present at the destination.
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 6
+                Text { text: "On conflict:"; color: Theme.textTertiary; font.pixelSize: 12 }
+                Chip {
+                    label: "overwrite"
+                    active: transfers.overwritePolicy === 0
+                    tooltip: "Replace destination files (rsync default)"
+                    onToggled: transfers.overwritePolicy = 0
+                }
+                Chip {
+                    label: "skip existing"
+                    active: transfers.overwritePolicy === 1
+                    tooltip: "Never touch files already on the destination (--ignore-existing)"
+                    onToggled: transfers.overwritePolicy = 1
+                }
+                Chip {
+                    label: "newer only"
+                    active: transfers.overwritePolicy === 2
+                    tooltip: "Only replace when the source is newer (--update)"
+                    onToggled: transfers.overwritePolicy = 2
+                }
+                Item { Layout.fillWidth: true }
+            }
+
             Rectangle {
                 Layout.fillWidth: true
                 Layout.fillHeight: true

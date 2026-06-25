@@ -38,9 +38,14 @@ class TransferManager : public QObject {
     Q_PROPERTY(int maxConcurrent READ maxConcurrent WRITE setMaxConcurrent NOTIFY maxConcurrentChanged)
     Q_PROPERTY(int rateLimitKBps READ rateLimitKBps WRITE setRateLimitKBps NOTIFY rateLimitChanged)
     Q_PROPERTY(bool verifyChecksums READ verifyChecksums WRITE setVerifyChecksums NOTIFY verifyChanged)
+    Q_PROPERTY(int overwritePolicy READ overwritePolicy WRITE setOverwritePolicy NOTIFY overwritePolicyChanged)
     Q_PROPERTY(int activeCount READ activeCount NOTIFY activeCountChanged)
 public:
     using EngineFactory = std::function<SyncEngine *()>;
+
+    // How a transfer treats files already present at the destination.
+    enum OverwritePolicy { Overwrite = 0, SkipExisting, NewerOnly };
+    Q_ENUM(OverwritePolicy)
 
     // Production ctor: the default factory creates a fresh RsyncProcessEngine
     // (with these caps) for every admitted transfer.
@@ -63,6 +68,10 @@ public:
     // by hash rather than size+mtime. Stamped onto each job as it starts.
     bool verifyChecksums() const { return m_verifyChecksums; }
     void setVerifyChecksums(bool on);
+
+    // Overwrite policy applied to each transfer as it starts (see OverwritePolicy).
+    int overwritePolicy() const { return m_overwritePolicy; }
+    void setOverwritePolicy(int policy);
 
     int activeCount() const { return m_active.size(); }
 
@@ -91,6 +100,7 @@ signals:
     void maxConcurrentChanged();
     void rateLimitChanged();
     void verifyChanged();
+    void overwritePolicyChanged();
     void activeCountChanged();
     void enqueued();  // emitted by enqueue() so the UI can auto-open the transfers modal
     // The last in-flight transfer finished and nothing is queued: the batch is done.
@@ -116,6 +126,7 @@ private:
     int m_maxConcurrent = 3;
     int m_rateLimitKBps = 0;
     bool m_verifyChecksums = false;
+    int m_overwritePolicy = Overwrite;
     int m_batchFailures = 0;  // failed/cancelled runs since the queue was last empty
 
     // Emit allTransfersComplete() when a finish leaves nothing active or queued.
