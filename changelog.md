@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Added native desktop notifications when a batch of transfers finishes: `TransferManager` emits `allTransfersComplete(failed)` when the queue drains, and a new `Notifier` posts a system notification (osascript on macOS, notify-send on Linux; no-op elsewhere) — GUI-free via QProcess. Covered by a manager test.
 - Added "Import config": pulls concrete hosts from `~/.ssh/config` (HostName / User / Port / IdentityFile, skipping wildcard patterns) into the saved-host sidebar, leaving existing entries untouched. New `SshConfigImport` parser in core with unit tests.
 - Saved SSH hosts can now carry a friendly label: the New SSH host dialog gained an optional "Label" field, and the store preserves a custom label across re-saves instead of overwriting it with the raw target. (Username, key, and port were already part of the saved-host profile.)
 - SSH connections now use keepalive (`ServerAliveInterval=15`, `ServerAliveCountMax=3`) on both the rsync transport and the browse plumbing, so long transfers and idle browse sessions survive a NAT timeout and a dead peer is detected in ~45s instead of hanging. Connect timeouts stay explicit (10s transport / 5s browse).

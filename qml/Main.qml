@@ -1250,4 +1250,14 @@ ApplicationWindow {
     }
 
     NewHostDialog { id: newHostDialog }
+
+    // Native notification when a batch of transfers drains.
+    Connections {
+        target: transfers
+        function onAllTransfersComplete(failed) {
+            notifier.notify("Ceres",
+                failed > 0 ? "Transfers finished — " + failed + " failed"
+                           : "All transfers complete")
+        }
+    }
 }

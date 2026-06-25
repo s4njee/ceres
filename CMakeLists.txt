@@ -49,6 +49,7 @@ add_library(ceres_core STATIC
     src/app/RemoteFs.h               src/app/RemoteFs.cpp
     src/app/TransferManager.h        src/app/TransferManager.cpp
     src/app/BrowseController.h       src/app/BrowseController.cpp
+    src/app/Notifier.h               src/app/Notifier.cpp
 )
 target_include_directories(ceres_core PUBLIC src)
 target_link_libraries(ceres_core PUBLIC Qt6::Core Qt6::Network)

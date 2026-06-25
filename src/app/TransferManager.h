@@ -86,6 +86,9 @@ signals:
     void rateLimitChanged();
     void activeCountChanged();
     void enqueued();  // emitted by enqueue() so the UI can auto-open the transfers modal
+    // The last in-flight transfer finished and nothing is queued: the batch is done.
+    // `failed` is how many of the just-drained batch ended in failure/cancellation.
+    void allTransfersComplete(int failed);
 
 private:
     // Start queued transfers up to maxConcurrent. Re-entrant: called on every
@@ -105,4 +108,8 @@ private:
     QSet<QString> m_paused;                 // ids the user paused (queued or active)
     int m_maxConcurrent = 3;
     int m_rateLimitKBps = 0;
+    int m_batchFailures = 0;  // failed/cancelled runs since the queue was last empty
+
+    // Emit allTransfersComplete() when a finish leaves nothing active or queued.
+    void notifyIfDrained();
 };

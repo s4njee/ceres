@@ -98,6 +98,7 @@ private slots:
     void seedShowsFilesUpfrontAndReconciles();
     void seedDoesNotResetLivePaths();
     void retryResubmitsFailedTransfer();
+    void allCompleteFiresWhenQueueDrains();
 };
 
 // Find a file row (from the FilesRole tree) by its path, or an empty map if absent.
@@ -415,6 +416,26 @@ void TransferManagerTest::retryResubmitsFailedTransfer()
     // A succeeded transfer drops its retained job: retrying it is a no-op.
     mgr.retry(id);
     QCOMPARE(factory.created.size(), 2);
+}
+
+void TransferManagerTest::allCompleteFiresWhenQueueDrains()
+{
+    FakeEngineFactory factory;
+    TransferManager mgr(std::ref(factory));
+    mgr.setMaxConcurrent(2);
+    QSignalSpy spy(&mgr, &TransferManager::allTransfersComplete);
+
+    mgr.enqueue(jobN(0), QStringLiteral("up"), QStringLiteral("t0"));
+    mgr.enqueue(jobN(1), QStringLiteral("up"), QStringLiteral("t1"));
+
+    // Finishing the first (of two active) doesn't drain the queue yet.
+    factory.created.at(0)->finish(0);
+    QCOMPARE(spy.count(), 0);
+
+    // The second finishes with an error: now drained, signal fires once with failed=1.
+    factory.created.at(1)->finish(23);
+    QCOMPARE(spy.count(), 1);
+    QCOMPARE(spy.at(0).at(0).toInt(), 1);
 }
 
 QTEST_MAIN(TransferManagerTest)

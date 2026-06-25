@@ -29,6 +29,7 @@
 #include "app/BrowseController.h"
 #include "app/JobController.h"
 #include "app/PathCompleter.h"
+#include "app/Notifier.h"
 #include "app/TransferManager.h"
 #include "core/SecretStore.h"
 #include "core/SshHostStore.h"
@@ -119,6 +120,7 @@ int main(int argc, char *argv[])
                              SshHostStore{}, true);
     PathCompleter completer(caps);
     TransferManager transfers(caps);
+    Notifier notifier;
     BrowseController browse(caps, SshHostStore{}, SecretStore{}, &transfers);
     // A host saved from the browse tab should appear in the sidebar immediately.
     QObject::connect(&browse, &BrowseController::hostsChanged,
@@ -129,6 +131,7 @@ int main(int argc, char *argv[])
     engine.rootContext()->setContextProperty(QStringLiteral("completer"), &completer);
     engine.rootContext()->setContextProperty(QStringLiteral("browse"), &browse);
     engine.rootContext()->setContextProperty(QStringLiteral("transfers"), &transfers);
+    engine.rootContext()->setContextProperty(QStringLiteral("notifier"), &notifier);
 
     QObject::connect(
         &engine, &QQmlApplicationEngine::objectCreationFailed, &app,

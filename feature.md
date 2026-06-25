@@ -106,7 +106,7 @@ Legend: `[x]` already in Ceres · `[ ]` not yet · _(italic notes for caveats)_
 - [x] Cross-platform (macOS / Windows / Linux)
 - [ ] Light / dark theme follow-system
 - [ ] Keyboard navigation & shortcuts throughout the browser
-- [t] Transfer notifications (system notification on completion)
+- [x] Transfer notifications (system notification on completion)
 - [ ] Drag a remote file out to the desktop to download
 - [t] Tabbed / multiple simultaneous host sessions
 - [t] Error toasts with actionable detail

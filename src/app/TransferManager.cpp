@@ -110,25 +110,41 @@ void TransferManager::pump()
             m_model.setStatus(id, crashed ? TransfersModel::Cancelled
                                           : (code == 0 ? TransfersModel::Done
                                                        : TransfersModel::Failed));
+            if (crashed || code != 0)
+                ++m_batchFailures;
             m_active.remove(id);
             m_paused.remove(id);
             e->deleteLater();
             emit activeCountChanged();
             pump();
+            notifyIfDrained();
         });
 
         connect(e, &SyncEngine::failedToStart, this, [this, id, e](const QString &reason) {
             m_model.setStatus(id, TransfersModel::Failed, reason);
+            ++m_batchFailures;
             m_active.remove(id);
             m_paused.remove(id);
             e->deleteLater();
             emit activeCountChanged();
             pump();
+            notifyIfDrained();
         });
 
         emit activeCountChanged();
         e->start(job, /*dryRun=*/false);
     }
+}
+
+void TransferManager::notifyIfDrained()
+{
+    // Paused-but-active transfers still occupy m_active, so a queue with only paused
+    // work isn't "drained"; the check naturally waits for them to resume and finish.
+    if (!m_active.isEmpty() || !m_queue.isEmpty())
+        return;
+    const int failed = m_batchFailures;
+    m_batchFailures = 0;
+    emit allTransfersComplete(failed);
 }
 
 void TransferManager::cancel(const QString &id)
