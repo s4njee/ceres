@@ -196,7 +196,6 @@ Rectangle {
                         required property int status
                         required property int percent
                         required property string speed
-                        required property string eta
                         required property string summary
                         required property string statusText
                         required property string error
@@ -253,8 +252,7 @@ Rectangle {
                                 text: {
                                     if (tRow.error.length > 0) return tRow.error
                                     if (tRow.status === 2 && tRow.summary.length > 0) return tRow.summary
-                                    if (tRow.status === 1 && tRow.speed.length > 0)
-                                        return tRow.speed + (tRow.eta.length > 0 ? " · ETA " + tRow.eta : "")
+                                    if (tRow.status === 1 && tRow.speed.length > 0) return tRow.speed
                                     return tRow.statusText
                                 }
                                 color: tRow.status === 3 ? Theme.danger

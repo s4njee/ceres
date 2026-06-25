@@ -122,7 +122,7 @@ void TransferManager::pump()
         });
 
         connect(e, &SyncEngine::progress, this, [this, id](const ProgressInfo &info) {
-            m_model.updateProgress(id, info.percent, info.rate, info.eta);
+            m_model.updateProgress(id, info.percent, info.rate);
         });
 
         // rsync --stats emits several summary lines; the one with the transfer rate is

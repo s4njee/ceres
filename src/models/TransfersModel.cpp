@@ -65,8 +65,6 @@ QVariant TransfersModel::data(const QModelIndex &index, int role) const
         return r.percent;
     case SpeedRole:
         return r.speed;
-    case EtaRole:
-        return r.eta;
     case SummaryRole:
         return r.summary;
     case ErrorRole:
@@ -104,7 +102,6 @@ QHash<int, QByteArray> TransfersModel::roleNames() const
         {StatusTextRole, "statusText"},
         {PercentRole, "percent"},
         {SpeedRole, "speed"},
-        {EtaRole, "eta"},
         {SummaryRole, "summary"},
         {ErrorRole, "error"},
         {FilesRole, "files"},
@@ -157,8 +154,7 @@ void TransfersModel::setStatus(const QString &id, Status status, const QString &
     emit activeCountChanged();
 }
 
-void TransfersModel::updateProgress(const QString &id, int percent, const QString &speed,
-                                    const QString &eta)
+void TransfersModel::updateProgress(const QString &id, int percent, const QString &speed)
 {
     const int idx = indexOfId(id);
     if (idx < 0)
@@ -167,7 +163,6 @@ void TransfersModel::updateProgress(const QString &id, int percent, const QStrin
     Row &r = m_rows[idx];
     r.percent = percent;
     r.speed = speed;
-    r.eta = eta;
     const QModelIndex mi = index(idx);
     emit dataChanged(mi, mi);
 }
