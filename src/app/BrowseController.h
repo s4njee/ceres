@@ -109,6 +109,9 @@ public:
     // Upload arbitrary local files/folders (absolute paths, e.g. from a Finder drop)
     // into the current remote directory.
     Q_INVOKABLE void uploadFiles(const QStringList &paths);
+    // Resolve an overwriteConflict prompt for the pending transfer: 0 = cancel,
+    // 1 = overwrite, 2 = skip existing, 3 = newer only.
+    Q_INVOKABLE void resolveConflict(int action);
 
 signals:
     void localPathChanged();
@@ -128,6 +131,9 @@ signals:
     void editorCommandChanged();
     /// Remote path-completion results (bare remote paths) for the path field.
     void remotePathCompleted(const QStringList &choices);
+    /// `count` destination items already exist; the UI should prompt and call
+    /// resolveConflict(). Only emitted when the overwrite policy is "Ask".
+    void overwriteConflict(int count);
     /// The remote host key changed; UI should confirm before removing known_hosts.
     void hostKeyChanged(const QString &host);
     /// A host was saved/updated (so the sidebar's SshHostListModel can reload).
@@ -150,6 +156,13 @@ private:
     // the result (delivered back on the GUI thread). `topName` is the rsync-relative
     // prefix (the item's own name). For remote sources the walk is RemoteFs::enumerate.
     void seedFromLocalWalk(const QString &id, const QString &absPath, const QString &topName);
+    // The actual transfer work, given a resolved overwrite choice. The public
+    // download/upload/uploadFiles wrap these with an "Ask"-policy conflict check.
+    void doDownload(const QStringList &names, bool ignoreExisting, bool updateOnly);
+    void doUpload(const QStringList &names, bool ignoreExisting, bool updateOnly);
+    void doUploadFiles(const QStringList &paths, bool ignoreExisting, bool updateOnly);
+    // Names (of `names`, or basenames of `paths`) that already exist in `dest` listing.
+    QStringList conflictsIn(const FileListModel &dest, const QStringList &names) const;
 
     RsyncCapabilities m_caps;
     SshHostStore m_hostStore;
@@ -174,6 +187,11 @@ private:
     QHash<QString, PendingOpen> m_pendingOpens;  // transfer id -> file to open when done
     QHash<QString, QString> m_editTargets;       // watched localPath -> remote upload dir
     QFileSystemWatcher *m_editWatcher = nullptr;
+
+    // A transfer held back by an "Ask"-policy conflict, awaiting resolveConflict().
+    struct PendingTransfer { enum Kind { Download, Upload, UploadFiles } kind; QStringList items; };
+    PendingTransfer m_pending;
+    bool m_hasPending = false;
 
     QString m_localPath;
     QString m_remotePath;   // resolved absolute remote dir (trailing slash)

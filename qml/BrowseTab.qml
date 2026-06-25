@@ -603,6 +603,7 @@ Item {
             remotePane.completionItems = choices
             remotePane.completionIndex = 0
         }
+        function onOverwriteConflict(count) { conflictDialog.count = count; conflictDialog.open = true }
     }
     Connections {
         target: transfers
@@ -678,6 +679,52 @@ Item {
                             deleteConfirm.open = false
                         }
                     }
+                }
+            }
+        }
+    }
+
+    // overwrite-conflict prompt (shown when the "Ask" policy hits existing items)
+    Rectangle {
+        id: conflictDialog
+        property bool open: false
+        property int count: 0
+        function choose(action) { browse.resolveConflict(action); open = false }
+        anchors.fill: parent
+        visible: open
+        color: "#cc000000"
+        focus: open
+        Keys.onEscapePressed: choose(0)
+        MouseArea { anchors.fill: parent; onClicked: conflictDialog.choose(0) }
+        Rectangle {
+            anchors.centerIn: parent
+            width: 420
+            height: cfCol.implicitHeight + 36
+            radius: Theme.radius
+            color: Theme.bgSecondary
+            border.width: 1
+            border.color: Theme.borderStrong
+            ColumnLayout {
+                id: cfCol
+                x: 18; y: 18
+                width: parent.width - 36
+                spacing: 12
+                Text { text: "Item already exists"; color: Theme.textPrimary; font.pixelSize: 15 }
+                Text {
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    color: Theme.textSecondary
+                    font.pixelSize: 12
+                    text: conflictDialog.count + " item(s) already exist at the destination. "
+                          + "What would you like to do?"
+                }
+                RowLayout {
+                    Layout.fillWidth: true
+                    Item { Layout.fillWidth: true }
+                    FlatButton { label: "Cancel"; onClicked: conflictDialog.choose(0) }
+                    FlatButton { label: "Skip existing"; onClicked: conflictDialog.choose(2) }
+                    FlatButton { label: "Newer only"; onClicked: conflictDialog.choose(3) }
+                    FlatButton { label: "Overwrite"; primary: true; onClicked: conflictDialog.choose(1) }
                 }
             }
         }
