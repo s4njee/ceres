@@ -30,17 +30,14 @@
 #include "app/JobController.h"
 #include "app/PathCompleter.h"
 #include "app/TransferManager.h"
-#include "core/ProfileStore.h"
 #include "core/SecretStore.h"
 #include "core/SshHostStore.h"
 #include "engine/BinaryLocator.h"
 #include "models/ChangeListModel.h"
 #include "models/FileListModel.h"
-#include "models/JobListModel.h"
 #include "models/PeerModel.h"
 #include "models/SshHostListModel.h"
 #include "models/TransfersModel.h"
-#include "sched/Scheduler.h"
 
 namespace {
 
@@ -104,9 +101,6 @@ int main(int argc, char *argv[])
     qmlRegisterUncreatableType<ChangeListModel>(
         "CeresUi", 1, 0, "ChangeListModel",
         QStringLiteral("ChangeListModel is provided by the controller"));
-    qmlRegisterUncreatableType<JobListModel>(
-        "CeresUi", 1, 0, "JobListModel",
-        QStringLiteral("JobListModel is provided by the controller"));
     qmlRegisterUncreatableType<SshHostListModel>(
         "CeresUi", 1, 0, "SshHostListModel",
         QStringLiteral("SshHostListModel is provided by the controller"));
@@ -121,7 +115,7 @@ int main(int argc, char *argv[])
         QStringLiteral("TransfersModel is provided by the transfer manager"));
 
     const RsyncCapabilities caps = BinaryLocator::locateRsync();
-    JobController controller(caps, nullptr, ProfileStore{}, SecretStore{}, Scheduler{},
+    JobController controller(caps, nullptr, SecretStore{},
                              SshHostStore{}, true);
     PathCompleter completer(caps);
     TransferManager transfers(caps);

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Removed the persistent saved-job system (`ProfileStore`, `JobListModel` sidebar, `Scheduler` OS-timer backends, the `ceres-runner` CLI, and `JobId`), pivoting to an interactive browse/transfer workflow. `JobController` and `SyncJob` were slimmed accordingly and their tests (`tst_profilestore`, `tst_scheduler`) dropped.
+- Reworked SSH host handling around saved hosts: added a `NewHostDialog`, expanded the browse tab transfer UI, and simplified `SshHostListModel`. Updated docs (architecture, groups, safety, portability, sync pipeline, Windows smoke test, README) to match the new architecture.
 - Comprehensive documentation pass across all headers, entry points, and QML: added `///` doc-comments to every class/struct explaining its role in the architecture, design rationale (dependency injection, portability seams, safety gates), platform-specific behaviour, and how components connect to each other.
 - Added a Doxygen documentation site (`Doxyfile` + `docs/*.dox`): per-directory module grouping, four narrative pages (architecture, sync pipeline, safety model, portability), and Graphviz class/collaboration/include/call diagrams. Builds clean (0 warnings) into `docs/doxygen/html/`.
 - Fixed round-tripping of `excludes` and `extraArgs` through the QML job form (jobMap/onJobLoaded) so that UI previews, real runs (including the `--delete` safety fingerprint gate), saves, and loads correctly preserve advanced options from saved profiles.

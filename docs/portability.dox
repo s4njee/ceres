@@ -32,14 +32,6 @@
 /// back ends keep the secret off the process command line. See @ref core and the
 /// @ref safety page.
 ///
-/// @section port_sched launchd vs systemd
-///
-/// Scheduler registers OS-level timers so jobs run while the GUI is closed: launchd
-/// agents on macOS, systemd user timers on Linux. Both invoke the same headless
-/// @c ceres-runner binary, which reads the same JSON profile the GUI writes. Unit
-/// names embed the validated job id, and orphaned units are reconciled away when a
-/// job is deleted. See @ref sched.
-///
 /// @section port_net Network identity
 ///
 /// NetworkUtils determines the machine's primary address with a connectionless UDP

@@ -127,7 +127,6 @@ Item {
                         id: hostRow
                         required property string target
                         required property string summary
-                        required property int jobCount
 
                         readonly property bool active: target === browse.target && browse.connected
                         width: ListView.view.width
@@ -161,12 +160,109 @@ Item {
                                 Text { text: target; color: Theme.textPrimary; font.family: Theme.mono; font.pixelSize: 12; elide: Text.ElideRight; Layout.fillWidth: true }
                                 Text { text: summary; color: Theme.textTertiary; font.pixelSize: 10; elide: Text.ElideMiddle; Layout.fillWidth: true }
                             }
-                            Text { text: jobCount; visible: jobCount > 1; color: Theme.textTertiary; font.pixelSize: 10 }
                         }
                     }
                 }
 
+                FlatButton { label: "+  New host"; Layout.fillWidth: true; onClicked: newHostDialog.show() }
                 FlatButton { label: "Disconnect"; Layout.fillWidth: true; visible: browse.connected; danger: true; outline: true; onClicked: browse.disconnectHost() }
+
+                Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: Theme.border; Layout.topMargin: 4 }
+
+                Text { text: "ON YOUR NETWORK"; color: Theme.textTertiary; font.pixelSize: 11; font.letterSpacing: 1; Layout.fillWidth: true }
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 8
+                    Text { text: "Discoverable"; color: Theme.textSecondary; font.pixelSize: 12; Layout.fillWidth: true }
+                    Text { text: controller.discoverable ? "visible" : "hidden"; color: Theme.textTertiary; font.pixelSize: 10; Layout.alignment: Qt.AlignVCenter }
+                    Rectangle {
+                        Layout.alignment: Qt.AlignVCenter
+                        width: 30; height: 16; radius: 8
+                        color: controller.discoverable ? Theme.accent : Theme.bgTertiary
+                        border.width: controller.discoverable ? 0 : 1
+                        border.color: Theme.border
+                        Rectangle {
+                            width: 12; height: 12; radius: 6
+                            anchors.verticalCenter: parent.verticalCenter
+                            x: controller.discoverable ? parent.width - 14 : 2
+                            color: controller.discoverable ? "#160a06" : Theme.textTertiary
+                            Behavior on x { NumberAnimation { duration: 120 } }
+                        }
+                        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: controller.discoverable = !controller.discoverable }
+                    }
+                }
+
+                ListView {
+                    id: peersList
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: Math.min(contentHeight, 150)
+                    clip: true
+                    spacing: 2
+                    model: controller.peers
+                    ScrollBar.vertical: ScrollBar {}
+
+                    Text {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        y: 6
+                        visible: controller.peers.count === 0
+                        text: "Ø  No machines found"
+                        color: Theme.textTertiary
+                        font.pixelSize: 12
+                    }
+
+                    delegate: Rectangle {
+                        width: ListView.view.width
+                        height: 40
+                        radius: Theme.radius
+                        color: peerMouse.containsMouse ? Theme.bgTertiary : "transparent"
+                        MouseArea {
+                            id: peerMouse
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: { targetField.text = address; browse.connectHost(address) }
+                        }
+                        RowLayout {
+                            anchors.fill: parent
+                            anchors.leftMargin: 6
+                            anchors.rightMargin: 6
+                            spacing: 8
+                            Rectangle { width: 7; height: 7; radius: 4; color: Theme.ok; Layout.alignment: Qt.AlignVCenter }
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                spacing: 0
+                                Text { text: name; color: Theme.textPrimary; font.pixelSize: 12; elide: Text.ElideRight; Layout.fillWidth: true }
+                                Text { text: address + " · " + os; color: Theme.textTertiary; font.family: Theme.mono; font.pixelSize: 10; elide: Text.ElideMiddle; Layout.fillWidth: true }
+                            }
+                            Text { text: accepts; color: Theme.textTertiary; font.pixelSize: 10 }
+                        }
+                    }
+                }
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 6
+                    Field {
+                        id: hostAddField
+                        Layout.fillWidth: true
+                        font.pixelSize: 12
+                        placeholderText: qsTr("add by host / IP")
+                        onAccepted: { controller.addPeerByHost(text); text = "" }
+                    }
+                    FlatButton {
+                        label: "Add"
+                        active: hostAddField.text.length > 0
+                        onClicked: { controller.addPeerByHost(hostAddField.text); hostAddField.text = "" }
+                    }
+                }
+                Text {
+                    text: controller.rsyncSummary
+                    color: controller.usingOpenRsync ? Theme.warning : Theme.textTertiary
+                    font.pixelSize: 10
+                    wrapMode: Text.WordWrap
+                    Layout.fillWidth: true
+                    Layout.topMargin: 6
+                }
             }
         }
         Rectangle { Layout.preferredWidth: 1; Layout.fillHeight: true; color: Theme.border }
@@ -400,6 +496,8 @@ Item {
     }
 
     TransfersDialog { id: transfersDialog }
+
+    NewHostDialog { id: newHostDialog }
 
     // delete confirm (used for both panes via confirmDelete)
     Rectangle {

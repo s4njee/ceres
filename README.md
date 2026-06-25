@@ -7,9 +7,24 @@ protocol — local, SSH (`user@host:`), and daemon (`rsync://`) targets all work
 is a calm, opinionated front-end with a real **before-you-sync preview**, first-class live
 progress, and safe defaults — over an advanced tier for full flag control later.
 
-> **Status: prototype.** Boots a QML window, previews and runs rsync jobs through
-> `QProcess`, stores JSON profiles, can register launchd/systemd schedules, and streams
-> parsed `--itemize-changes` output into the UI.
+> **Status: prototype.** Boots a QML window, previews and runs ad-hoc rsync syncs
+> through `QProcess`, browses local/remote files, and streams parsed
+> `--itemize-changes` output into the UI.
+
+## Screens
+
+The modal dialogs across the Sync and Browse tabs:
+
+| | |
+| --- | --- |
+| **SSH password** — prompts for credentials when key auth fails (sync runs and browse connects share it). | ![SSH password dialog](docs/img/ssh-password.png) |
+| **Add SSH host** — offered when you use a host that isn't saved yet. | ![Add SSH host dialog](docs/img/add-ssh-host.png) |
+| **Delete-extras confirm** — the destructive-run safety gate before a `--delete` sync. | ![Delete extras confirmation](docs/img/delete-extras-confirm.png) |
+| **Remote folder picker** — browse a remote tree to fill a Sync source/destination. | ![Remote folder picker](docs/img/remote-folder-picker.png) |
+| **Transfers** — the parallel transfer queue; folder transfers expand to per-file progress. | ![Transfers dialog](docs/img/transfers.png) |
+| **New folder / Rename** — text prompt for the Browse file operations. | ![New folder prompt](docs/img/new-folder-prompt.png) |
+| **Delete confirm (Browse)** — confirms deleting selected local/remote items. | ![Browse delete confirmation](docs/img/delete-confirm.png) |
+| **Right-click menu (Browse)** — per-pane file actions (New folder / Rename / Delete). | ![Browse context menu](docs/img/context-menu.png) |
 
 ## Architecture
 
@@ -17,8 +32,8 @@ progress, and safe defaults — over an advanced tier for full flag control late
 QML (Qt Quick Controls 2, Basic)           — UI shell
   └─ JobController (QObject)               — exposed to QML
        ├─ ChangeListModel (QAbstractListModel)
-       ├─ ProfileStore / SecretStore       — JSON profiles + OS keychain/libsecret
-       ├─ Scheduler / DiscoveryService     — launchd/systemd + LAN beacons
+       ├─ SshHostStore / SecretStore       — saved SSH hosts + OS keychain/libsecret
+       ├─ DiscoveryService                 — LAN beacons
        └─ SyncEngine (abstract)            — the portability seam
             └─ RsyncProcessEngine          — QProcess + the real rsync binary
                  ├─ ArgvBuilder            — SyncJob -> argv (capability-aware)
@@ -27,8 +42,8 @@ QML (Qt Quick Controls 2, Basic)           — UI shell
 ```
 
 `ceres_core` (everything below the QML layer) is a non-GUI Qt Core/Network static
-library with no Quick/QML dependency, so parser, arg builder, profile, scheduler,
-and controller behavior are unit-tested headless. A future Windows engine
+library with no Quick/QML dependency, so parser, arg builder, and controller
+behavior are unit-tested headless. A future Windows engine
 (cwRsync / WSL) can reuse it behind `SyncEngine`.
 
 ## Prerequisites
@@ -75,7 +90,7 @@ This copies Qt DLLs/plugins/QML imports, writes `qt.conf`, and copies
 The tests cover the pieces that are easy to get subtly wrong: `OutputParser`
 (itemize parsing, `\r`/`\n` chunk-boundary handling, progress2 with/without `to-chk`),
 `ArgvBuilder`/`EndpointParser` (capability gating, SSH/daemon detection, quoting,
-delete/dry-run, SRC/DEST placement), storage/scheduler safety, binary probing,
+delete/dry-run, SRC/DEST placement), binary probing,
 path completion, discovery beacons, and the controller's destructive-run gate.
 
 ## Roadmap

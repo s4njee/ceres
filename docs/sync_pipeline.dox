@@ -6,11 +6,10 @@
 ///
 /// @section pipe_compose 1. Form → SyncJob
 ///
-/// The QML form is a view over a SyncJob. When the user previews, saves, or runs,
-/// JobController turns the QML variant map into a SyncJob struct (and back again
-/// when loading a saved profile). Advanced options — @c excludes and @c extraArgs
-/// — round-trip through this conversion so a saved profile runs exactly as
-/// previewed. See @ref core.
+/// The QML form is a view over a SyncJob. When the user previews or runs,
+/// JobController turns the QML variant map into a SyncJob struct. Advanced
+/// options — @c excludes and @c extraArgs — round-trip through this conversion so
+/// a run executes exactly what was previewed. See @ref core.
 ///
 /// @section pipe_argv 2. SyncJob → argv
 ///

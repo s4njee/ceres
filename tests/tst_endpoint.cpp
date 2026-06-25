@@ -17,6 +17,7 @@ void EndpointTest::classifiesLocalSshAndDaemon()
     QCOMPARE(EndpointParser::kindName(QStringLiteral("/tmp/a:b")), QStringLiteral("local"));
     QCOMPARE(EndpointParser::kindName(QStringLiteral("user@host:/backup")), QStringLiteral("ssh"));
     QCOMPARE(EndpointParser::kindName(QStringLiteral("host:/backup")), QStringLiteral("ssh"));
+    QCOMPARE(EndpointParser::kindName(QStringLiteral("host:~/backup")), QStringLiteral("ssh"));
     QCOMPARE(EndpointParser::kindName(QStringLiteral("host.with.dot:/path")), QStringLiteral("ssh"));
     QCOMPARE(EndpointParser::kindName(QStringLiteral("rsync://host/module")), QStringLiteral("daemon"));
     QCOMPARE(EndpointParser::kindName(QStringLiteral("host::module")), QStringLiteral("daemon"));

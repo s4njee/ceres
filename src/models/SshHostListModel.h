@@ -5,14 +5,12 @@
 #include <QString>
 
 #include "core/SshHost.h"
-#include "core/SyncJob.h"
 
-/// Backs the sidebar list of saved SSH hosts, derived from saved sync profiles.
+/// Backs the sidebar list of saved SSH hosts.
 ///
-/// Each row represents one unique SSH target (`user@host` or `host`) found in a
-/// saved job's source or destination endpoint. The model keeps a representative
-/// job id so the UI can show where the host came from without exposing the full
-/// jobs list in the sidebar.
+/// Each row represents one saved SSH target (`user@host` or `host`) added via the
+/// New host dialog (or remembered from a password prompt) and persisted by
+/// SshHostStore.
 /// @ingroup models
 class SshHostListModel : public QAbstractListModel {
     Q_OBJECT
@@ -23,8 +21,6 @@ public:
         QString host;
         QString user;
         QString summary;
-        int jobCount = 0;
-        QString firstJobId;
         bool hasPassword = false;
     };
 
@@ -33,8 +29,6 @@ public:
         HostRole,
         UserRole,
         SummaryRole,
-        JobCountRole,
-        FirstJobIdRole,
         HasPasswordRole,
     };
 
@@ -44,7 +38,7 @@ public:
     QVariant data(const QModelIndex &index, int role) const override;
     QHash<int, QByteArray> roleNames() const override;
 
-    void setHosts(const QList<SshHost> &savedHosts, const QList<SyncJob> &jobs);
+    void setHosts(const QList<SshHost> &savedHosts);
 
 signals:
     void countChanged();

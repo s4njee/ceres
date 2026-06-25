@@ -178,7 +178,7 @@ void RsyncProcessEngine::launch(bool dryRun)
     // SSH password auth: ssh can't read /dev/tty under QProcess, so feed the password
     // through OpenSSH's askpass hook. We point SSH_ASKPASS at *this* executable, which
     // short-circuits to printing CERES_SSH_PASSWORD when it sees CERES_ASKPASS (see
-    // main.cpp / runner_main.cpp). REQUIRE=force makes ssh use the helper even without
+    // main.cpp). REQUIRE=force makes ssh use the helper even without
     // a DISPLAY/tty (OpenSSH >= 8.4). The password never touches the argv.
     if (ArgvBuilder::usesSsh(job) && !job.sshPassword.isEmpty()) {
         QString askpass = QCoreApplication::applicationFilePath();

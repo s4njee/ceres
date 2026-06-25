@@ -16,8 +16,8 @@ set_source_files_properties(qml/Theme.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
 
 # ---------------------------------------------------------------------------
 # ceres_core: non-GUI engine, app services, models, and controller.
-# Deliberately free of Quick/QML deps so the parser, scheduling, storage, and
-# controller behavior can be unit-tested headless.
+# Deliberately free of Quick/QML deps so the parser, storage, and controller
+# behavior can be unit-tested headless.
 # ---------------------------------------------------------------------------
 add_library(ceres_core STATIC
     src/cli/AdHocTransfer.h        src/cli/AdHocTransfer.cpp
@@ -25,11 +25,9 @@ add_library(ceres_core STATIC
     src/core/Peer.h
     src/core/FileEntry.h
     src/core/Endpoint.h            src/core/Endpoint.cpp
-    src/core/JobId.h
     src/core/SshHost.h
     src/core/SshKnownHosts.h        src/core/SshKnownHosts.cpp
     src/core/SshHostStore.h          src/core/SshHostStore.cpp
-    src/core/ProfileStore.h          src/core/ProfileStore.cpp
     src/core/SecretStore.h           src/core/SecretStore.cpp
     src/engine/RsyncEvents.h
     src/engine/SyncEngine.h
@@ -40,9 +38,7 @@ add_library(ceres_core STATIC
     src/net/Beacon.h                 src/net/Beacon.cpp
     src/net/DiscoveryService.h       src/net/DiscoveryService.cpp
     src/net/NetworkUtils.h           src/net/NetworkUtils.cpp
-    src/sched/Scheduler.h            src/sched/Scheduler.cpp
     src/models/ChangeListModel.h     src/models/ChangeListModel.cpp
-    src/models/JobListModel.h        src/models/JobListModel.cpp
     src/models/SshHostListModel.h     src/models/SshHostListModel.cpp
     src/models/FileListModel.h        src/models/FileListModel.cpp
     src/models/TransfersModel.h       src/models/TransfersModel.cpp
@@ -80,6 +76,7 @@ qt_add_qml_module(ceres
         qml/SshPasswordDialog.qml
         qml/KnownHostChangedDialog.qml
         qml/AddSshHostDialog.qml
+        qml/NewHostDialog.qml
         qml/BrowseTab.qml
         qml/TransfersDialog.qml
         qml/FileBrowserPane.qml
@@ -89,16 +86,12 @@ target_link_libraries(ceres PRIVATE
     Qt6::Gui Qt6::Qml Qt6::Quick Qt6::QuickControls2
 )
 
-# Headless runner invoked by the OS scheduler (and usable from a terminal).
-qt_add_executable(ceres-runner src/cli/runner_main.cpp)
-target_link_libraries(ceres-runner PRIVATE ceres_core Qt6::Core)
-
 if(WIN32)
     add_custom_target(stage-msys2-rsync
         COMMAND powershell -NoProfile -ExecutionPolicy Bypass
                 -File "${CMAKE_CURRENT_SOURCE_DIR}/scripts/stage-msys2-rsync.ps1"
                 -DestinationDir "$<TARGET_FILE_DIR:ceres>"
-        DEPENDS ceres ceres-runner
+        DEPENDS ceres
         COMMENT "Staging MSYS2 rsync/OpenSSH runtime beside ceres.exe"
         VERBATIM
     )
@@ -106,7 +99,7 @@ if(WIN32)
         COMMAND powershell -NoProfile -ExecutionPolicy Bypass
                 -File "${CMAKE_CURRENT_SOURCE_DIR}/scripts/stage-qt-runtime.ps1"
                 -DestinationDir "$<TARGET_FILE_DIR:ceres>"
-        DEPENDS ceres ceres-runner
+        DEPENDS ceres
         COMMENT "Staging Qt runtime beside ceres.exe"
         VERBATIM
     )

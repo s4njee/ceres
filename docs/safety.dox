@@ -3,8 +3,8 @@
 ///
 /// rsync is a power tool: a stray @c --delete against the wrong source can erase a
 /// backup. Ceres layers several independent guards so that no single mistake —
-/// a typo, an unmounted drive, a stale schedule, a hostile filename — turns into
-/// data loss or command injection.
+/// a typo, an unmounted drive, a hostile filename — turns into data loss or
+/// command injection.
 ///
 /// @section safe_gate The destructive-run fingerprint gate
 ///
@@ -23,15 +23,6 @@
 /// empty or unmounted source makes the destination look entirely extraneous. A
 /// value of 0 means "no cap".
 ///
-/// @section safe_jobid Job-id validation
-///
-/// A job id becomes both a profile filename (@c \<id\>.json) and part of an OS
-/// scheduler unit name (e.g. @c com.ceres.job.\<id\>). Before any id is used to
-/// read, write, remove, register, or discover such a resource, it is validated:
-/// ASCII letters, digits, @c -, @c _ and @c . only, length-bounded, and never
-/// @c "." or @c ".." . This blocks path traversal and unit-name injection. See
-/// @c isSafeJobId in @ref core.
-///
 /// @section safe_secrets Secret handling
 ///
 /// rsync-daemon passwords never touch disk in cleartext and never appear on a
@@ -43,8 +34,7 @@
 /// - **Linux** — handed to @c secret-tool over stdin, never as an argv element.
 ///
 /// At run time the password is passed to rsync through the @c RSYNC_PASSWORD
-/// environment variable and is never persisted in the job's JSON profile. See
-/// SecretStore in @ref core.
+/// environment variable. See SecretStore in @ref core.
 ///
 /// @section safe_quoting SSH command quoting
 ///

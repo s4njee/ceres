@@ -7,15 +7,13 @@
 #include <QTimer>
 #include <QVariantMap>
 
-#include "core/ProfileStore.h"
 #include "core/SecretStore.h"
 #include "core/SshHostStore.h"
+#include "core/SyncJob.h"
 #include "engine/BinaryLocator.h"
 #include "models/ChangeListModel.h"
-#include "models/JobListModel.h"
 #include "models/PeerModel.h"
 #include "models/SshHostListModel.h"
-#include "sched/Scheduler.h"
 
 class DiscoveryService;
 class SyncEngine;
@@ -26,13 +24,12 @@ class SyncEngine;
 /// property named "controller" in main.cpp. It owns:
 ///   - The SyncEngine (runs rsync via QProcess)
 ///   - The ChangeListModel (preview / itemized changes list)
-///   - The ProfileStore + SecretStore (persistence layer)
-///   - The JobListModel (sidebar job list)
+///   - The SecretStore (keychain-backed credentials)
+///   - The SshHostStore + SshHostListModel (saved SSH hosts sidebar)
 ///   - The PeerModel + DiscoveryService (LAN peer discovery)
-///   - The Scheduler (OS-level timers for background syncs)
 ///
 /// **Dependency injection**: The two-argument constructor accepts all
-/// dependencies (engine, stores, scheduler, capabilities) so unit tests can
+/// dependencies (engine, stores, capabilities) so unit tests can
 /// inject mocks/stubs without needing a real rsync binary or filesystem.
 /// The default constructor is used by the real app and auto-locates rsync.
 ///
@@ -55,9 +52,7 @@ class JobController : public QObject {
     Q_PROPERTY(QString status READ status NOTIFY statusChanged)
     Q_PROPERTY(QString hostName READ hostName CONSTANT)
     Q_PROPERTY(QString hostAddress READ hostAddress NOTIFY hostAddressChanged)
-    Q_PROPERTY(JobListModel *jobs READ jobs CONSTANT)
     Q_PROPERTY(SshHostListModel *sshHosts READ sshHosts CONSTANT)
-    Q_PROPERTY(QString currentId READ currentId NOTIFY currentChanged)
     Q_PROPERTY(PeerModel *peers READ peers CONSTANT)
     Q_PROPERTY(bool discoverable READ discoverable WRITE setDiscoverable NOTIFY discoverableChanged)
 public:
@@ -68,15 +63,13 @@ public:
     /// Test-friendly constructor: accepts all dependencies so tests can inject
     /// a mock SyncEngine, in-memory stores, etc. Set startNetworkServices=false
     /// to skip UDP beacon setup in headless test environments.
-    JobController(RsyncCapabilities caps, SyncEngine *engine, ProfileStore store,
-                  SecretStore secrets, Scheduler scheduler, SshHostStore sshHostStore,
+    JobController(RsyncCapabilities caps, SyncEngine *engine,
+                  SecretStore secrets, SshHostStore sshHostStore,
                   bool startNetworkServices,
                   QObject *parent = nullptr);
 
     ChangeListModel *changes() { return &m_changes; }
-    JobListModel *jobs() { return &m_jobs; }
     SshHostListModel *sshHosts() { return &m_sshHosts; }
-    QString currentId() const { return m_currentId; }
     PeerModel *peers() { return &m_peers; }
     bool discoverable() const { return m_discoverable; }
     void setDiscoverable(bool on);
@@ -113,12 +106,6 @@ public:
                                        const QString &password, bool remember);
     Q_INVOKABLE void repairKnownHostAndRetry(const QVariantMap &job);
 
-    // Profile management (sidebar jobs).
-    Q_INVOKABLE void newJob();  // reset the editor to a blank, unsaved job
-    Q_INVOKABLE void loadJob(const QString &id);
-    Q_INVOKABLE void saveJob(const QVariantMap &job);
-    Q_INVOKABLE void deleteJob(const QString &id);
-
     // Saved SSH hosts.
     Q_INVOKABLE QString sshTargetForJob(const QVariantMap &job) const;
     Q_INVOKABLE bool isSshHostSaved(const QString &target) const;
@@ -139,12 +126,8 @@ signals:
     void logChanged();
     void progressChanged();
     void statusChanged();
-    void currentChanged();
     void discoverableChanged();
     void hostAddressChanged();
-    /// Pushes a job's fields into the QML editor. Emitted on loadJob() (with
-    /// the saved job's fields) and newJob() (with blank defaults, archive=on).
-    void jobLoaded(const QVariantMap &job);
 
     /// An SSH run failed public-key authentication. The UI responds by prompting for
     /// a username/password (prefilled with `user`, parsed from the remote endpoint)
@@ -159,7 +142,6 @@ private:
     SshHost sshHostFromJob(const SyncJob &job, bool hasPassword) const;
     QString sshHostSecretKey(const QString &target) const;
     SyncJob jobFromMap(const QVariantMap &map) const;  ///< QML variant map → SyncJob struct
-    QVariantMap mapFromJob(const SyncJob &job) const;  ///< SyncJob struct → QML variant map
     QByteArray syncFingerprint(const SyncJob &job) const; ///< SHA-256 of sync-relevant fields
     void setRunning(bool running);
     void setStatus(const QString &status);
@@ -168,16 +150,12 @@ private:
     RsyncCapabilities m_caps;
     SyncEngine *m_engine = nullptr;
     ChangeListModel m_changes;
-    ProfileStore m_store;
     SecretStore m_secrets;
     SshHostStore m_sshHostStore;
-    JobListModel m_jobs;
     SshHostListModel m_sshHosts;
-    QString m_currentId;
     PeerModel m_peers;
     DiscoveryService *m_discovery = nullptr;
     bool m_discoverable = true;
-    Scheduler m_scheduler;
 
     QStringList m_logLines;
     QString m_status;

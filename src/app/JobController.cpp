@@ -70,21 +70,19 @@ QString formatBytesProgress(const ProgressInfo &p)
 } // namespace
 
 JobController::JobController(QObject *parent)
-    : JobController(BinaryLocator::locateRsync(), nullptr, ProfileStore{}, SecretStore{},
-                    Scheduler{}, SshHostStore{}, true, parent)
+    : JobController(BinaryLocator::locateRsync(), nullptr, SecretStore{},
+                    SshHostStore{}, true, parent)
 {
 }
 
-JobController::JobController(RsyncCapabilities caps, SyncEngine *engine, ProfileStore store,
-                             SecretStore secrets, Scheduler scheduler, SshHostStore sshHostStore,
+JobController::JobController(RsyncCapabilities caps, SyncEngine *engine,
+                             SecretStore secrets, SshHostStore sshHostStore,
                              bool startNetworkServices,
                              QObject *parent)
     : QObject(parent),
       m_caps(std::move(caps)),
-      m_store(std::move(store)),
       m_secrets(std::move(secrets)),
-      m_sshHostStore(std::move(sshHostStore)),
-      m_scheduler(std::move(scheduler))
+      m_sshHostStore(std::move(sshHostStore))
 {
     m_hostName = QHostInfo::localHostName();
     m_hostAddress = NetworkUtils::primaryAddress();
@@ -103,34 +101,7 @@ JobController::JobController(RsyncCapabilities caps, SyncEngine *engine, Profile
         m_addressTimer.start();
     }
 
-    const QList<SyncJob> loaded = m_store.loadAll();
-    m_jobs.setJobs(loaded);
-    m_sshHosts.setHosts(m_sshHostStore.loadAll(), loaded);
-    // Re-register only schedules whose OS unit went missing (e.g. deleted out of
-    // band). Re-applying an already-registered job would reload its launchd agent
-    // and reset a StartInterval countdown on every launch; saveJob() already
-    // re-applies when a schedule is edited.
-    QStringList loadedIds;
-    QStringList liveScheduled;
-    for (const SyncJob &j : loaded) {
-        loadedIds << j.id;
-        if (j.schedule != ScheduleKind::Manual) {
-            liveScheduled << j.id;
-            if (!m_scheduler.isRegistered(j.id))
-                m_scheduler.apply(j, Scheduler::runnerPath());
-        }
-    }
-    // Prune an installed unit only when its job is genuinely gone (no profile file
-    // at all) or loaded as Manual. A profile that is present but failed to load
-    // (locked / corrupt this run) is left alone, so a transient read error can't
-    // silently destroy a live schedule.
-    const QStringList onDisk = m_store.presentJobIds();
-    for (const QString &id : m_scheduler.installedJobIds()) {
-        if (liveScheduled.contains(id))
-            continue;
-        if (loadedIds.contains(id) || !onDisk.contains(id))
-            m_scheduler.remove(id);
-    }
+    m_sshHosts.setHosts(m_sshHostStore.loadAll());
 
     if (startNetworkServices) {
         Peer self;
@@ -301,36 +272,7 @@ SyncJob JobController::jobFromMap(const QVariantMap &m) const
     j.sshPort = qBound(0, m.value(QStringLiteral("sshPort")).toInt(), 65535);
     j.daemonPassword = m.value(QStringLiteral("daemonPassword")).toString();
     j.sshPassword = m.value(QStringLiteral("sshPassword")).toString();
-    j.schedule = scheduleKindFromString(m.value(QStringLiteral("schedule")).toString());
-    j.intervalMinutes = qMax(1, m.value(QStringLiteral("intervalMinutes"), 60).toInt());
-    j.atHour = qBound(0, m.value(QStringLiteral("atHour"), 9).toInt(), 23);
-    j.atMinute = qBound(0, m.value(QStringLiteral("atMinute"), 0).toInt(), 59);
-    j.weekday = qBound(0, m.value(QStringLiteral("weekday"), 0).toInt(), 6);
     return j;
-}
-
-QVariantMap JobController::mapFromJob(const SyncJob &j) const
-{
-    return {
-        {QStringLiteral("name"), j.name},
-        {QStringLiteral("source"), j.source},
-        {QStringLiteral("destination"), j.destination},
-        {QStringLiteral("archive"), j.archive},
-        {QStringLiteral("compress"), j.compress},
-        {QStringLiteral("deleteExtras"), j.deleteExtraneous},
-        {QStringLiteral("checksum"), j.checksum},
-        {QStringLiteral("maxDelete"), j.maxDelete},
-        {QStringLiteral("excludes"), j.excludes},
-        {QStringLiteral("extraArgs"), j.extraArgs},
-        {QStringLiteral("sshKey"), j.sshKeyPath},
-        {QStringLiteral("sshPort"), j.sshPort},
-        {QStringLiteral("schedule"), scheduleKindToString(j.schedule)},
-        {QStringLiteral("intervalMinutes"), j.intervalMinutes},
-        {QStringLiteral("atHour"), j.atHour},
-        {QStringLiteral("atMinute"), j.atMinute},
-        {QStringLiteral("weekday"), j.weekday},
-        // daemonPassword is session-only and never pushed back into the editor.
-    };
 }
 
 void JobController::preview(const QVariantMap &job)
@@ -359,21 +301,9 @@ void JobController::startJob(const SyncJob &job, bool dryRun)
     m_activeDryRun = dryRun;
 
     SyncJob j = job;
-    // For a daemon target with no password typed this session, pull the stored one
-    // from the keychain — but only if the edited endpoint still matches the saved
-    // job, so we never send one server's password to a newly-typed host.
-    if (j.daemonPassword.isEmpty() && EndpointParser::usesDaemon(j) && !m_currentId.isEmpty()) {
-        const SyncJob saved = m_jobs.jobById(m_currentId);
-        if (saved.source == j.source && saved.destination == j.destination)
-            j.daemonPassword = m_secrets.get(m_currentId);
-    }
-    // Likewise pull a remembered SSH password (stored under "<id>.ssh") for an
-    // unchanged SSH target, so a saved credential authenticates without re-prompting.
-    if (j.sshPassword.isEmpty() && EndpointParser::usesSsh(j) && !m_currentId.isEmpty()) {
-        const SyncJob saved = m_jobs.jobById(m_currentId);
-        if (saved.source == j.source && saved.destination == j.destination)
-            j.sshPassword = m_secrets.get(m_currentId + QStringLiteral(".ssh"));
-    }
+    // For an SSH target that matches a saved host, fall back to that host's stored
+    // key/port and remembered password so a saved credential authenticates without
+    // re-prompting.
     if (EndpointParser::usesSsh(j)) {
         const Endpoint e = EndpointParser::isSsh(j.source) ? EndpointParser::parse(j.source)
                                                            : EndpointParser::parse(j.destination);
@@ -422,15 +352,13 @@ void JobController::retryWithPassword(const QVariantMap &job, const QString &use
         j.destination = EndpointParser::withUser(j.destination, username);
     j.sshPassword = password;
 
-    // Persist for saved jobs as before, and also save the SSH target itself so an
-    // unsaved/manual credential can appear in the sidebar and be reused later.
+    // Save the SSH target itself so the credential appears in the sidebar and can
+    // be reused later.
     if (remember) {
         saveSshHost(j, true);
         const SshHost host = sshHostFromJob(j, true);
         if (!host.target.isEmpty())
             m_secrets.set(sshHostSecretKey(host.target), password);
-        if (!m_currentId.isEmpty())
-            m_secrets.set(m_currentId + QStringLiteral(".ssh"), password);
     }
 
     startJob(j, m_activeDryRun);  // repeat the failed run in the same mode
@@ -451,66 +379,6 @@ void JobController::repairKnownHostAndRetry(const QVariantMap &job)
 
     setStatus(result.message);
     startJob(jobFromMap(job), m_activeDryRun);
-}
-
-void JobController::newJob()
-{
-    m_currentId.clear();
-    emit currentChanged();
-    emit jobLoaded(mapFromJob(SyncJob{}));  // blank, archive on by default
-}
-
-void JobController::loadJob(const QString &id)
-{
-    const SyncJob j = m_jobs.jobById(id);
-    if (j.id.isEmpty())
-        return;
-    m_currentId = j.id;
-    emit currentChanged();
-    emit jobLoaded(mapFromJob(j));
-}
-
-void JobController::saveJob(const QVariantMap &jobMap)
-{
-    SyncJob job = jobFromMap(jobMap);
-    job.id = m_currentId.isEmpty() ? QUuid::createUuid().toString(QUuid::WithoutBraces) : m_currentId;
-    if (job.name.trimmed().isEmpty())
-        job.name = QStringLiteral("Untitled sync");
-    else
-        job.name = job.name.trimmed();
-
-    if (!m_store.save(job)) {
-        setStatus(QStringLiteral("Could not save job"));
-        return;
-    }
-    m_jobs.upsert(job);
-    rebuildSshHosts();
-    if (!job.daemonPassword.isEmpty())
-        m_secrets.set(job.id, job.daemonPassword);  // keychain, never the profile JSON
-    else if (!EndpointParser::usesDaemon(job))
-        m_secrets.remove(job.id);  // target no longer a daemon -> drop any stale secret
-
-    // SSH password (stored under "<id>.ssh") is remembered only when the user opted in
-    // via the auth modal; otherwise drop any stale secret if the target isn't SSH.
-    const QString sshKey = job.id + QStringLiteral(".ssh");
-    if (jobMap.value(QStringLiteral("rememberSshPassword")).toBool() && !job.sshPassword.isEmpty())
-        m_secrets.set(sshKey, job.sshPassword);
-    else if (!EndpointParser::usesSsh(job))
-        m_secrets.remove(sshKey);
-    m_currentId = job.id;
-    emit currentChanged();
-
-    m_scheduler.apply(job, Scheduler::runnerPath());  // registers or unregisters per schedule
-
-    if (job.schedule == ScheduleKind::Manual) {
-        setStatus(QStringLiteral("Saved '%1'").arg(job.name));
-    } else if (EndpointParser::usesDaemon(job) && m_secrets.get(job.id).isEmpty()) {
-        // A scheduled daemon sync with no stored password can't authenticate.
-        setStatus(QStringLiteral("Saved '%1' · scheduled — set a daemon password so "
-                                 "scheduled runs can authenticate").arg(job.name));
-    } else {
-        setStatus(QStringLiteral("Saved '%1' · scheduled").arg(job.name));
-    }
 }
 
 QString JobController::sshTargetForJob(const QVariantMap &jobMap) const
@@ -547,18 +415,6 @@ void JobController::saveSshHostPassword(const QString &endpoint, const QString &
         m_secrets.set(sshHostSecretKey(host.target), password);
 }
 
-void JobController::deleteJob(const QString &id)
-{
-    m_scheduler.remove(id);  // drop any OS schedule first
-    m_secrets.remove(id);    // and its stored daemon password
-    m_secrets.remove(id + QStringLiteral(".ssh"));  // and any remembered SSH password
-    m_store.remove(id);
-    m_jobs.removeById(id);
-    rebuildSshHosts();
-    if (m_currentId == id)
-        newJob();
-}
-
 void JobController::setDiscoverable(bool on)
 {
     if (m_discoverable == on)
@@ -571,15 +427,7 @@ void JobController::setDiscoverable(bool on)
 
 void JobController::rebuildSshHosts()
 {
-    QList<SyncJob> jobs;
-    for (int row = 0; row < m_jobs.rowCount(); ++row) {
-        const QModelIndex idx = m_jobs.index(row);
-        const QString id = m_jobs.data(idx, JobListModel::IdRole).toString();
-        const SyncJob job = m_jobs.jobById(id);
-        if (!job.id.isEmpty())
-            jobs << job;
-    }
-    m_sshHosts.setHosts(m_sshHostStore.loadAll(), jobs);
+    m_sshHosts.setHosts(m_sshHostStore.loadAll());
 }
 
 QString JobController::sshHostSecretKey(const QString &target) const

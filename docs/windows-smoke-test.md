@@ -17,7 +17,7 @@ cmake --build build
 cmake --build build --target stage-windows-runtime
 ```
 
-After staging, `build/` should contain `ceres.exe`, `ceres-runner.exe`,
+After staging, `build/` should contain `ceres.exe`,
 `qt.conf`, the Qt DLLs/plugins/QML imports, and `rsync/bin/` with `rsync.exe`,
 `ssh.exe`, `msys-2.0.dll`, and the `ldd`-discovered DLLs.
 
@@ -67,20 +67,9 @@ After staging, `build/` should contain `ceres.exe`, `ceres-runner.exe`,
       ntdll NtSuspendProcess/NtResumeProcess over the Job Object's processes,
       since there is no SIGSTOP.)*
 
-- [ ] **Register a scheduled job.** Create an interval/daily/weekly schedule.
-      Verify with `schtasks /query /tn "Ceres\<jobId>"` that the task exists and
-      its action invokes `ceres-runner.exe --job <id>`.
-
-- [ ] **Scheduled run fires.** Either wait for the trigger or
-      `schtasks /run /tn "Ceres\<jobId>"`. `ceres-runner.exe` runs the sync
-      headless and reads any daemon password from Credential Manager
-      (LOCAL_MACHINE persistence).
-
-- [ ] **Delete reconciles the schedule.** Delete the job in the GUI; confirm the
-      `schtasks` entry is removed (no orphan task left behind).
-
-- [ ] **Secrets round-trip.** Save a daemon password, restart the app, confirm
-      it is read back from Windows Credential Manager.
+- [ ] **Secrets round-trip.** Connect to an SSH host with a password and tick
+      "remember"; restart the app and confirm it reconnects without re-prompting
+      (password read back from Windows Credential Manager).
 
 ## Known follow-ups (not blockers for this pass)
 

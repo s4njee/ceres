@@ -62,7 +62,6 @@ $DestinationDir = if (Test-Path -LiteralPath $DestinationDir) {
 }
 
 $ceres = Require-File (Join-Path $DestinationDir "ceres.exe")
-$runner = Require-File (Join-Path $DestinationDir "ceres-runner.exe")
 
 if ($CleanQt) {
     foreach ($path in @(
@@ -90,7 +89,7 @@ $queue = [System.Collections.Generic.Queue[string]]::new()
 $seen = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
 $copied = [System.Collections.Generic.SortedSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
 
-foreach ($file in @($ceres, $runner)) {
+foreach ($file in @($ceres)) {
     $queue.Enqueue($file)
     [void]$seen.Add($file)
 }

@@ -121,8 +121,7 @@ bool SecretStore::set(const QString &id, const QString &secret) const
     cred.TargetName = const_cast<LPWSTR>(asWide(target));
     cred.CredentialBlobSize = static_cast<DWORD>(blob.size());
     cred.CredentialBlob = reinterpret_cast<LPBYTE>(const_cast<char *>(blob.constData()));
-    // LOCAL_MACHINE so the scheduled ceres-runner (a different logon session of the
-    // same user) can still read it.
+    // LOCAL_MACHINE so the credential survives across logon sessions.
     cred.Persist = CRED_PERSIST_LOCAL_MACHINE;
     cred.UserName = const_cast<LPWSTR>(asWide(id));
     return CredWriteW(&cred, 0);

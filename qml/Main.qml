@@ -5,20 +5,19 @@
 //   │ Top strip: app name + host IP pill           │
 //   ├──────────┬──────────────────────────────────┤
 //   │ Sidebar  │ Main editor panel                │
-//   │ (210px)  │  - Job name + Save button        │
-//   │          │  - From/To path fields + Browse  │
-//   │ SSH      │  - Option chips (archive, etc.)  │
-//   │ hosts    │  - Schedule selector             │
-//   │          │  - Preview / Run / Cancel buttons │
-//   │ NETWORK  │  - SplitView: preview + log      │
-//   │ peers    │  - Progress bar + status          │
+//   │ (210px)  │  - From/To path fields + Browse  │
+//   │          │  - Option chips (archive, etc.)  │
+//   │ SSH      │  - Preview / Run / Cancel buttons │
+//   │ hosts    │  - SplitView: preview + log      │
+//   │ NETWORK  │  - Progress bar + status          │
+//   │ peers    │                                   │
 //   └──────────┴──────────────────────────────────┘
 //
 // Data flows through the `controller` context property (a C++ JobController).
 // The QML `jobMap()` function gathers the editor's current state into a
-// QVariantMap and passes it to controller.preview() / controller.run() /
-// controller.saveJob(). Controller signals (onJobLoaded, onRemoteCompleted)
-// push state back into the editor.
+// QVariantMap and passes it to controller.preview() / controller.run().
+// Controller signals (onRemoteCompleted, onSshAuthRequired) push state back
+// into the editor.
 
 import QtQuick
 import QtQuick.Controls.Basic
@@ -40,13 +39,11 @@ ApplicationWindow {
     property bool deleteOn: false
     property bool checksumOn: false
     property bool confirmOpen: false
-    property string scheduleKind: "manual"
-    property int weekday: 0
     property int currentTab: 1   // 0 = Sync editor, 1 = Browse
 
     // SSH password auth state. Modal-driven (no always-visible field): held for the
     // session so subsequent manual runs reuse it; persisted to the keychain only when
-    // the user ticks "remember" in the auth modal (see retryWithPassword/saveJob).
+    // the user ticks "remember" in the auth modal (see retryWithPassword).
     property string sshPassword: ""
     property bool rememberSshPassword: false
     // Which flow opened the auth modal: "run" (a sync) or "browse" (remote folder picker).
@@ -62,7 +59,6 @@ ApplicationWindow {
     readonly property int completionChoiceLimit: 12
     readonly property int remoteBrowseLimit: 200
 
-    function pad(n) { return (n < 10 ? "0" : "") + n }
     function endpointKind(p) { return controller.endpointKind(p || "") }
     function looksDaemon(p) { return endpointKind(p) === "daemon" }
     function looksRemote(p) {
@@ -87,7 +83,7 @@ ApplicationWindow {
     }
 
     function toggleSavedHostTarget(target) {
-        var endpoint = target + ":"
+        var endpoint = target + ":~/"
         if (toField.text === endpoint) {
             root.setPathField(toField, "")
             root.setPathField(fromField, endpoint)
@@ -195,7 +191,6 @@ ApplicationWindow {
 
     function jobMap() {
         return {
-            name: nameField.text,
             source: fromField.text,
             destination: toField.text,
             archive: root.archiveOn,
@@ -209,12 +204,7 @@ ApplicationWindow {
             sshPort: parseInt(sshPortField.text) || 0,
             daemonPassword: daemonPwField.text,
             sshPassword: root.sshPassword,
-            rememberSshPassword: root.rememberSshPassword,
-            schedule: root.scheduleKind,
-            intervalMinutes: parseInt(intervalField.text) || 60,
-            atHour: parseInt(timeField.text.split(":")[0]) || 0,
-            atMinute: parseInt(timeField.text.split(":")[1]) || 0,
-            weekday: root.weekday
+            rememberSshPassword: root.rememberSshPassword
         }
     }
 
@@ -226,9 +216,7 @@ ApplicationWindow {
     }
 
     function continueHostAction(action) {
-        if (action === "save") {
-            controller.saveJob(root.jobMap())
-        } else if (action === "preview") {
+        if (action === "preview") {
             if (!controller.running && fromField.text.length > 0 && toField.text.length > 0)
                 controller.preview(root.jobMap())
         } else if (action === "run") {
@@ -238,8 +226,6 @@ ApplicationWindow {
                 else
                     controller.run(root.jobMap())
             }
-        } else if (action === "new") {
-            controller.newJob()
         }
     }
 
@@ -254,10 +240,6 @@ ApplicationWindow {
     }
 
     // Basic keyboard shortcuts (Ctrl maps to Cmd on macOS).
-    Shortcut {
-        sequence: "Ctrl+S"
-        onActivated: root.runWithHostPrompt("save")
-    }
     Shortcut {
         sequence: "Ctrl+Return"
         onActivated: {
@@ -276,28 +258,6 @@ ApplicationWindow {
 
     Connections {
         target: controller
-        function onJobLoaded(job) {
-            nameField.text = job.name && job.name.length > 0 ? job.name : "Untitled sync"
-            fromField.text = job.source || ""
-            toField.text = job.destination || ""
-            root.archiveOn = job.archive
-            root.compressOn = job.compress
-            root.deleteOn = job.deleteExtras
-            root.checksumOn = job.checksum
-            maxDeleteField.text = job.maxDelete ? String(job.maxDelete) : ""
-            sshKeyField.text = job.sshKey || ""
-            sshPortField.text = job.sshPort ? String(job.sshPort) : ""
-            daemonPwField.text = ""
-            root.sshPassword = ""
-            root.rememberSshPassword = false
-            root.scheduleKind = job.schedule || "manual"
-            intervalField.text = String(job.intervalMinutes || 60)
-            timeField.text = pad(job.atHour) + ":" + pad(job.atMinute)
-            root.weekday = job.weekday || 0
-            root.excludes = job.excludes || []
-            root.extraArgs = job.extraArgs || []
-            controller.changes.clear()
-        }
         function onSshAuthRequired(host, user) {
             root.authContext = "run"
             sshAuthDialog.show(host, user)
@@ -821,12 +781,11 @@ ApplicationWindow {
                                     Text { text: target; color: Theme.textPrimary; font.family: Theme.mono; font.pixelSize: 12; elide: Text.ElideRight; Layout.fillWidth: true }
                                     Text { text: summary; color: Theme.textTertiary; font.pixelSize: 10; elide: Text.ElideMiddle; Layout.fillWidth: true }
                                 }
-                                Text { text: jobCount; visible: jobCount > 1; color: Theme.textTertiary; font.pixelSize: 10 }
                             }
                         }
                     }
 
-                    FlatButton { Layout.fillWidth: true; label: "+  New sync"; onClicked: root.runWithHostPrompt("new") }
+                    FlatButton { Layout.fillWidth: true; label: "+  New host"; onClicked: newHostDialog.show() }
 
                     Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: Theme.border; Layout.topMargin: 4 }
 
@@ -880,7 +839,7 @@ ApplicationWindow {
                                 anchors.fill: parent
                                 cursorShape: Qt.PointingHandCursor
                                 onClicked: {
-                                    toField.text = daemon ? ("rsync://" + address + "/") : (address + ":")
+                                    toField.text = daemon ? ("rsync://" + address + "/") : (address + ":~/")
                                     toField.forceActiveFocus()
                                 }
                             }
@@ -935,33 +894,6 @@ ApplicationWindow {
                 Layout.fillHeight: true
                 Layout.margins: 16
                 spacing: 12
-
-                RowLayout {
-                    Layout.fillWidth: true
-                    spacing: 8
-                    TextField {
-                        id: nameField
-                        Layout.fillWidth: true
-                        text: "Untitled sync"
-                        placeholderText: qsTr("Job name")
-                        color: Theme.textPrimary
-                        placeholderTextColor: Theme.textTertiary
-                        font.pixelSize: 16
-                        background: Rectangle {
-                            color: "transparent"
-                            Rectangle {
-                                anchors.bottom: parent.bottom
-                                width: parent.width
-                                height: 1
-                                color: nameField.activeFocus ? Theme.accent : Theme.border
-                            }
-                        }
-                    }
-                    FlatButton {
-                        label: "Save job"
-                        onClicked: root.runWithHostPrompt("save")
-                    }
-                }
 
                 GridLayout {
                     columns: 2
@@ -1081,64 +1013,6 @@ ApplicationWindow {
                     }
                 }
 
-                // Schedule — registers an OS timer (launchd/systemd) unless Manual.
-                ColumnLayout {
-                    Layout.fillWidth: true
-                    spacing: 8
-
-                    RowLayout {
-                        Layout.fillWidth: true
-                        spacing: 6
-                        Text { text: "SCHEDULE"; color: Theme.textTertiary; font.pixelSize: 11; font.letterSpacing: 1; Layout.rightMargin: 4 }
-                        Chip { label: "manual"; active: root.scheduleKind === "manual"; onToggled: root.scheduleKind = "manual" }
-                        Chip { label: "interval"; active: root.scheduleKind === "interval"; onToggled: root.scheduleKind = "interval" }
-                        Chip { label: "daily"; active: root.scheduleKind === "daily"; onToggled: root.scheduleKind = "daily" }
-                        Chip { label: "weekly"; active: root.scheduleKind === "weekly"; onToggled: root.scheduleKind = "weekly" }
-                    }
-
-                    RowLayout {
-                        visible: root.scheduleKind === "interval"
-                        Layout.fillWidth: true
-                        spacing: 8
-                        Text { text: "every"; color: Theme.textSecondary; font.pixelSize: 12 }
-                        Field {
-                            id: intervalField
-                            Layout.preferredWidth: 70
-                            text: "60"
-                            inputMethodHints: Qt.ImhDigitsOnly
-                            validator: IntValidator { bottom: 1; top: 525600 }
-                        }
-                        Text { text: "minutes"; color: Theme.textSecondary; font.pixelSize: 12 }
-                    }
-
-                    RowLayout {
-                        visible: root.scheduleKind === "daily" || root.scheduleKind === "weekly"
-                        Layout.fillWidth: true
-                        spacing: 8
-                        Text { text: "at"; color: Theme.textSecondary; font.pixelSize: 12 }
-                        Field {
-                            id: timeField
-                            Layout.preferredWidth: 80
-                            text: "09:00"
-                            placeholderText: "HH:MM"
-                            validator: RegularExpressionValidator {
-                                regularExpression: /^([01][0-9]|2[0-3]):[0-5][0-9]$/
-                            }
-                        }
-                    }
-
-                    RowLayout {
-                        visible: root.scheduleKind === "weekly"
-                        Layout.fillWidth: true
-                        spacing: 6
-                        Text { text: "on"; color: Theme.textSecondary; font.pixelSize: 12 }
-                        Repeater {
-                            model: ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"]
-                            Chip { label: modelData; active: root.weekday === index; onToggled: root.weekday = index }
-                        }
-                    }
-                }
-
                 RowLayout {
                     Layout.fillWidth: true
                     spacing: 8
@@ -1146,18 +1020,13 @@ ApplicationWindow {
                     FlatButton {
                         label: "Preview"
                         active: parent.canStart
-                        onClicked: controller.preview(root.jobMap())
+                        onClicked: root.runWithHostPrompt("preview")
                     }
                     FlatButton {
                         label: controller.running ? "Running…" : "Run sync"
                         primary: true
                         active: parent.canStart
-                        onClicked: {
-                            if (root.deleteOn)
-                                root.confirmOpen = true
-                            else
-                                controller.run(root.jobMap())
-                        }
+                        onClicked: root.runWithHostPrompt("run")
                     }
                     Item { Layout.fillWidth: true }
                     FlatButton { label: "Cancel"; active: controller.running; onClicked: controller.cancel() }
@@ -1371,4 +1240,6 @@ ApplicationWindow {
             root.continueHostAction(action)
         }
     }
+
+    NewHostDialog { id: newHostDialog }
 }

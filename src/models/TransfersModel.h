@@ -7,7 +7,7 @@
 /// Backs the transfers modal: the live list of ad-hoc transfers managed by
 /// TransferManager's parallel-capped queue.
 ///
-/// Unlike JobListModel (saved profiles), the rows here are transient — one row
+/// The rows here are transient — one row
 /// per in-flight or recently-finished transfer. TransferManager owns this model
 /// and is the only writer; it calls add() to enqueue a row, then setStatus() /
 /// updateProgress() as each engine reports lifecycle and progress. The QML

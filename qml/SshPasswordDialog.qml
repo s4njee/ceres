@@ -110,7 +110,7 @@ Rectangle {
                 label: "remember on this machine (keychain)"
                 active: root.remember
                 onToggled: root.remember = !root.remember
-                tooltip: "Stores the password in the OS keychain so saved/scheduled runs can reuse it"
+                tooltip: "Stores the password in the OS keychain so this host can reuse it later"
             }
 
             RowLayout {
