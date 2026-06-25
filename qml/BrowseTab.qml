@@ -10,6 +10,10 @@ import QtQuick.Layouts
 Item {
     id: tab
 
+    // The active browse session. All `browse.*` bindings below follow whichever tab is
+    // selected; switching sessions.currentIndex re-points the whole pane at it.
+    readonly property var browse: sessions.current
+
     // ---- prompt helper (inline modal) ----
     function promptInput(title, initial, onAccept) {
         promptDialog.title = title
@@ -272,6 +276,62 @@ Item {
             Layout.fillWidth: true
             Layout.fillHeight: true
             spacing: 10
+
+            // session tabs: one per simultaneous host connection, plus a "+" to add.
+            Flow {
+                Layout.fillWidth: true
+                Layout.topMargin: 8
+                Layout.leftMargin: 12
+                Layout.rightMargin: 12
+                spacing: 4
+                Repeater {
+                    model: sessions.labels
+                    delegate: Rectangle {
+                        required property string modelData
+                        required property int index
+                        readonly property bool isCurrent: index === sessions.currentIndex
+                        implicitHeight: 26
+                        implicitWidth: tabRow.implicitWidth + 16
+                        radius: Theme.radius
+                        color: isCurrent ? Theme.bgTertiary : "transparent"
+                        border.width: 1
+                        border.color: isCurrent ? Theme.accent : Theme.border
+                        Row {
+                            id: tabRow
+                            anchors.centerIn: parent
+                            spacing: 6
+                            Text {
+                                text: modelData
+                                color: parent.parent.isCurrent ? Theme.textPrimary : Theme.textSecondary
+                                font.pixelSize: 12
+                                anchors.verticalCenter: parent.verticalCenter
+                            }
+                            Text {
+                                visible: sessions.count > 1
+                                text: "✕"
+                                color: closeMouse.containsMouse ? Theme.danger : Theme.textTertiary
+                                font.pixelSize: 11
+                                anchors.verticalCenter: parent.verticalCenter
+                                MouseArea {
+                                    id: closeMouse
+                                    anchors.fill: parent
+                                    anchors.margins: -3
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: sessions.closeSession(index)
+                                }
+                            }
+                        }
+                        MouseArea {
+                            anchors.fill: parent
+                            z: -1
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: sessions.currentIndex = index
+                        }
+                    }
+                }
+                FlatButton { label: "+"; onClicked: sessions.addSession() }
+            }
 
             // top: manual connect + status + transfers
             RowLayout {

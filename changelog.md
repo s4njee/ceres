@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Added tabbed, simultaneous host sessions: a new `BrowseSessions` manager owns multiple independent `BrowseController` connections, and the browse tab gains a session tab strip (+ to add, ✕ to close, click to switch). Each tab keeps its own SSH connection, local/remote paths, and bookmarks; all share the one transfer queue. The pane binds to the active session, so switching tabs re-points the whole UI.
 - Added remote file quick-view and edit-in-place: the remote context menu gains "Quick view" (download to a temp dir and open with the OS default app), "Edit" (open in the configured editor and re-upload automatically on every save via a file watcher), and "Set editor…" to configure the editor command (persisted; empty = OS default). Downloads/uploads run through the normal transfer queue, so auth and progress are handled.
 - Added a persistent transfer history: every finished transfer (done/failed/cancelled) is logged with its direction, destination, status, and time, capped at 200 and surviving restarts (QSettings). The transfers dialog gains a History view toggle with a Clear action. Covered by a manager test.
 - Transfers now show a live ETA and a final throughput summary: each row displays "speed · ETA h:mm:ss" while running and the rsync `--stats` line ("sent … received … bytes/sec") on completion. Surfaced via new `eta`/`summary` model roles fed from the parser's existing ETA field and stats output.

@@ -108,7 +108,7 @@ Legend: `[x]` already in Ceres · `[ ]` not yet · _(italic notes for caveats)_
 - [ ] Keyboard navigation & shortcuts throughout the browser
 - [x] Transfer notifications (system notification on completion)
 - [ ] Drag a remote file out to the desktop to download
-- [t] Tabbed / multiple simultaneous host sessions
+- [x] Tabbed / multiple simultaneous host sessions
 - [x] Error toasts with actionable detail
 - [ ] Localization / i18n
 
