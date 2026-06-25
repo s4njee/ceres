@@ -9,6 +9,7 @@
 #include <QProcess>
 #include <QSettings>
 #include <QStandardPaths>
+#include <QStorageInfo>
 #include <QThreadPool>
 #include <QUuid>
 
@@ -436,6 +437,17 @@ void BrowseController::localRefresh()
         entries.append(e);
     }
     m_local.setEntries(entries);
+
+    // Free-space indicator for the local pane (QStorageInfo is synchronous).
+    const QStorageInfo storage(m_localPath);
+    const QString free = storage.isValid() && storage.bytesTotal() > 0
+            ? formatBytes(storage.bytesAvailable()) + QStringLiteral(" free of ")
+                  + formatBytes(storage.bytesTotal())
+            : QString();
+    if (free != m_localFree) {
+        m_localFree = free;
+        emit localFreeChanged();
+    }
 }
 
 void BrowseController::mkdirLocal(const QString &name)

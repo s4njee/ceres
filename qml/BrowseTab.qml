@@ -421,6 +421,7 @@ Item {
                     Layout.fillHeight: true
                     Layout.preferredWidth: 1   // equal share with the remote pane
                     title: "LOCAL"
+                    info: browse.localFree
                     fileModel: browse.localFiles
                     path: browse.localPath
                     allowContext: true

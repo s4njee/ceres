@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added a free-space indicator to the local pane too: shows "X free of Y" for the local filesystem (via `QStorageInfo`, refreshed on each local listing), matching the remote pane's line.
+
 - Made the bookmarks bar uniform: the "Bookmark this folder" action is now a Chip (with the ★ folded into its label) instead of a taller FlatButton, so it matches the bookmark pills' size.
 
 - Moved the remote free-space indicator onto its own line below the pane header (was sharing the header row with the title), so it has room to show "X free of Y" in full.

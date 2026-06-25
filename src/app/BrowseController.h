@@ -39,6 +39,7 @@ class BrowseController : public QObject {
     Q_PROPERTY(bool connected READ connected NOTIFY connectedChanged)
     Q_PROPERTY(bool busy READ busy NOTIFY busyChanged)
     Q_PROPERTY(QString remoteFree READ remoteFree NOTIFY remoteFreeChanged)
+    Q_PROPERTY(QString localFree READ localFree NOTIFY localFreeChanged)
     Q_PROPERTY(QStringList bookmarks READ bookmarks NOTIFY bookmarksChanged)
     Q_PROPERTY(QString editorCommand READ editorCommand WRITE setEditorCommand NOTIFY editorCommandChanged)
 public:
@@ -53,6 +54,7 @@ public:
     bool connected() const { return m_connected; }
     bool busy() const { return m_busy; }
     QString remoteFree() const { return m_remoteFree; }  // "X free of Y" for the remote header
+    QString localFree() const { return m_localFree; }    // same, for the local filesystem
     QStringList bookmarks() const { return m_bookmarks; }  // saved paths for the connected host
 
     // Favorite remote paths, persisted per host (QSettings). Add/remove the current
@@ -117,6 +119,7 @@ signals:
     void connectedChanged();
     void busyChanged();
     void remoteFreeChanged();
+    void localFreeChanged();
     void bookmarksChanged();
     /// Key auth failed; the UI should prompt for a password (prefilled with `user`)
     /// and call connectWithPassword(). `host` is shown for context.
@@ -167,6 +170,7 @@ private:
     QString m_sshPassword;  // session password (empty = key/agent auth)
 
     QString m_remoteFree;   // free/total summary for the connected remote filesystem
+    QString m_localFree;    // free/total summary for the local filesystem
     QStringList m_bookmarks;  // favorite paths for the current target (from QSettings)
 
     QString m_editorCommand;  // external editor command (empty = OS default opener)
