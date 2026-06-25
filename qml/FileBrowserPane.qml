@@ -157,6 +157,7 @@ ColumnLayout {
                 required property string name
                 required property bool isDir
                 required property bool isSymlink
+                required property string linkTarget
                 required property string sizeText
                 required property string mtimeText
 
@@ -180,7 +181,10 @@ ColumnLayout {
                     }
                     Text {
                         Layout.fillWidth: true
-                        text: row.name
+                        // Symlinks show their target inline: "link → /path/to/target".
+                        text: row.isSymlink && row.linkTarget.length > 0
+                              ? row.name + "  → " + row.linkTarget
+                              : row.name
                         color: Theme.textPrimary
                         font.family: Theme.mono
                         font.pixelSize: 12

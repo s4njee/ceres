@@ -41,10 +41,11 @@ void RemoteFsTest::parsesGnuListing()
     QVERIFY(!entries.at(2).isDir);
     QCOMPARE(entries.at(2).size, qint64(99999));
 
-    // Symlink: flagged as such, target stripped, treated as a file (not a dir).
+    // Symlink: flagged as such, name split from target, treated as a file (not a dir).
     QCOMPARE(entries.at(3).name, QStringLiteral("current"));
     QVERIFY(entries.at(3).isSymlink);
     QVERIFY(!entries.at(3).isDir);
+    QCOMPARE(entries.at(3).linkTarget, QStringLiteral("/opt/app/v2"));
 }
 
 void RemoteFsTest::parsesBsdListing()

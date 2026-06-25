@@ -362,6 +362,8 @@ void BrowseController::localRefresh()
         e.name = fi.fileName();
         e.isDir = fi.isDir();
         e.isSymlink = fi.isSymLink();
+        if (e.isSymlink)
+            e.linkTarget = fi.symLinkTarget();
         e.size = fi.isDir() ? 0 : fi.size();
         e.mtimeText = fi.lastModified().toString(QStringLiteral("MMM d  HH:mm"));
         e.mtime = fi.lastModified().toSecsSinceEpoch();

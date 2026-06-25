@@ -39,7 +39,7 @@ Legend: `[x]` already in Ceres · `[ ]` not yet · _(italic notes for caveats)_
 - [x] Show hidden (dotfiles) entries
 - [x] Sort by name / size / date / type
 - [x] Filter / search within a directory
-- [t] Follow / display symlink targets
+- [x] Follow / display symlink targets
 - [ ] Show / edit POSIX permissions (chmod) and ownership (chown)
 - [t] Bookmarks / favorite remote paths
 - [t] Breadcrumb path bar

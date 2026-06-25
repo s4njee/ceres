@@ -492,10 +492,12 @@ QList<FileEntry> RemoteFs::parseLsList(const QString &lsOutput)
         }
         QString name = line.mid(pos);
 
-        // Symlinks list as "link -> target"; keep only the link's own name.
+        // Symlinks list as "link -> target"; split the link's own name from the target.
         const int arrow = name.indexOf(QStringLiteral(" -> "));
-        if (entry.isSymlink && arrow >= 0)
+        if (entry.isSymlink && arrow >= 0) {
+            entry.linkTarget = name.mid(arrow + 4);
             name = name.left(arrow);
+        }
 
         if (name.isEmpty() || name == QLatin1String(".") || name == QLatin1String(".."))
             continue;

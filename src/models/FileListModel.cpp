@@ -22,6 +22,8 @@ QVariant FileListModel::data(const QModelIndex &index, int role) const
         return e.isDir;
     case IsSymlinkRole:
         return e.isSymlink;
+    case LinkTargetRole:
+        return e.linkTarget;
     case SizeRole:
         return e.size;
     case SizeTextRole:
@@ -39,6 +41,7 @@ QHash<int, QByteArray> FileListModel::roleNames() const
         {NameRole, "name"},
         {IsDirRole, "isDir"},
         {IsSymlinkRole, "isSymlink"},
+        {LinkTargetRole, "linkTarget"},
         {SizeRole, "size"},
         {SizeTextRole, "sizeText"},
         {MtimeTextRole, "mtimeText"},

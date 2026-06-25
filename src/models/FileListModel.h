@@ -23,6 +23,7 @@ public:
         NameRole = Qt::UserRole + 1,
         IsDirRole,
         IsSymlinkRole,
+        LinkTargetRole,
         SizeRole,
         SizeTextRole,
         MtimeTextRole,

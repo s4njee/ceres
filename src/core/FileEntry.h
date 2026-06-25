@@ -12,6 +12,7 @@ struct FileEntry {
     QString name;            // base name (no path), e.g. "report.pdf"
     bool isDir = false;      // directory (or a symlink resolving to one, best-effort)
     bool isSymlink = false;  // listing showed a symlink (mode 'l')
+    QString linkTarget;      // symlink destination (the "-> target" part), if known
     qint64 size = 0;         // bytes (0 for directories we don't size)
     QString mtimeText;       // human date as shown by the source, e.g. "Jun 22 10:30"
     qint64 mtime = 0;        // epoch seconds for sorting (0 = unknown; remote ls isn't
