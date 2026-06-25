@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Dropped the redundant "· user@host" from the remote pane title (it's already shown in the session tab), leaving just "REMOTE" beside the filter.
+
 - Added a free-space indicator to the local pane too: shows "X free of Y" for the local filesystem (via `QStorageInfo`, refreshed on each local listing), matching the remote pane's line.
 
 - Made the bookmarks bar uniform: the "Bookmark this folder" action is now a Chip (with the ★ folded into its label) instead of a taller FlatButton, so it matches the bookmark pills' size.
