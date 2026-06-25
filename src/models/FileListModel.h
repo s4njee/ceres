@@ -54,9 +54,6 @@ public:
 
     const FileEntry &entryAt(int row) const { return m_entries.at(row); }
     bool isDirAt(int row) const;
-    // True if the full (unfiltered) listing contains an entry with this exact name —
-    // used for destination-conflict detection before a transfer.
-    bool hasName(const QString &name) const;
 
     /// Human-readable byte count, e.g. 1536 -> "1.5 KB". Shared with tests.
     static QString humanSize(qint64 bytes);

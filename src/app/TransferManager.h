@@ -43,10 +43,8 @@ class TransferManager : public QObject {
 public:
     using EngineFactory = std::function<SyncEngine *()>;
 
-    // How a transfer treats files already present at the destination. `Ask` defers the
-    // decision to the caller (BrowseController prompts on a detected conflict); the
-    // manager leaves Ask jobs' own ignoreExisting/updateOnly fields untouched.
-    enum OverwritePolicy { Overwrite = 0, SkipExisting, NewerOnly, Ask };
+    // How a transfer treats files already present at the destination.
+    enum OverwritePolicy { Overwrite = 0, SkipExisting, NewerOnly };
     Q_ENUM(OverwritePolicy)
 
     // Production ctor: the default factory creates a fresh RsyncProcessEngine
@@ -137,7 +135,7 @@ private:
     int m_maxConcurrent = 3;
     int m_rateLimitKBps = 0;
     bool m_verifyChecksums = false;
-    int m_overwritePolicy = Ask;  // default: prompt on a detected conflict
+    int m_overwritePolicy = NewerOnly;  // default: only replace when the source is newer
     int m_batchFailures = 0;  // failed/cancelled runs since the queue was last empty
 
     // Emit allTransfersComplete() when a finish leaves nothing active or queued.

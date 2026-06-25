@@ -683,93 +683,10 @@ void BrowseController::seedFromLocalWalk(const QString &id, const QString &absPa
     });
 }
 
-QStringList BrowseController::conflictsIn(const FileListModel &dest, const QStringList &names) const
-{
-    QStringList out;
-    for (const QString &name : names) {
-        if (!name.isEmpty() && dest.hasName(name))
-            out << name;
-    }
-    return out;
-}
-
 void BrowseController::download(const QStringList &names)
 {
     if (!m_connected || !m_transfers)
         return;
-    // "Ask" policy: if any name already exists locally, hold the batch and prompt.
-    if (m_transfers->overwritePolicy() == TransferManager::Ask) {
-        const QStringList conflicts = conflictsIn(m_local, names);
-        if (!conflicts.isEmpty()) {
-            m_pending = {PendingTransfer::Download, names};
-            m_hasPending = true;
-            emit overwriteConflict(conflicts.size());
-            return;
-        }
-    }
-    doDownload(names, /*ignoreExisting=*/false, /*updateOnly=*/false);
-}
-
-void BrowseController::upload(const QStringList &names)
-{
-    if (!m_connected || !m_transfers)
-        return;
-    if (m_transfers->overwritePolicy() == TransferManager::Ask) {
-        const QStringList conflicts = conflictsIn(m_remote, names);
-        if (!conflicts.isEmpty()) {
-            m_pending = {PendingTransfer::Upload, names};
-            m_hasPending = true;
-            emit overwriteConflict(conflicts.size());
-            return;
-        }
-    }
-    doUpload(names, false, false);
-}
-
-void BrowseController::uploadFiles(const QStringList &paths)
-{
-    if (!m_connected || !m_transfers)
-        return;
-    if (m_transfers->overwritePolicy() == TransferManager::Ask) {
-        QStringList names;
-        for (const QString &p : paths)
-            names << QFileInfo(p.trimmed()).fileName();
-        const QStringList conflicts = conflictsIn(m_remote, names);
-        if (!conflicts.isEmpty()) {
-            m_pending = {PendingTransfer::UploadFiles, paths};
-            m_hasPending = true;
-            emit overwriteConflict(conflicts.size());
-            return;
-        }
-    }
-    doUploadFiles(paths, false, false);
-}
-
-void BrowseController::resolveConflict(int action)
-{
-    if (!m_hasPending)
-        return;
-    const PendingTransfer p = m_pending;
-    m_hasPending = false;
-    if (action == 0)
-        return;  // cancel
-    const bool ignoreExisting = (action == 2);  // skip existing
-    const bool updateOnly = (action == 3);      // newer only
-    switch (p.kind) {
-    case PendingTransfer::Download:
-        doDownload(p.items, ignoreExisting, updateOnly);
-        break;
-    case PendingTransfer::Upload:
-        doUpload(p.items, ignoreExisting, updateOnly);
-        break;
-    case PendingTransfer::UploadFiles:
-        doUploadFiles(p.items, ignoreExisting, updateOnly);
-        break;
-    }
-}
-
-void BrowseController::doDownload(const QStringList &names, bool ignoreExisting, bool updateOnly)
-{
     const QString dest = withTrailingSlash(m_localPath);
     for (const QString &name : names) {
         if (name.isEmpty())
@@ -777,8 +694,6 @@ void BrowseController::doDownload(const QStringList &names, bool ignoreExisting,
         SyncJob job = transferJob();
         job.source = m_target + QLatin1Char(':') + joinRemote(m_remotePath, name);
         job.destination = dest;
-        job.ignoreExisting = ignoreExisting;
-        job.updateOnly = updateOnly;
         const QString id = m_transfers->enqueue(job, QStringLiteral("down"), name);
         // Walk the remote tree so the whole file list shows at 0% immediately; the
         // result arrives async (RemoteFs::enumerated) and never blocks the transfer.
@@ -786,8 +701,10 @@ void BrowseController::doDownload(const QStringList &names, bool ignoreExisting,
     }
 }
 
-void BrowseController::doUpload(const QStringList &names, bool ignoreExisting, bool updateOnly)
+void BrowseController::upload(const QStringList &names)
 {
+    if (!m_connected || !m_transfers)
+        return;
     const QString dest = m_target + QLatin1Char(':') + withTrailingSlash(m_remotePath);
     for (const QString &name : names) {
         if (name.isEmpty())
@@ -795,16 +712,16 @@ void BrowseController::doUpload(const QStringList &names, bool ignoreExisting, b
         SyncJob job = transferJob();
         job.source = QDir(m_localPath).filePath(name);
         job.destination = dest;
-        job.ignoreExisting = ignoreExisting;
-        job.updateOnly = updateOnly;
         const QString id = m_transfers->enqueue(job, QStringLiteral("up"), name);
         // Local source: walk off-thread and seed the file list when it returns.
         seedFromLocalWalk(id, job.source, name);
     }
 }
 
-void BrowseController::doUploadFiles(const QStringList &paths, bool ignoreExisting, bool updateOnly)
+void BrowseController::uploadFiles(const QStringList &paths)
 {
+    if (!m_connected || !m_transfers)
+        return;
     const QString dest = m_target + QLatin1Char(':') + withTrailingSlash(m_remotePath);
     for (const QString &path : paths) {
         const QString clean = path.trimmed();
@@ -813,8 +730,6 @@ void BrowseController::doUploadFiles(const QStringList &paths, bool ignoreExisti
         SyncJob job = transferJob();
         job.source = clean;  // absolute local path from the drop
         job.destination = dest;
-        job.ignoreExisting = ignoreExisting;
-        job.updateOnly = updateOnly;
         const QString display = QFileInfo(clean).fileName();
         const QString id = m_transfers->enqueue(job, QStringLiteral("up"), display);
         seedFromLocalWalk(id, clean, display);

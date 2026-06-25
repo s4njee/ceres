@@ -154,15 +154,6 @@ bool FileListModel::isDirAt(int row) const
     return row >= 0 && row < m_entries.size() && m_entries.at(row).isDir;
 }
 
-bool FileListModel::hasName(const QString &name) const
-{
-    for (const FileEntry &e : m_source) {
-        if (e.name == name)
-            return true;
-    }
-    return false;
-}
-
 QString FileListModel::humanSize(qint64 bytes)
 {
     if (bytes < 0)

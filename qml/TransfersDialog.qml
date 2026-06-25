@@ -83,12 +83,6 @@ Rectangle {
                 spacing: 6
                 Text { text: "On conflict:"; color: Theme.textTertiary; font.pixelSize: 12 }
                 Chip {
-                    label: "ask"
-                    active: transfers.overwritePolicy === 3
-                    tooltip: "Prompt when the destination already has matching items"
-                    onToggled: transfers.overwritePolicy = 3
-                }
-                Chip {
                     label: "overwrite"
                     active: transfers.overwritePolicy === 0
                     tooltip: "Replace destination files (rsync default)"

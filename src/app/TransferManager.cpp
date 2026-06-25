@@ -130,12 +130,8 @@ void TransferManager::pump()
         SyncJob job = pending.job;
         job.bwLimitKBps = m_rateLimitKBps;     // apply the current rate cap at start time
         job.checksum = job.checksum || m_verifyChecksums;  // -c content verification
-        // Overwrite (default) and Ask leave the job's own ignoreExisting/updateOnly
-        // fields as the caller set them; Skip/Newer force the corresponding flag.
-        if (m_overwritePolicy == SkipExisting)
-            job.ignoreExisting = true;
-        else if (m_overwritePolicy == NewerOnly)
-            job.updateOnly = true;
+        job.ignoreExisting = (m_overwritePolicy == SkipExisting);
+        job.updateOnly = (m_overwritePolicy == NewerOnly);
 
         SyncEngine *e = m_factory();
         e->setParent(this);
