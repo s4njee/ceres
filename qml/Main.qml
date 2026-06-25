@@ -785,7 +785,15 @@ ApplicationWindow {
                         }
                     }
 
-                    FlatButton { Layout.fillWidth: true; label: "+  New host"; onClicked: newHostDialog.show() }
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 6
+                        FlatButton { Layout.fillWidth: true; label: "+  New host"; onClicked: newHostDialog.show() }
+                        FlatButton {
+                            label: "Import config"
+                            onClicked: controller.importSshConfig()
+                        }
+                    }
 
                     Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: Theme.border; Layout.topMargin: 4 }
 

@@ -22,7 +22,7 @@ Legend: `[x]` already in Ceres · `[ ]` not yet · _(italic notes for caveats)_
 - [ ] Jump host / `ProxyJump` (bastion) support
 - [x] Connection timeout / keepalive configuration
 - [t] Reconnect on dropped connection
-- [t] Import hosts from `~/.ssh/config`
+- [x] Import hosts from `~/.ssh/config`
 
 ## Host-key / trust management
 - [x] Accept and pin new host keys (`accept-new`)

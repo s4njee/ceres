@@ -28,6 +28,7 @@ add_library(ceres_core STATIC
     src/core/SshHost.h
     src/core/SshKnownHosts.h        src/core/SshKnownHosts.cpp
     src/core/SshHostStore.h          src/core/SshHostStore.cpp
+    src/core/SshConfigImport.h       src/core/SshConfigImport.cpp
     src/core/SecretStore.h           src/core/SecretStore.cpp
     src/engine/RsyncEvents.h
     src/engine/SyncEngine.h

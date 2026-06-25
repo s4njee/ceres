@@ -120,6 +120,9 @@ public:
     /// Rebuild the saved-SSH-hosts sidebar model from disk. Called when another
     /// component (e.g. the browse tab) saves a host out of band.
     Q_INVOKABLE void reloadSshHosts() { rebuildSshHosts(); }
+    // Import concrete hosts from ~/.ssh/config into the saved-host sidebar (existing
+    // targets are left untouched). Returns the number of new hosts added.
+    Q_INVOKABLE int importSshConfig();
 
 signals:
     void runningChanged();

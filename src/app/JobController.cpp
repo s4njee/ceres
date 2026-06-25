@@ -1,6 +1,8 @@
 #include "app/JobController.h"
 
 #include <QCryptographicHash>
+#include <QDir>
+#include <QFile>
 #include <QHostInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -10,6 +12,7 @@
 
 #include "core/Endpoint.h"
 #include "core/Peer.h"
+#include "core/SshConfigImport.h"
 #include "core/SshKnownHosts.h"
 #include "core/SshHost.h"
 #include "core/SyncJob.h"
@@ -428,6 +431,27 @@ void JobController::setDiscoverable(bool on)
 void JobController::rebuildSshHosts()
 {
     m_sshHosts.setHosts(m_sshHostStore.loadAll());
+}
+
+int JobController::importSshConfig()
+{
+    QFile f(QDir::homePath() + QStringLiteral("/.ssh/config"));
+    if (!f.open(QIODevice::ReadOnly | QIODevice::Text))
+        return 0;
+
+    const QList<SshHost> hosts = SshConfigImport::parse(QString::fromUtf8(f.readAll()));
+    int added = 0;
+    for (const SshHost &host : hosts) {
+        // Skip incomplete entries and anything we already have (don't clobber a saved
+        // host's label/key/password with config-derived values).
+        if (host.target.isEmpty() || host.host.isEmpty() || m_sshHostStore.contains(host.target))
+            continue;
+        if (m_sshHostStore.upsert(host))
+            ++added;
+    }
+    if (added > 0)
+        rebuildSshHosts();
+    return added;
 }
 
 QString JobController::sshHostSecretKey(const QString &target) const
