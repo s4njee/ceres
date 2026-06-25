@@ -58,6 +58,7 @@ private slots:
     void daemonTargetHasNoSsh();
     void maxDeleteCap();
     void bwLimit();
+    void partialOnlyForPerFileTransfers();
     void expandsLocalTilde();
     void convertsWindowsLocalPaths();
     void windowsBuildConvertsLocalEndpoints();
@@ -294,6 +295,21 @@ void ArgvBuilderTest::bwLimit()
     const QStringList none = ArgvBuilder::build(job, modern(), false);
     QVERIFY(std::none_of(none.cbegin(), none.cend(),
                          [](const QString &a) { return a.startsWith(QStringLiteral("--bwlimit")); }));
+}
+
+void ArgvBuilderTest::partialOnlyForPerFileTransfers()
+{
+    SyncJob job;
+    job.source = QStringLiteral("a/");
+    job.destination = QStringLiteral("b/");
+
+    // The preview/sync path (no per-file progress) shouldn't keep partials.
+    QVERIFY(!ArgvBuilder::build(job, modern(), false).contains(QStringLiteral("--partial")));
+
+    // The browse transfer path (per-file progress) gets --partial so retries resume.
+    ArgvBuilder::BuildOptions options;
+    options.perFileProgress = true;
+    QVERIFY(ArgvBuilder::build(job, modern(), options).contains(QStringLiteral("--partial")));
 }
 
 void ArgvBuilderTest::expandsLocalTilde()

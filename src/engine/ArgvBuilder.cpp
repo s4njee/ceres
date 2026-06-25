@@ -126,6 +126,12 @@ QStringList ArgvBuilder::build(const SyncJob &job, const RsyncCapabilities &caps
     // Always-on machine-readable output that drives the UI.
     args << QStringLiteral("--itemize-changes") << QStringLiteral("--stats");
 
+    // Keep partially transferred files on interruption so a retried ad-hoc transfer
+    // resumes where it left off instead of resending from scratch. Scoped to the
+    // per-file transfer path (the browse queue); the preview/sync path doesn't need it.
+    if (options.perFileProgress)
+        args << QStringLiteral("--partial");
+
     // Capability-gated: keep the command valid on limited rsyncs (openrsync).
     // Per-file mode swaps the aggregate progress2 for rsync's per-file --progress so
     // the parser can report each file individually (and derive the aggregate itself).

@@ -62,7 +62,7 @@ Legend: `[x]` already in Ceres · `[ ]` not yet · _(italic notes for caveats)_
 - [x] Delta/incremental transfer (rsync) — skip unchanged files
 - [x] On-the-wire compression
 - [x] Preserve attributes / timestamps (archive mode)
-- [t] Resume an interrupted partial transfer (`--partial` / restart)
+- [x] Resume an interrupted partial transfer (`--partial` / restart)
 - [t] Overwrite policy (skip / overwrite / rename / newer-only) prompts
 - [x] Bandwidth / transfer-rate limit
 - [t] Per-transfer ETA and overall throughput summary
