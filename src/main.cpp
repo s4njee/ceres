@@ -7,18 +7,18 @@
 ///   2. Registering C++ model types as uncreatable QML types — they're owned by
 ///      JobController and handed to QML via Q_PROPERTY, but QML needs to know
 ///      their type to bind to roles and properties.
-///   3. Creating the two context-property singletons (controller + completer)
-///      and injecting them into the QML engine's root context.
+///   3. Creating the context-property objects (controller, completer, sessions,
+///      transfers, notifier) and injecting them into the QML engine's root context.
 ///
-/// The controller and completer live on the stack here (parent = nullptr) so
-/// they outlive the QML engine — QML pointers to them remain valid during
-/// teardown.
+/// Those objects live on the stack in main() (parent = nullptr) so they outlive the
+/// QML engine — QML pointers to them remain valid during teardown.
 
 #include <cstdio>
 
 #include <QByteArray>
 #include <QCoreApplication>
 #include <QGuiApplication>
+#include <QIcon>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QQuickStyle>
@@ -41,7 +41,19 @@
 #include "models/SshHostListModel.h"
 #include "models/TransfersModel.h"
 
+#ifndef CERES_VERSION
+#define CERES_VERSION "0.0.0"
+#endif
+
 namespace {
+
+// Shared app identity, set on whichever QCoreApplication subclass we end up using.
+void setAppIdentity()
+{
+    QCoreApplication::setApplicationName(QStringLiteral("Ceres"));
+    QCoreApplication::setOrganizationName(QStringLiteral("Ceres"));
+    QCoreApplication::setApplicationVersion(QStringLiteral(CERES_VERSION));
+}
 
 bool isHelpArg(const char *arg)
 {
@@ -81,8 +93,7 @@ int main(int argc, char *argv[])
 
     if (argc == 3) {
         QCoreApplication app(argc, argv);
-        QCoreApplication::setApplicationName(QStringLiteral("Ceres"));
-        QCoreApplication::setOrganizationName(QStringLiteral("Ceres"));
+        setAppIdentity();
         return AdHocTransfer::run(QString::fromLocal8Bit(argv[1]),
                                   QString::fromLocal8Bit(argv[2]));
     }
@@ -93,8 +104,10 @@ int main(int argc, char *argv[])
     }
 
     QGuiApplication app(argc, argv);
-    QGuiApplication::setApplicationName(QStringLiteral("Ceres"));
-    QGuiApplication::setOrganizationName(QStringLiteral("Ceres"));
+    setAppIdentity();
+    // Associates the window with its .desktop entry on Linux (Wayland app id / taskbar icon).
+    QGuiApplication::setDesktopFileName(QStringLiteral("ceres"));
+    app.setWindowIcon(QIcon(QStringLiteral(":/icons/ceres-512.png")));
 
     QQuickStyle::setStyle(QStringLiteral("Basic"));  // custom high-contrast dark theme, no Material
 

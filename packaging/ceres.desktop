@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Ceres
+GenericName=File Transfer
+Comment=rsync-based file transfer and folder sync over SSH
+Exec=ceres
+Icon=ceres
+Terminal=false
+Categories=Network;FileTransfer;Utility;
+Keywords=rsync;ssh;sftp;scp;sync;transfer;backup;
+StartupNotify=true

@@ -29,3 +29,6 @@ ui_*.h
 .vscode/
 .idea/
 *.swp
+
+# Stray tool caches
+.vite/

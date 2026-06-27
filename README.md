@@ -67,11 +67,38 @@ cmake --build build
 ./build/ceres            # the GUI
 ```
 
+On macOS the GUI builds as an app bundle, so run `./build/ceres.app/Contents/MacOS/ceres`
+(or `open build/ceres.app`); on Linux/Windows it's `./build/ceres`.
+
 ## Test
 
 ```sh
 ctest --test-dir build --output-on-failure
 ```
+
+## Packaging
+
+Ceres ships with install rules and CPack configuration. The Qt runtime
+(frameworks/DLLs + QML plugins) is bundled at install time, and an app icon,
+`Info.plist` (macOS), and `.desktop` entry + themed icons (Linux) are included.
+
+```sh
+# Stage a self-contained install tree:
+cmake --install build --prefix dist
+
+# Or build a distributable archive (.dmg on macOS, .tar.gz on Linux, .zip on Windows):
+cd build && cpack
+```
+
+Icons are generated from [`icons/ceres.svg`](icons/ceres.svg) into `.icns` / `.ico`
+/ `.png`; regenerate with `rsvg-convert` + `iconutil` + ImageMagick if you swap the
+source SVG.
+
+> **macOS note:** a Homebrew-installed Qt uses absolute install names that
+> `macdeployqt` can't fully relocate, so a locally-built `.dmg` runs on machines
+> that have Qt but isn't byte-for-byte portable. Build against an official Qt
+> (online installer / `aqtinstall`) for a fully self-contained, distributable
+> bundle. Signing/notarization is a separate step for public distribution.
 
 ## Windows MSYS2 rsync runtime
 

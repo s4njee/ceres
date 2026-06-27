@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Packaging: added install rules and CPack configuration so the app builds into a distributable bundle — a macOS `.app` (with `Info.plist`, `.icns` icon, and the Qt runtime deployed) packaged as a `.dmg`, a Linux install with a `.desktop` entry and themed icons (`.tar.gz`/`.deb`), and a Windows `.zip`. App version, organization, window/dock icon, and Linux desktop-file association are now set. Icons are generated from `icons/ceres.svg` into `.icns`/`.ico`/`.png`. See the README "Packaging" section.
+- Removed dead leftover files from the retired scheduler/profile system (`JobId.h`, `ProfileStore.*`, `tst_profilestore.cpp`, `tst_scheduler.cpp`).
+
 - Stopped double-crawling remote directories on download: the upfront file-list seed used a recursive `find` over SSH, but rsync's sender already crawls the tree — so the remote was walked twice and two file lists crossed the wire. Downloads now skip the seed walk and fill the list live from rsync's per-file output. Uploads keep their cheap local seed walk. Removed the now-unused `RemoteFs::enumerate`.
 
 - Dropped the redundant "· user@host" from the remote pane title (it's already shown in the session tab), leaving just "REMOTE" beside the filter.

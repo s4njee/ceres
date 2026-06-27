@@ -1,0 +1,17 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Ceres download icon">
+  <title>Ceres</title>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#13c233"/>
+      <stop offset="0.55" stop-color="#009a22"/>
+      <stop offset="1" stop-color="#007019"/>
+    </linearGradient>
+  </defs>
+  <rect x="16" y="16" width="480" height="480" rx="112" fill="url(#bg)"/>
+  <rect x="16" y="16" width="480" height="480" rx="112" fill="none" stroke="#ffffff" stroke-opacity="0.12" stroke-width="2"/>
+  <g fill="none" stroke="#ffffff" stroke-width="40" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M256 116 V300"/>
+    <path d="M192 240 L256 318 L320 240"/>
+    <path d="M152 350 V382 Q152 404 174 404 H338 Q360 404 360 382 V350"/>
+  </g>
+</svg>

@@ -90,6 +90,14 @@ target_link_libraries(ceres PRIVATE
     ceres_core
     Qt6::Gui Qt6::Qml Qt6::Quick Qt6::QuickControls2
 )
+target_compile_definitions(ceres PRIVATE CERES_VERSION="${PROJECT_VERSION}")
+
+# The window/dock icon, embedded so it's available at runtime on every platform.
+qt_add_resources(ceres "ceres_appicon"
+    PREFIX "/"
+    BASE "${CMAKE_CURRENT_SOURCE_DIR}"
+    FILES icons/ceres-512.png
+)
 
 if(WIN32)
     add_custom_target(stage-msys2-rsync
@@ -112,6 +120,69 @@ if(WIN32)
         DEPENDS stage-msys2-rsync stage-qt-runtime
     )
 endif()
+
+# ---------------------------------------------------------------------------
+# Packaging: install rules + CPack (macOS .dmg, Linux .tar.gz/.deb, Windows .zip).
+#   cmake --build build --target ceres
+#   cmake --install build --prefix dist     # staged install tree
+#   cd build && cpack                        # produces a distributable archive
+# ---------------------------------------------------------------------------
+if(APPLE)
+    set_target_properties(ceres PROPERTIES
+        MACOSX_BUNDLE TRUE
+        MACOSX_BUNDLE_BUNDLE_NAME "Ceres"
+        MACOSX_BUNDLE_GUI_IDENTIFIER "app.ceres.Ceres"
+        MACOSX_BUNDLE_BUNDLE_VERSION "${PROJECT_VERSION}"
+        MACOSX_BUNDLE_SHORT_VERSION_STRING "${PROJECT_VERSION}"
+        MACOSX_BUNDLE_ICON_FILE "ceres.icns"
+    )
+    # Copy the .icns into the bundle's Resources folder.
+    target_sources(ceres PRIVATE icons/ceres.icns)
+    set_source_files_properties(icons/ceres.icns PROPERTIES MACOSX_PACKAGE_LOCATION "Resources")
+endif()
+
+# Bundle the Qt runtime (frameworks/DLLs + QML plugins) at install time.
+qt_generate_deploy_qml_app_script(
+    TARGET ceres
+    OUTPUT_SCRIPT ceres_deploy_script
+    NO_UNSUPPORTED_PLATFORM_ERROR
+)
+install(SCRIPT ${ceres_deploy_script})
+
+if(APPLE)
+    install(TARGETS ceres BUNDLE DESTINATION .)
+else()
+    install(TARGETS ceres RUNTIME DESTINATION bin)
+endif()
+
+if(UNIX AND NOT APPLE)
+    # Desktop integration: launcher entry + themed icons.
+    install(FILES packaging/ceres.desktop DESTINATION share/applications)
+    install(FILES icons/ceres-256.png
+            DESTINATION share/icons/hicolor/256x256/apps RENAME ceres.png)
+    install(FILES icons/ceres-512.png
+            DESTINATION share/icons/hicolor/512x512/apps RENAME ceres.png)
+    install(FILES icons/ceres.svg
+            DESTINATION share/icons/hicolor/scalable/apps RENAME ceres.svg)
+endif()
+
+set(CPACK_PACKAGE_NAME "Ceres")
+set(CPACK_PACKAGE_VENDOR "Ceres")
+set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "rsync-based file transfer and folder sync over SSH")
+set(CPACK_PACKAGE_HOMEPAGE_URL "https://github.com/s4njee/ceres")
+set(CPACK_PACKAGE_EXECUTABLES "ceres" "Ceres")
+if(APPLE)
+    set(CPACK_GENERATOR "DragNDrop")
+elseif(WIN32)
+    set(CPACK_GENERATOR "ZIP")
+else()
+    set(CPACK_GENERATOR "TGZ")
+    set(CPACK_DEBIAN_PACKAGE_MAINTAINER "Ceres")
+    set(CPACK_DEBIAN_PACKAGE_SECTION "net")
+    set(CPACK_DEBIAN_PACKAGE_DEPENDS "rsync, openssh-client")
+endif()
+include(CPack)
 
 # ---------------------------------------------------------------------------
 # Tests
