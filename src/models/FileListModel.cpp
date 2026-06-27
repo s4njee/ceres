@@ -2,6 +2,8 @@
 
 #include <algorithm>
 
+#include "core/Format.h"
+
 int FileListModel::rowCount(const QModelIndex &parent) const
 {
     if (parent.isValid())
@@ -156,20 +158,5 @@ bool FileListModel::isDirAt(int row) const
 
 QString FileListModel::humanSize(qint64 bytes)
 {
-    if (bytes < 0)
-        return {};
-    if (bytes < 1024)
-        return QString::number(bytes) + QStringLiteral(" B");
-
-    static const char *units[] = {"KB", "MB", "GB", "TB", "PB"};
-    double value = static_cast<double>(bytes) / 1024.0;
-    int unit = 0;
-    while (value >= 1024.0 && unit < 4) {
-        value /= 1024.0;
-        ++unit;
-    }
-    // One decimal under 10 (1.5 KB), none above (24 MB) — compact but readable.
-    const int decimals = value < 10.0 ? 1 : 0;
-    return QString::number(value, 'f', decimals) + QLatin1Char(' ')
-        + QLatin1String(units[unit]);
+    return Format::humanSize(bytes);  // single definition lives in core/Format.h
 }

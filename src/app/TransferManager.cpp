@@ -8,19 +8,14 @@
 #include <QSettings>
 #include <QUuid>
 
+#include "core/AppSettings.h"
+#include "core/Format.h"
 #include "engine/RsyncProcessEngine.h"
 #include "engine/SyncEngine.h"
-#include "models/FileListModel.h"
 
 namespace {
 const QString kHistoryKey = QStringLiteral("transferHistory");
 constexpr int kHistoryCap = 200;
-
-QSettings historySettings()
-{
-    return QSettings(QSettings::IniFormat, QSettings::UserScope, QStringLiteral("Ceres"),
-                     QStringLiteral("Ceres"));
-}
 
 // Turn rsync's "sent N bytes  received M bytes  R bytes/sec" stats line into a compact
 // human-readable summary; falls back to the trimmed original if it doesn't parse.
@@ -37,9 +32,9 @@ QString humanizeStats(const QString &line)
     const qint64 sent = toLong(m.captured(1));
     const qint64 received = toLong(m.captured(2));
     const qint64 rate = static_cast<qint64>(m.captured(3).remove(QLatin1Char(',')).toDouble());
-    return FileListModel::humanSize(sent) + QStringLiteral(" sent · ")
-            + FileListModel::humanSize(received) + QStringLiteral(" received · ")
-            + FileListModel::humanSize(rate) + QStringLiteral("/s");
+    return Format::humanSize(sent) + QStringLiteral(" sent · ")
+            + Format::humanSize(received) + QStringLiteral(" received · ")
+            + Format::humanSize(rate) + QStringLiteral("/s");
 }
 }  // namespace
 
@@ -222,7 +217,7 @@ void TransferManager::recordHistory(const QString &id, const QString &status)
     if (name.isEmpty())
         return;
 
-    QSettings s = historySettings();
+    QSettings s = appSettings();
     QJsonArray arr = QJsonDocument::fromJson(s.value(kHistoryKey).toByteArray()).array();
     QJsonObject o;
     o[QStringLiteral("name")] = name;
@@ -239,7 +234,7 @@ void TransferManager::recordHistory(const QString &id, const QString &status)
 
 QVariantList TransferManager::history() const
 {
-    QSettings s = historySettings();
+    QSettings s = appSettings();
     const QJsonArray arr = QJsonDocument::fromJson(s.value(kHistoryKey).toByteArray()).array();
     QVariantList out;
     out.reserve(arr.size());
@@ -250,7 +245,7 @@ QVariantList TransferManager::history() const
 
 void TransferManager::clearHistory()
 {
-    QSettings s = historySettings();
+    QSettings s = appSettings();
     s.remove(kHistoryKey);
     emit historyChanged();
 }

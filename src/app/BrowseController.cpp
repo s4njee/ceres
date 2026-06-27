@@ -14,6 +14,8 @@
 #include <QUuid>
 
 #include "app/TransferManager.h"
+#include "core/AppSettings.h"
+#include "core/Format.h"
 #include "core/SshKnownHosts.h"
 #include "core/SyncJob.h"
 
@@ -51,27 +53,6 @@ QString joinRemote(const QString &dir, const QString &name)
 QString withTrailingSlash(const QString &p)
 {
     return p.endsWith(QLatin1Char('/')) ? p : p + QLatin1Char('/');
-}
-
-// One settings store (favorites, editor command), independent of app-wide QCoreApplication setup.
-QSettings bookmarkSettings()
-{
-    return QSettings(QSettings::IniFormat, QSettings::UserScope, QStringLiteral("Ceres"),
-                     QStringLiteral("Ceres"));
-}
-
-// Human-readable byte count (e.g. "1.4 GB"), for toast messages.
-QString formatBytes(qint64 bytes)
-{
-    static const char *units[] = {"B", "KB", "MB", "GB", "TB", "PB"};
-    double v = static_cast<double>(bytes);
-    int u = 0;
-    while (v >= 1024.0 && u < 5) {
-        v /= 1024.0;
-        ++u;
-    }
-    return QString::number(v, 'f', u == 0 ? 0 : 1) + QLatin1Char(' ')
-            + QLatin1String(units[u]);
 }
 
 // Walk a local file or directory and return paths relative to its parent — each
@@ -144,7 +125,7 @@ BrowseController::BrowseController(RsyncCapabilities caps, SshHostStore hostStor
             [this](qint64 avail, qint64 total, const QString &error) {
                 // Best-effort: a df failure just leaves the indicator blank.
                 const QString text = error.isEmpty() && total > 0
-                        ? formatBytes(avail) + QStringLiteral(" free of ") + formatBytes(total)
+                        ? Format::humanSize(avail) + QStringLiteral(" free of ") + Format::humanSize(total)
                         : QString();
                 if (text != m_remoteFree) {
                     m_remoteFree = text;
@@ -156,7 +137,7 @@ BrowseController::BrowseController(RsyncCapabilities caps, SshHostStore hostStor
                 if (!error.isEmpty())
                     emit errorOccurred(error);
                 else
-                    emit infoOccurred(name + QStringLiteral(": ") + formatBytes(bytes));
+                    emit infoOccurred(name + QStringLiteral(": ") + Format::humanSize(bytes));
             });
 
     // Quick-view / edit: act on the result of a fetch-to-temp transfer.
@@ -166,7 +147,7 @@ BrowseController::BrowseController(RsyncCapabilities caps, SshHostStore hostStor
     m_editWatcher = new QFileSystemWatcher(this);
     connect(m_editWatcher, &QFileSystemWatcher::fileChanged, this,
             &BrowseController::onEditedFileChanged);
-    m_editorCommand = bookmarkSettings().value(QStringLiteral("editorCommand")).toString();
+    m_editorCommand = appSettings().value(QStringLiteral("editorCommand")).toString();
 
     m_localPath = QDir::homePath();
     localRefresh();
@@ -433,8 +414,8 @@ void BrowseController::localRefresh()
     // Free-space indicator for the local pane (QStorageInfo is synchronous).
     const QStorageInfo storage(m_localPath);
     const QString free = storage.isValid() && storage.bytesTotal() > 0
-            ? formatBytes(storage.bytesAvailable()) + QStringLiteral(" free of ")
-                  + formatBytes(storage.bytesTotal())
+            ? Format::humanSize(storage.bytesAvailable()) + QStringLiteral(" free of ")
+                  + Format::humanSize(storage.bytesTotal())
             : QString();
     if (free != m_localFree) {
         m_localFree = free;
@@ -481,7 +462,7 @@ void BrowseController::reloadBookmarks()
 {
     QStringList next;
     if (!m_target.isEmpty()) {
-        QSettings s = bookmarkSettings();
+        QSettings s = appSettings();
         s.beginGroup(QStringLiteral("bookmarks"));
         next = s.value(m_target).toStringList();
         s.endGroup();
@@ -496,7 +477,7 @@ void BrowseController::addBookmark()
 {
     if (!m_connected || m_target.isEmpty() || m_remotePath.isEmpty())
         return;
-    QSettings s = bookmarkSettings();
+    QSettings s = appSettings();
     s.beginGroup(QStringLiteral("bookmarks"));
     QStringList list = s.value(m_target).toStringList();
     if (!list.contains(m_remotePath)) {
@@ -512,7 +493,7 @@ void BrowseController::removeBookmark(const QString &path)
 {
     if (m_target.isEmpty())
         return;
-    QSettings s = bookmarkSettings();
+    QSettings s = appSettings();
     s.beginGroup(QStringLiteral("bookmarks"));
     QStringList list = s.value(m_target).toStringList();
     if (list.removeAll(path) > 0)
@@ -565,7 +546,7 @@ void BrowseController::setEditorCommand(const QString &cmd)
     if (cmd == m_editorCommand)
         return;
     m_editorCommand = cmd;
-    bookmarkSettings().setValue(QStringLiteral("editorCommand"), cmd);
+    appSettings().setValue(QStringLiteral("editorCommand"), cmd);
     emit editorCommandChanged();
 }
 

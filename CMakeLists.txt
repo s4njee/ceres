@@ -24,6 +24,8 @@ add_library(ceres_core STATIC
     src/core/SyncJob.h
     src/core/Peer.h
     src/core/FileEntry.h
+    src/core/Format.h
+    src/core/AppSettings.h
     src/core/Endpoint.h            src/core/Endpoint.cpp
     src/core/SshHost.h
     src/core/SshKnownHosts.h        src/core/SshKnownHosts.cpp
