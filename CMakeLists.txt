@@ -48,6 +48,7 @@ add_library(ceres_core STATIC
     src/models/PeerModel.h           src/models/PeerModel.cpp
     src/app/JobController.h          src/app/JobController.cpp
     src/app/PathCompleter.h          src/app/PathCompleter.cpp
+    src/app/SshCommand.h             src/app/SshCommand.cpp
     src/app/RemoteFs.h               src/app/RemoteFs.cpp
     src/app/TransferManager.h        src/app/TransferManager.cpp
     src/app/BrowseController.h       src/app/BrowseController.cpp
