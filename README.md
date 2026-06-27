@@ -122,10 +122,11 @@ path completion, discovery beacons, and the controller's destructive-run gate.
 
 ## Roadmap
 
-See the design doc for the full plan. Next milestones: harden SSH/daemon flows,
-polish the preview UX, expand the advanced options tier, package signed macOS/Linux
-builds, and add Windows support. The Windows bundled-rsync checklist lives in
-[`TODO.md`](TODO.md).
+See the design doc for the full plan. Packaging (macOS `.dmg`, Linux `.deb`/`.tar.gz`,
+Windows `.zip`) is in place via CPack — see [Packaging](#packaging). Next milestones:
+harden SSH/daemon flows, expand the advanced options tier, and sign/notarize the
+macOS/Linux release artifacts for public distribution. The Windows bundled-rsync
+checklist lives in [`TODO.md`](TODO.md).
 
 ## License
 
