@@ -37,7 +37,8 @@ changes within seconds of them happening.
 > `core/Snapshot` does the timestamp naming + newest-prior selection (tested), and
 > "Snapshot to remote" on a local folder creates `<base>/<timestamp>/` snapshots that
 > hardlink from the latest prior one and repoint a `latest` symlink. Snapshots are
-> browsable/downloadable for restore. **Remaining:** a dedicated timeline scrubber,
+> browsable/downloadable for restore, and a **timeline strip** lets you jump between
+> snapshots (sticky to the base, active one highlighted). **Remaining:** a
 > pruning/retention policy, and one-click "restore to here".
 
 Every sync to a destination becomes a **browsable, restorable point in time**,
