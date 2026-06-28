@@ -4,6 +4,10 @@
 
 - Performance: fixed the UI freezing when transferring highly-nested folders with many files. The transfers tree tracked per-file progress with a linear scan over every file already recorded — so a transfer of N files cost O(N²) overall, stalling the UI as the count grew. Each transfer row now keeps a path→index hash, making per-file updates and folder-ancestor synthesis O(1), plus a cached leaf count instead of re-counting. The expanded file tree handed to QML is also capped (the count badge still shows the true total) so opening a transfer with tens of thousands of files stays responsive.
 
+- Performance (UI latency): the transfers panel only builds a transfer's per-file tree while that row is expanded. Previously the inner list was instantiated for every transfer row regardless, so each per-file progress tick — streamed continuously by rsync — rebuilt thousands of QML items even for collapsed rows, the main source of jank during a big transfer. Collapsed rows (the common case) now do no per-file rendering work at all.
+
+- Performance (UI latency): local folder listing now runs its per-entry `stat()` scan (size / mtime / symlink) on a worker thread instead of the GUI thread, so opening a directory with thousands of entries no longer hitches the UI. Results are applied back on the GUI thread and stale scans are dropped if you navigate on before one finishes.
+
 - Performance: the local upload pre-walk now uses `std::filesystem::recursive_directory_iterator` instead of `QDirIterator`. The iterator's cached entry type (from `readdir`'s `d_type`) classifies files without a `stat()` per entry — the dominant syscall cost when walking a large, deeply-nested tree — so seeding the file list before an upload is noticeably faster. Behaviour is unchanged: symlinks are skipped and not descended, dotfiles are included.
 
 - Gave the macOS menu bar a proper monochrome template icon (`icon.mask`) that auto-inverts for light/dark, instead of the colored app icon; other platforms keep the colored tray icon. New `icons/ceres-tray.svg` glyph rendered to `@1x`/`@2x` PNGs.

@@ -425,34 +425,46 @@ void BrowseController::setLocalPath(const QString &path)
 
 void BrowseController::localRefresh()
 {
-    QList<FileEntry> entries;
-    const QFileInfoList infos =
-        QDir(m_localPath)
-            .entryInfoList(QDir::AllEntries | QDir::NoDotAndDotDot | QDir::Hidden, QDir::Name);
-    for (const QFileInfo &fi : infos) {
-        FileEntry e;
-        e.name = fi.fileName();
-        e.isDir = fi.isDir();
-        e.isSymlink = fi.isSymLink();
-        if (e.isSymlink)
-            e.linkTarget = fi.symLinkTarget();
-        e.size = fi.isDir() ? 0 : fi.size();
-        e.mtimeText = fi.lastModified().toString(QStringLiteral("MMM d  HH:mm"));
-        e.mtime = fi.lastModified().toSecsSinceEpoch();
-        entries.append(e);
-    }
-    m_local.setEntries(entries);
+    // Listing a folder means a stat() per entry (size/mtime/symlink); a directory with
+    // thousands of entries would stutter the UI if done inline. Scan on a pool thread,
+    // then hop back to mutate the model. Stale scans (the user navigated on) are dropped
+    // by comparing the scanned path against the current one on return.
+    const QString path = m_localPath;
+    QThreadPool::globalInstance()->start([this, path] {
+        QList<FileEntry> entries;
+        const QFileInfoList infos =
+            QDir(path).entryInfoList(QDir::AllEntries | QDir::NoDotAndDotDot | QDir::Hidden,
+                                     QDir::Name);
+        entries.reserve(infos.size());
+        for (const QFileInfo &fi : infos) {
+            FileEntry e;
+            e.name = fi.fileName();
+            e.isDir = fi.isDir();
+            e.isSymlink = fi.isSymLink();
+            if (e.isSymlink)
+                e.linkTarget = fi.symLinkTarget();
+            e.size = fi.isDir() ? 0 : fi.size();
+            e.mtimeText = fi.lastModified().toString(QStringLiteral("MMM d  HH:mm"));
+            e.mtime = fi.lastModified().toSecsSinceEpoch();
+            entries.append(e);
+        }
 
-    // Free-space indicator for the local pane (QStorageInfo is synchronous).
-    const QStorageInfo storage(m_localPath);
-    const QString free = storage.isValid() && storage.bytesTotal() > 0
-            ? Format::humanSize(storage.bytesAvailable()) + QStringLiteral(" free of ")
-                  + Format::humanSize(storage.bytesTotal())
-            : QString();
-    if (free != m_localFree) {
-        m_localFree = free;
-        emit localFreeChanged();
-    }
+        const QStorageInfo storage(path);
+        const QString free = storage.isValid() && storage.bytesTotal() > 0
+                ? Format::humanSize(storage.bytesAvailable()) + QStringLiteral(" free of ")
+                      + Format::humanSize(storage.bytesTotal())
+                : QString();
+
+        QMetaObject::invokeMethod(this, [this, path, entries, free] {
+            if (path != m_localPath)  // a newer navigation superseded this scan
+                return;
+            m_local.setEntries(entries);
+            if (free != m_localFree) {
+                m_localFree = free;
+                emit localFreeChanged();
+            }
+        }, Qt::QueuedConnection);
+    });
 }
 
 void BrowseController::mkdirLocal(const QString &name)

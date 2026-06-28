@@ -294,13 +294,19 @@ Rectangle {
                             }
                         }
 
-                        // per-file detail (expandable tree populated by the live rsync stream)
-                        ColumnLayout {
-                            visible: tRow.expanded
+                        // Per-file detail (expandable tree populated by the live rsync stream).
+                        // Loaded only while expanded: the inner Repeater rebuilds on every
+                        // per-file progress tick, so keeping it uninstantiated for collapsed
+                        // rows (the common case) avoids churning thousands of QML items per
+                        // second during a large transfer.
+                        Loader {
+                            active: tRow.expanded
+                            visible: active
                             Layout.fillWidth: true
                             Layout.leftMargin: 26
                             Layout.rightMargin: 8
                             Layout.bottomMargin: 4
+                            sourceComponent: ColumnLayout {
                             spacing: 2
                             Repeater {
                                 model: tRow.files
@@ -358,6 +364,7 @@ Rectangle {
                                         elide: Text.ElideRight
                                     }
                                 }
+                            }
                             }
                         }
                     }
