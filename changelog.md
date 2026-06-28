@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Performance: fixed the UI freezing when transferring highly-nested folders with many files. The transfers tree tracked per-file progress with a linear scan over every file already recorded — so a transfer of N files cost O(N²) overall, stalling the UI as the count grew. Each transfer row now keeps a path→index hash, making per-file updates and folder-ancestor synthesis O(1), plus a cached leaf count instead of re-counting. The expanded file tree handed to QML is also capped (the count badge still shows the true total) so opening a transfer with tens of thousands of files stays responsive.
+
 - Gave the macOS menu bar a proper monochrome template icon (`icon.mask`) that auto-inverts for light/dark, instead of the colored app icon; other platforms keep the colored tray icon. New `icons/ceres-tray.svg` glyph rendered to `@1x`/`@2x` PNGs.
 
 - Menu-bar / tray presence + background running: Ceres now puts a native tray icon (menu bar on macOS) with live status — "N transferring" / "N paused" / "Idle" — and a menu to show/hide the window, pause-all / resume-all transfers, and quit. Closing the window hides it to the tray instead of quitting, so queued/active transfers keep running in the background; reopen from the tray. `TransferManager` gains `pauseAll`/`resumeAll` + a `pausedCount` property (covered by a test). Uses `Qt.labs.platform` (the app now links Qt Widgets for the tray's cross-platform fallback; `ceres_core` stays GUI-free).

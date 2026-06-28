@@ -1,6 +1,5 @@
 #include "models/TransfersModel.h"
 
-#include <QSet>
 #include <QStringList>
 #include <QVariantList>
 #include <QVariantMap>
@@ -70,11 +69,17 @@ QVariant TransfersModel::data(const QModelIndex &index, int role) const
     case ErrorRole:
         return r.error;
     case FileCountRole:
-        return fileCount(r);
+        return r.leafCount;
     case FilesRole: {
+        // Cap the per-row tree handed to the (eager) QML Repeater so expanding a transfer
+        // with tens of thousands of files stays responsive. The count role shows the true
+        // total; this just bounds what's rendered.
+        constexpr int kMaxRows = 2000;
         QVariantList list;
-        list.reserve(r.files.size());
-        for (const FileLine &f : r.files) {
+        const int n = qMin(r.files.size(), kMaxRows);
+        list.reserve(n);
+        for (int i = 0; i < n; ++i) {
+            const FileLine &f = r.files.at(i);
             list.append(QVariantMap{{QStringLiteral("name"), f.name},
                                     {QStringLiteral("path"), f.path},
                                     {QStringLiteral("depth"), f.depth},
@@ -180,6 +185,36 @@ void TransfersModel::setSummary(const QString &id, const QString &summary)
     emit dataChanged(mi, mi, {SummaryRole});
 }
 
+int TransfersModel::ensureFileLine(Row &r, const QString &cleanPath)
+{
+    const auto existing = r.fileIndex.constFind(cleanPath);
+    if (existing != r.fileIndex.cend())
+        return existing.value();
+
+    const QStringList parts = cleanPath.split(QLatin1Char('/'), Qt::SkipEmptyParts);
+
+    // Synthesize any missing folder ancestors (O(1) membership via the index).
+    QString prefix;
+    for (int i = 0; i < parts.size() - 1; ++i) {
+        if (!prefix.isEmpty())
+            prefix += QLatin1Char('/');
+        prefix += parts.at(i);
+        const QString folderPath = prefix + QLatin1Char('/');
+        if (!r.fileIndex.contains(folderPath)) {
+            r.fileIndex.insert(folderPath, static_cast<int>(r.files.size()));
+            r.files.append(FileLine{parts.at(i), folderPath, i, true, 100, QString(), false});
+        }
+    }
+
+    const QString leafName = parts.isEmpty() ? cleanPath : parts.last();
+    const int leafDepth = parts.isEmpty() ? 0 : static_cast<int>(parts.size() - 1);
+    const int pos = static_cast<int>(r.files.size());
+    r.fileIndex.insert(cleanPath, pos);
+    r.files.append(FileLine{leafName, cleanPath, leafDepth, false, 0, QString(), false});
+    ++r.leafCount;
+    return pos;
+}
+
 void TransfersModel::updateFileProgress(const QString &id, const QString &path, int percent,
                                         const QString &rate)
 {
@@ -189,43 +224,14 @@ void TransfersModel::updateFileProgress(const QString &id, const QString &path, 
         return;
 
     Row &r = m_rows[idx];
-    const int oldFileCount = fileCount(r);
-    const QStringList parts = cleanPath.split(QLatin1Char('/'), Qt::SkipEmptyParts);
-    QString prefix;
+    const int before = r.leafCount;
+    const int pos = ensureFileLine(r, cleanPath);  // O(depth), not O(N)
+    r.files[pos].percent = percent;
+    r.files[pos].rate = rate;
 
-    for (int i = 0; i < parts.size() - 1; ++i) {
-        if (!prefix.isEmpty())
-            prefix += QLatin1Char('/');
-        prefix += parts.at(i);
-        const QString folderPath = prefix + QLatin1Char('/');
-
-        bool exists = false;
-        for (const FileLine &f : r.files) {
-            if (f.path == folderPath) {
-                exists = true;
-                break;
-            }
-        }
-        if (!exists)
-            r.files.append(FileLine{parts.at(i), folderPath, i, true, 100, QString()});
-    }
-
-    for (FileLine &f : r.files) {
-        if (f.path == cleanPath) {
-            f.percent = percent;
-            f.rate = rate;
-            const QModelIndex mi = index(idx);
-            emit dataChanged(mi, mi, {FilesRole});
-            return;
-        }
-    }
-
-    const QString leafName = parts.isEmpty() ? cleanPath : parts.last();
-    const int leafDepth = parts.isEmpty() ? 0 : static_cast<int>(parts.size() - 1);
-    r.files.append(FileLine{leafName, cleanPath, leafDepth, false, percent, rate});
     const QModelIndex mi = index(idx);
-    emit dataChanged(mi, mi, fileCount(r) == oldFileCount ? QList<int>{FilesRole}
-                                                          : QList<int>{FilesRole, FileCountRole});
+    emit dataChanged(mi, mi, r.leafCount == before ? QList<int>{FilesRole}
+                                                   : QList<int>{FilesRole, FileCountRole});
 }
 
 void TransfersModel::seedFiles(const QString &id, const QStringList &paths)
@@ -235,48 +241,20 @@ void TransfersModel::seedFiles(const QString &id, const QStringList &paths)
         return;
 
     Row &r = m_rows[idx];
-    const int oldFileCount = fileCount(r);
-
-    // Index existing paths so a live update that already created a row (the real
-    // transfer can outrun the walk) is neither duplicated nor reset to 0%.
-    QSet<QString> seen;
-    seen.reserve(r.files.size() + paths.size());
-    for (const FileLine &f : r.files)
-        seen.insert(f.path);
+    const int before = r.leafCount;
 
     // Sort so ancestors precede their children and the tree renders in a stable order.
     QStringList sorted = paths;
     sorted.sort();
-
     for (const QString &raw : sorted) {
         const QString cleanPath = cleanTreePath(raw);
-        if (cleanPath.isEmpty())
-            continue;
-        const QStringList parts = cleanPath.split(QLatin1Char('/'), Qt::SkipEmptyParts);
-        if (parts.isEmpty())
-            continue;
-
-        QString prefix;
-        for (int i = 0; i < parts.size() - 1; ++i) {
-            if (!prefix.isEmpty())
-                prefix += QLatin1Char('/');
-            prefix += parts.at(i);
-            const QString folderPath = prefix + QLatin1Char('/');
-            if (!seen.contains(folderPath)) {
-                seen.insert(folderPath);
-                r.files.append(FileLine{parts.at(i), folderPath, i, true, 100, QString(), false});
-            }
-        }
-        if (!seen.contains(cleanPath)) {
-            seen.insert(cleanPath);
-            const int leafDepth = static_cast<int>(parts.size() - 1);
-            r.files.append(FileLine{parts.last(), cleanPath, leafDepth, false, 0, QString(), false});
-        }
+        if (!cleanPath.isEmpty())
+            ensureFileLine(r, cleanPath);  // creates at 0%, leaves an existing one untouched
     }
 
     const QModelIndex mi = index(idx);
-    emit dataChanged(mi, mi, fileCount(r) == oldFileCount ? QList<int>{FilesRole}
-                                                          : QList<int>{FilesRole, FileCountRole});
+    emit dataChanged(mi, mi, r.leafCount == before ? QList<int>{FilesRole}
+                                                   : QList<int>{FilesRole, FileCountRole});
 }
 
 void TransfersModel::markUntouchedUpToDate(const QString &id)
@@ -321,16 +299,6 @@ int TransfersModel::activeCount() const
     int n = 0;
     for (const Row &r : m_rows) {
         if (r.status == Active)
-            ++n;
-    }
-    return n;
-}
-
-int TransfersModel::fileCount(const Row &row)
-{
-    int n = 0;
-    for (const FileLine &f : row.files) {
-        if (!f.isDir)
             ++n;
     }
     return n;

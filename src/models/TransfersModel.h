@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QAbstractListModel>
+#include <QHash>
 #include <QList>
 #include <QString>
 
@@ -95,10 +96,16 @@ private:
         Status status = Queued;
         int percent = 0;
         QList<FileLine> files;
+        // path -> index into `files`, so per-file progress updates are O(1) instead of a
+        // linear scan (the difference between O(N) and O(N²) over a whole transfer).
+        QHash<QString, int> fileIndex;
+        int leafCount = 0;  // cached count of non-directory entries (FileCountRole)
     };
 
     int indexOfId(const QString &id) const;
-    static int fileCount(const Row &row);
+    // Ensure folder ancestors + the leaf for `cleanPath` exist in the row (via fileIndex),
+    // creating any missing entries at 0%; returns the leaf's index in `files`.
+    int ensureFileLine(Row &row, const QString &cleanPath);
 
     QList<Row> m_rows;
 };
