@@ -2,7 +2,6 @@
 
 #include <QDateTime>
 #include <QDir>
-#include <QDirIterator>
 #include <QFile>
 #include <QFileInfo>
 #include <QFileSystemWatcher>
@@ -12,6 +11,9 @@
 #include <QStorageInfo>
 #include <QThreadPool>
 #include <QUuid>
+
+#include <filesystem>
+#include <system_error>
 
 #include "app/TransferManager.h"
 #include "core/AppSettings.h"
@@ -73,13 +75,35 @@ QStringList walkLocal(const QString &absPath, const QString &topName)
 
     const QString base = info.absoluteFilePath();
     const int strip = base.size() + 1;  // drop "base/" to get the path within
+    const QString prefix = topName + QLatin1Char('/');
     QStringList rels;
-    QDirIterator it(base, QDir::Files | QDir::Hidden | QDir::NoSymLinks,
-                    QDirIterator::Subdirectories);
-    while (it.hasNext()) {
-        const QString within = it.next().mid(strip);
+
+    // std::filesystem over QDirIterator: directory_entry caches the entry type from
+    // readdir's d_type, so classifying files needs no per-entry stat() — the dominant
+    // cost when walking a large, deeply-nested tree. Symlinks are skipped (and not
+    // descended into) to match the old NoSymLinks behaviour; dotfiles are included.
+    namespace fs = std::filesystem;
+    std::error_code ec;
+    fs::recursive_directory_iterator it(fs::path(base.toStdU16String()),
+                                        fs::directory_options::skip_permission_denied, ec);
+    if (ec)
+        return rels;
+    const fs::recursive_directory_iterator end;
+    for (; it != end; it.increment(ec)) {
+        if (ec)
+            break;
+        const fs::directory_entry &entry = *it;
+        std::error_code probe;
+        if (entry.is_symlink(probe)) {
+            it.disable_recursion_pending();  // never descend a symlinked directory
+            continue;
+        }
+        if (!entry.is_regular_file(probe))
+            continue;
+        const QString within =
+            QString::fromStdU16String(entry.path().generic_u16string()).mid(strip);
         if (!within.isEmpty())
-            rels << topName + QLatin1Char('/') + within;
+            rels << prefix + within;
     }
     return rels;
 }
