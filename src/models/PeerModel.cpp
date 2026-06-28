@@ -28,6 +28,8 @@ QVariant PeerModel::data(const QModelIndex &index, int role) const
         return p.isDaemon();
     case ManualRole:
         return p.manual;
+    case PairedRole:
+        return m_pairedIds.contains(p.id);
     default:
         return {};
     }
@@ -43,7 +45,23 @@ QHash<int, QByteArray> PeerModel::roleNames() const
         {AcceptsRole, "accepts"},
         {DaemonRole, "daemon"},
         {ManualRole, "manual"},
+        {PairedRole, "paired"},
     };
+}
+
+void PeerModel::setPairedIds(QSet<QString> ids)
+{
+    if (ids == m_pairedIds)
+        return;
+    m_pairedIds = std::move(ids);
+    if (!m_peers.isEmpty())
+        emit dataChanged(index(0), index(static_cast<int>(m_peers.size()) - 1), {PairedRole});
+}
+
+Peer PeerModel::peerById(const QString &id) const
+{
+    const int idx = indexOfId(id);
+    return idx >= 0 ? m_peers.at(idx) : Peer{};
 }
 
 int PeerModel::indexOfId(const QString &id) const

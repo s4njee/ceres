@@ -863,6 +863,26 @@ ApplicationWindow {
                                     Text { text: name; color: Theme.textPrimary; font.pixelSize: 12; elide: Text.ElideRight; Layout.fillWidth: true }
                                     Text { text: address + " · " + os; color: Theme.textTertiary; font.family: Theme.mono; font.pixelSize: 10; elide: Text.ElideMiddle; Layout.fillWidth: true }
                                 }
+                                // Pair affordance: paired devices show a check (click to unpair);
+                                // others show "Pair" (click to verify a code and pair).
+                                Text {
+                                    text: model.paired ? "✓ paired" : "Pair"
+                                    color: model.paired ? Theme.ok : Theme.accent
+                                    font.pixelSize: 10
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        anchors.margins: -4
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: {
+                                            if (model.paired) {
+                                                controller.unpairPeer(model.id)
+                                            } else {
+                                                pairDialog.open(model.id, name,
+                                                                controller.pairingCodeFor(model.id))
+                                            }
+                                        }
+                                    }
+                                }
                                 Text { text: accepts; color: Theme.textTertiary; font.pixelSize: 10 }
                             }
                         }
@@ -1250,6 +1270,65 @@ ApplicationWindow {
     }
 
     NewHostDialog { id: newHostDialog }
+
+    // Device-pairing confirmation: show the shared verification code so the user can
+    // confirm it matches on the other device before trusting it (TOFU).
+    Rectangle {
+        id: pairDialog
+        property bool shown: false
+        property string peerId: ""
+        property string peerName: ""
+        property string code: ""
+        function open(id, name, c) { peerId = id; peerName = name; code = c; shown = true }
+
+        anchors.fill: parent
+        visible: shown
+        color: "#cc000000"
+        focus: shown
+        Keys.onEscapePressed: pairDialog.shown = false
+        MouseArea { anchors.fill: parent; onClicked: pairDialog.shown = false }
+        Rectangle {
+            anchors.centerIn: parent
+            width: 400
+            height: pdCol.implicitHeight + 36
+            radius: Theme.radius
+            color: Theme.bgSecondary
+            border.width: 1
+            border.color: Theme.borderStrong
+            ColumnLayout {
+                id: pdCol
+                x: 18; y: 18
+                width: parent.width - 36
+                spacing: 12
+                Text { text: "Pair with " + pairDialog.peerName; color: Theme.textPrimary; font.pixelSize: 15 }
+                Text {
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    color: Theme.textSecondary
+                    font.pixelSize: 12
+                    text: "Confirm this code matches the one shown on the other device, then pair."
+                }
+                Text {
+                    Layout.alignment: Qt.AlignHCenter
+                    text: pairDialog.code
+                    color: Theme.accent
+                    font.family: Theme.mono
+                    font.pixelSize: 26
+                    font.letterSpacing: 4
+                }
+                RowLayout {
+                    Layout.fillWidth: true
+                    Item { Layout.fillWidth: true }
+                    FlatButton { label: "Cancel"; onClicked: pairDialog.shown = false }
+                    FlatButton {
+                        label: "Pair"
+                        primary: true
+                        onClicked: { controller.pairPeer(pairDialog.peerId); pairDialog.shown = false }
+                    }
+                }
+            }
+        }
+    }
 
     // Native notification when a batch of transfers drains.
     Connections {

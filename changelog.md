@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Mesh pairing: discovered LAN devices in the "On your network" sidebar now have a "Pair" action that shows a six-digit verification code (the same on both devices) to confirm before trusting — then the device is remembered across restarts (by stable machine id) and badged "✓ paired". `JobController` gains pair/unpair/pairing-code invokables backed by `PairedDeviceStore`; `PeerModel` gains a `paired` role. Syncing to a paired device reuses the existing connect/transfer path.
+
 - Snapshots: "Snapshot to remote" on a local folder backs it up into the current remote directory as a timestamped snapshot, hardlinking unchanged files from the latest prior snapshot (`--link-dest`) so each snapshot costs only its delta, then repoints a `latest` symlink. Snapshots are plain timestamped dirs you can browse and download to restore. Added a remote `symlink` op and a `FileListModel::names()` accessor; the snapshot count shows in the menu label.
 
 - Refactor: extracted the ssh-invocation plumbing (argv building, ssh-binary location, SSH_ASKPASS environment, shell quoting, auth-failure detection) that was copy-pasted as file-local statics in `RemoteFs.cpp` and `PathCompleter.cpp` into one shared `SshCommand` module. The copies had already drifted — keepalive options were in only one — so completion ssh calls now also get keepalive. ~280 lines of duplication removed.

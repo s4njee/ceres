@@ -1,16 +1,19 @@
 #include "app/JobController.h"
 
 #include <QCryptographicHash>
+#include <QDateTime>
 #include <QDir>
 #include <QFile>
 #include <QHostInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QSet>
 #include <QUuid>
 #include <utility>
 
 #include "core/Endpoint.h"
+#include "core/PairingCode.h"
 #include "core/Peer.h"
 #include "core/SshConfigImport.h"
 #include "core/SshKnownHosts.h"
@@ -118,9 +121,11 @@ JobController::JobController(RsyncCapabilities caps, SyncEngine *engine,
         self.os = NetworkUtils::osName();
         self.version = QStringLiteral("0.1");
         self.accepts = {QStringLiteral("ssh")};
+        m_selfId = self.id;
         m_discovery = new DiscoveryService(&m_peers, self, this);
         m_discovery->start();
     }
+    refreshPairedIds();  // mark already-paired devices in the sidebar
 
     m_engine = engine ? engine : new RsyncProcessEngine(m_caps, this);
 
@@ -505,6 +510,49 @@ void JobController::addPeerByHost(const QString &host)
 {
     if (m_discovery)
         m_discovery->addManualPeer(host);
+}
+
+void JobController::refreshPairedIds()
+{
+    QSet<QString> ids;
+    for (const PairedDevice &d : m_pairedStore.loadAll())
+        ids.insert(d.deviceId);
+    m_peers.setPairedIds(std::move(ids));
+}
+
+QString JobController::pairingCodeFor(const QString &peerId) const
+{
+    return PairingCode::forDevices(m_selfId, peerId);
+}
+
+void JobController::pairPeer(const QString &peerId)
+{
+    const Peer peer = m_peers.peerById(peerId);
+    if (peer.id.isEmpty())
+        return;
+    PairedDevice d;
+    d.deviceId = peer.id;
+    d.name = peer.name;
+    d.sshTarget = peer.primaryAddress();  // bare host; the connect flow prompts for login
+    d.pairedAtMs = QDateTime::currentMSecsSinceEpoch();
+    m_pairedStore.upsert(d);
+    refreshPairedIds();
+}
+
+void JobController::unpairPeer(const QString &peerId)
+{
+    m_pairedStore.remove(peerId);
+    refreshPairedIds();
+}
+
+bool JobController::isPaired(const QString &peerId) const
+{
+    return m_pairedStore.contains(peerId);
+}
+
+QString JobController::pairedTarget(const QString &peerId) const
+{
+    return m_pairedStore.load(peerId).sshTarget;
 }
 
 void JobController::setRunning(bool running)

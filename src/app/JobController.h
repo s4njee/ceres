@@ -7,6 +7,7 @@
 #include <QTimer>
 #include <QVariantMap>
 
+#include "core/PairedDeviceStore.h"
 #include "core/SecretStore.h"
 #include "core/SshHostStore.h"
 #include "core/SyncJob.h"
@@ -117,6 +118,18 @@ public:
     // Discovery.
     Q_INVOKABLE void addPeerByHost(const QString &host);
 
+    // --- Mesh pairing ---
+    // The six-digit verification code shared by this device and `peerId` (show it on
+    // both ends; the user confirms they match before pairing).
+    Q_INVOKABLE QString pairingCodeFor(const QString &peerId) const;
+    // Record/forget a paired device (by its discovered peer id). pairPeer captures the
+    // peer's name and current address as the ssh target.
+    Q_INVOKABLE void pairPeer(const QString &peerId);
+    Q_INVOKABLE void unpairPeer(const QString &peerId);
+    Q_INVOKABLE bool isPaired(const QString &peerId) const;
+    // The ssh target (user@host / host) recorded for a paired device, for connecting.
+    Q_INVOKABLE QString pairedTarget(const QString &peerId) const;
+
     /// Rebuild the saved-SSH-hosts sidebar model from disk. Called when another
     /// component (e.g. the browse tab) saves a host out of band.
     Q_INVOKABLE void reloadSshHosts() { rebuildSshHosts(); }
@@ -159,6 +172,10 @@ private:
     PeerModel m_peers;
     DiscoveryService *m_discovery = nullptr;
     bool m_discoverable = true;
+    PairedDeviceStore m_pairedStore;
+    QString m_selfId;  // this device's stable id (for pairing codes)
+
+    void refreshPairedIds();  // push the paired-device id set into m_peers
 
     QStringList m_logLines;
     QString m_status;
