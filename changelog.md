@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Gave the macOS menu bar a proper monochrome template icon (`icon.mask`) that auto-inverts for light/dark, instead of the colored app icon; other platforms keep the colored tray icon. New `icons/ceres-tray.svg` glyph rendered to `@1x`/`@2x` PNGs.
+
 - Menu-bar / tray presence + background running: Ceres now puts a native tray icon (menu bar on macOS) with live status — "N transferring" / "N paused" / "Idle" — and a menu to show/hide the window, pause-all / resume-all transfers, and quit. Closing the window hides it to the tray instead of quitting, so queued/active transfers keep running in the background; reopen from the tray. `TransferManager` gains `pauseAll`/`resumeAll` + a `pausedCount` property (covered by a test). Uses `Qt.labs.platform` (the app now links Qt Widgets for the tray's cross-platform fallback; `ceres_core` stays GUI-free).
 
 - Tidied the "Import config" button: it lived in the Sync sidebar and gave no feedback (looking dead when ~/.ssh/config had nothing new). Moved it into the ⚙ settings menu as "Import hosts from ~/.ssh/config" alongside the other import/export actions, and it now reports its result ("Imported N host(s)…" / "No new hosts…").

@@ -1,0 +1,10 @@
+<svg width="44" height="44" viewBox="92 96 328 328" xmlns="http://www.w3.org/2000/svg">
+  <title>Ceres menu-bar glyph</title>
+  <!-- Glyph only (no background square) in solid black on transparent: used as a
+       macOS menu-bar template (icon.mask), where only the alpha channel matters. -->
+  <g fill="none" stroke="#000000" stroke-width="44" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M256 116 V300"/>
+    <path d="M192 240 L256 318 L320 240"/>
+    <path d="M152 350 V382 Q152 404 174 404 H338 Q360 404 360 382 V350"/>
+  </g>
+</svg>

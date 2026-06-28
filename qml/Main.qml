@@ -45,7 +45,11 @@ ApplicationWindow {
     // window after it's been hidden.
     Platform.SystemTrayIcon {
         visible: true
-        icon.source: "qrc:/icons/ceres-512.png"
+        // macOS menu bar wants a monochrome template glyph (icon.mask auto-inverts it
+        // for light/dark); elsewhere use the full colored app icon.
+        icon.source: Qt.platform.os === "osx" ? "qrc:/icons/ceres-tray.png"
+                                              : "qrc:/icons/ceres-512.png"
+        icon.mask: Qt.platform.os === "osx"
         tooltip: transfers.activeCount > 0
                  ? ("Ceres — " + transfers.activeCount + " transferring")
                  : (transfers.pausedCount > 0 ? "Ceres — paused" : "Ceres")

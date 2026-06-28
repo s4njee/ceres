@@ -100,11 +100,16 @@ target_link_libraries(ceres PRIVATE
 )
 target_compile_definitions(ceres PRIVATE CERES_VERSION="${PROJECT_VERSION}")
 
-# The window/dock icon, embedded so it's available at runtime on every platform.
+# The window/dock icon + the monochrome menu-bar (tray) glyph, embedded so they're
+# available at runtime on every platform. The @2x variant is picked automatically on
+# high-DPI displays.
 qt_add_resources(ceres "ceres_appicon"
     PREFIX "/"
     BASE "${CMAKE_CURRENT_SOURCE_DIR}"
-    FILES icons/ceres-512.png
+    FILES
+        icons/ceres-512.png
+        icons/ceres-tray.png
+        icons/ceres-tray@2x.png
 )
 
 if(WIN32)
