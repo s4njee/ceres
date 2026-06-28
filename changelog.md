@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Import/export settings: the sidebar gains "Export settings" / "Import settings" buttons that back up your saved SSH hosts, paired mesh devices, and per-host bookmarks (plus the editor command) to a single portable JSON file and restore them on another machine. Import merges (never wipes). Secrets are deliberately excluded — passwords stay in the OS keychain — so the file is safe to move around. New tested `ConfigBundle` core serializer; `JobController` exposes `exportConfig`/`importConfig`.
+
 - Snapshot timeline: when a remote directory holds snapshots, the browse tab shows a timeline strip — a "base" pill plus one pill per snapshot (formatted "Jun 27 · 14:03", newest first). Clicking a pill jumps to that point in time; the strip stays visible while browsing inside a snapshot, highlighting the active one, with a hint to download files to restore. `BrowseController` tracks the snapshot context (sticky base + active snapshot) across navigation.
 
 - Mesh pairing: discovered LAN devices in the "On your network" sidebar now have a "Pair" action that shows a six-digit verification code (the same on both devices) to confirm before trusting — then the device is remembered across restarts (by stable machine id) and badged "✓ paired". `JobController` gains pair/unpair/pairing-code invokables backed by `PairedDeviceStore`; `PeerModel` gains a `paired` role. Syncing to a paired device reuses the existing connect/transfer path.

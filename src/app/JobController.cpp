@@ -12,6 +12,10 @@
 #include <QUuid>
 #include <utility>
 
+#include <QUrl>
+
+#include "core/AppSettings.h"
+#include "core/ConfigBundle.h"
 #include "core/Endpoint.h"
 #include "core/PairingCode.h"
 #include "core/Peer.h"
@@ -457,6 +461,67 @@ int JobController::importSshConfig()
     if (added > 0)
         rebuildSshHosts();
     return added;
+}
+
+namespace {
+// FileDialog hands back a file:// URL; CLI/tests may pass a plain path.
+QString toLocalPath(const QString &p)
+{
+    return p.startsWith(QLatin1String("file:")) ? QUrl(p).toLocalFile() : p;
+}
+}  // namespace
+
+bool JobController::exportConfig(const QString &path)
+{
+    ConfigBundle::Data d;
+    d.hosts = m_sshHostStore.loadAll();
+    d.devices = m_pairedStore.loadAll();
+    {
+        QSettings s = appSettings();
+        s.beginGroup(QStringLiteral("bookmarks"));
+        for (const QString &target : s.childKeys())
+            d.bookmarks.insert(target, s.value(target).toStringList());
+        s.endGroup();
+    }
+    d.editorCommand = appSettings().value(QStringLiteral("editorCommand")).toString();
+
+    QFile f(toLocalPath(path));
+    const bool ok = f.open(QIODevice::WriteOnly) && f.write(ConfigBundle::toJson(d)) >= 0;
+    emit configMessage(ok ? QStringLiteral("Settings exported")
+                          : QStringLiteral("Export failed"));
+    return ok;
+}
+
+bool JobController::importConfig(const QString &path)
+{
+    QFile f(toLocalPath(path));
+    ConfigBundle::Data d;
+    if (!f.open(QIODevice::ReadOnly) || !ConfigBundle::fromJson(f.readAll(), d)) {
+        emit configMessage(QStringLiteral("Import failed: not a Ceres config file"));
+        return false;
+    }
+
+    // Merge (upsert), never wipe what's already there.
+    for (const SshHost &host : d.hosts)
+        m_sshHostStore.upsert(host);
+    for (const PairedDevice &dev : d.devices)
+        m_pairedStore.upsert(dev);
+    if (!d.bookmarks.isEmpty()) {
+        QSettings s = appSettings();
+        s.beginGroup(QStringLiteral("bookmarks"));
+        for (auto it = d.bookmarks.cbegin(); it != d.bookmarks.cend(); ++it)
+            s.setValue(it.key(), it.value());
+        s.endGroup();
+    }
+    if (!d.editorCommand.isEmpty())
+        appSettings().setValue(QStringLiteral("editorCommand"), d.editorCommand);
+
+    rebuildSshHosts();
+    refreshPairedIds();
+    emit configMessage(QStringLiteral("Imported %1 host(s), %2 device(s)")
+                           .arg(d.hosts.size())
+                           .arg(d.devices.size()));
+    return true;
 }
 
 QString JobController::sshHostSecretKey(const QString &target) const

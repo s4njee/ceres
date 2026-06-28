@@ -41,6 +41,14 @@ ApplicationWindow {
     property bool confirmOpen: false
     property int currentTab: 1   // 0 = Sync editor, 1 = Browse
 
+    // Transient feedback for config export/import (cleared after a few seconds).
+    property string configMessage: ""
+    Timer { id: configMessageTimer; interval: 5000; onTriggered: root.configMessage = "" }
+    Connections {
+        target: controller
+        function onConfigMessage(msg) { root.configMessage = msg; configMessageTimer.restart() }
+    }
+
     // SSH password auth state. Modal-driven (no always-visible field): held for the
     // session so subsequent manual runs reuse it; persisted to the keychain only when
     // the user ticks "remember" in the auth modal (see retryWithPassword).
@@ -315,6 +323,23 @@ ApplicationWindow {
             toField.text = p;
             toField.cursorPosition = toField.text.length;
         }
+    }
+
+    FileDialog {
+        id: exportConfigDialog
+        title: "Export Ceres settings"
+        fileMode: FileDialog.SaveFile
+        defaultSuffix: "json"
+        nameFilters: ["Ceres config (*.json)", "All files (*)"]
+        onAccepted: controller.exportConfig(selectedFile)
+    }
+
+    FileDialog {
+        id: importConfigDialog
+        title: "Import Ceres settings"
+        fileMode: FileDialog.OpenFile
+        nameFilters: ["Ceres config (*.json)", "All files (*)"]
+        onAccepted: controller.importConfig(selectedFile)
     }
 
     Popup {
@@ -793,6 +818,22 @@ ApplicationWindow {
                             label: "Import config"
                             onClicked: controller.importSshConfig()
                         }
+                    }
+                    // Export/import all Ceres settings (hosts, paired devices, bookmarks)
+                    // as a portable JSON file — no secrets (those stay in the keychain).
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 6
+                        FlatButton { Layout.fillWidth: true; label: "Export settings"; onClicked: exportConfigDialog.open() }
+                        FlatButton { Layout.fillWidth: true; label: "Import settings"; onClicked: importConfigDialog.open() }
+                    }
+                    Text {
+                        visible: root.configMessage.length > 0
+                        text: root.configMessage
+                        color: Theme.textTertiary
+                        font.pixelSize: 10
+                        wrapMode: Text.WordWrap
+                        Layout.fillWidth: true
                     }
 
                     Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: Theme.border; Layout.topMargin: 4 }

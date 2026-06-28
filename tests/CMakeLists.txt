@@ -32,6 +32,8 @@ ceres_add_test(Snapshot tst_snapshot tst_snapshot.cpp)
 
 ceres_add_test(Pairing tst_pairing tst_pairing.cpp)
 
+ceres_add_test(ConfigBundle tst_configbundle tst_configbundle.cpp)
+
 ceres_add_test(Beacon tst_beacon tst_beacon.cpp)
 
 ceres_add_test(PathCompleter tst_pathcompleter tst_pathcompleter.cpp)

@@ -137,11 +137,18 @@ public:
     // targets are left untouched). Returns the number of new hosts added.
     Q_INVOKABLE int importSshConfig();
 
+    // Export/import the portable config bundle (saved hosts, paired devices, bookmarks,
+    // editor command — no secrets) to/from a JSON file. `path` may be a file:// URL
+    // (from a FileDialog) or a plain path. Both emit configMessage for UI feedback.
+    Q_INVOKABLE bool exportConfig(const QString &path);
+    Q_INVOKABLE bool importConfig(const QString &path);
+
 signals:
     void runningChanged();
     void logChanged();
     void progressChanged();
     void statusChanged();
+    void configMessage(const QString &message);  // transient export/import feedback
     void discoverableChanged();
     void hostAddressChanged();
 
