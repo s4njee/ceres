@@ -146,13 +146,18 @@ if(APPLE)
     set_source_files_properties(icons/ceres.icns PROPERTIES MACOSX_PACKAGE_LOCATION "Resources")
 endif()
 
-# Bundle the Qt runtime (frameworks/DLLs + QML plugins) at install time.
-qt_generate_deploy_qml_app_script(
-    TARGET ceres
-    OUTPUT_SCRIPT ceres_deploy_script
-    NO_UNSUPPORTED_PLATFORM_ERROR
-)
-install(SCRIPT ${ceres_deploy_script})
+# Bundle the Qt runtime (frameworks/DLLs + QML plugins) into the install tree. On
+# macOS/Windows this self-contains the .app/.exe (macdeployqt/windeployqt). On Linux
+# the AppImage build uses linuxdeploy's qt plugin instead, and distro packages link
+# the system Qt — so the install-time deploy is skipped there.
+if(APPLE OR WIN32)
+    qt_generate_deploy_qml_app_script(
+        TARGET ceres
+        OUTPUT_SCRIPT ceres_deploy_script
+        NO_UNSUPPORTED_PLATFORM_ERROR
+    )
+    install(SCRIPT ${ceres_deploy_script})
+endif()
 
 if(APPLE)
     install(TARGETS ceres BUNDLE DESTINATION .)
@@ -180,7 +185,13 @@ set(CPACK_PACKAGE_EXECUTABLES "ceres" "Ceres")
 if(APPLE)
     set(CPACK_GENERATOR "DragNDrop")
 elseif(WIN32)
-    set(CPACK_GENERATOR "ZIP")
+    # NSIS installer (.exe). The release workflow ships this; ZIP stays a fallback.
+    set(CPACK_GENERATOR "NSIS")
+    set(CPACK_NSIS_DISPLAY_NAME "Ceres")
+    set(CPACK_NSIS_PACKAGE_NAME "Ceres")
+    set(CPACK_NSIS_INSTALLED_ICON_NAME "bin\\\\ceres.exe")
+    set(CPACK_NSIS_MUI_ICON "${CMAKE_CURRENT_SOURCE_DIR}/icons/ceres.ico")
+    set(CPACK_NSIS_ENABLE_UNINSTALL_BEFORE_INSTALL ON)
 else()
     set(CPACK_GENERATOR "TGZ")
     set(CPACK_DEBIAN_PACKAGE_MAINTAINER "Ceres")

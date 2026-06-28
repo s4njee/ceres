@@ -86,19 +86,30 @@ Ceres ships with install rules and CPack configuration. The Qt runtime
 # Stage a self-contained install tree:
 cmake --install build --prefix dist
 
-# Or build a distributable archive (.dmg on macOS, .tar.gz on Linux, .zip on Windows):
+# Or build a distributable archive locally (.dmg on macOS, NSIS .exe on Windows,
+# .tar.gz on Linux):
 cd build && cpack
 ```
+
+**Releases** are built in CI ([`.github/workflows/release.yml`](.github/workflows/release.yml))
+against an official Qt, producing portable artifacts for each platform on a `v*` tag
+(or via *Run workflow*):
+
+| Platform | Artifact | How |
+|----------|----------|-----|
+| macOS | `Ceres-macOS.zip` | deployed `.app`, zipped |
+| Windows | `Ceres-Windows-Setup.exe` | NSIS installer |
+| Linux | `Ceres-x86_64.AppImage` | `linuxdeploy` + Qt plugin |
 
 Icons are generated from [`icons/ceres.svg`](icons/ceres.svg) into `.icns` / `.ico`
 / `.png`; regenerate with `rsvg-convert` + `iconutil` + ImageMagick if you swap the
 source SVG.
 
 > **macOS note:** a Homebrew-installed Qt uses absolute install names that
-> `macdeployqt` can't fully relocate, so a locally-built `.dmg` runs on machines
-> that have Qt but isn't byte-for-byte portable. Build against an official Qt
-> (online installer / `aqtinstall`) for a fully self-contained, distributable
-> bundle. Signing/notarization is a separate step for public distribution.
+> `macdeployqt` can't fully relocate, so a *locally*-built `.dmg` runs on machines
+> that have Qt but isn't byte-for-byte portable. The CI release uses an official Qt
+> (`aqtinstall`) for a fully self-contained bundle. Signing/notarization is a
+> separate step for public distribution.
 
 ## Windows MSYS2 rsync runtime
 
