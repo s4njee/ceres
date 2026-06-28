@@ -445,8 +445,10 @@ void JobController::rebuildSshHosts()
 int JobController::importSshConfig()
 {
     QFile f(QDir::homePath() + QStringLiteral("/.ssh/config"));
-    if (!f.open(QIODevice::ReadOnly | QIODevice::Text))
+    if (!f.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        emit configMessage(QStringLiteral("No ~/.ssh/config found"));
         return 0;
+    }
 
     const QList<SshHost> hosts = SshConfigImport::parse(QString::fromUtf8(f.readAll()));
     int added = 0;
@@ -460,6 +462,9 @@ int JobController::importSshConfig()
     }
     if (added > 0)
         rebuildSshHosts();
+    emit configMessage(added > 0
+                           ? QStringLiteral("Imported %1 host(s) from ~/.ssh/config").arg(added)
+                           : QStringLiteral("No new hosts in ~/.ssh/config"));
     return added;
 }
 

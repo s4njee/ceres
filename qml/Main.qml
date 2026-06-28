@@ -345,7 +345,7 @@ ApplicationWindow {
     Menu {
         id: settingsMenu
         background: Rectangle {
-            implicitWidth: 190
+            implicitWidth: 240
             color: Theme.bgSecondary
             border.width: 1
             border.color: Theme.borderStrong
@@ -354,7 +354,7 @@ ApplicationWindow {
         component SettingsItem: MenuItem {
             id: si
             implicitHeight: 28
-            implicitWidth: 190
+            implicitWidth: 240
             contentItem: Text {
                 text: si.text
                 color: Theme.textPrimary
@@ -366,6 +366,7 @@ ApplicationWindow {
         }
         SettingsItem { text: "Export settings…"; onTriggered: exportConfigDialog.open() }
         SettingsItem { text: "Import settings…"; onTriggered: importConfigDialog.open() }
+        SettingsItem { text: "Import hosts from ~/.ssh/config"; onTriggered: controller.importSshConfig() }
     }
 
     Popup {
@@ -851,10 +852,6 @@ ApplicationWindow {
                         Layout.fillWidth: true
                         spacing: 6
                         FlatButton { Layout.fillWidth: true; label: "+  New host"; onClicked: newHostDialog.show() }
-                        FlatButton {
-                            label: "Import config"
-                            onClicked: controller.importSshConfig()
-                        }
                     }
 
                     Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: Theme.border; Layout.topMargin: 4 }

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Tidied the "Import config" button: it lived in the Sync sidebar and gave no feedback (looking dead when ~/.ssh/config had nothing new). Moved it into the ⚙ settings menu as "Import hosts from ~/.ssh/config" alongside the other import/export actions, and it now reports its result ("Imported N host(s)…" / "No new hosts…").
+
 - Import/export settings: a ⚙ menu in the shared header (reachable from either tab) offers "Export settings…" / "Import settings…" that back up your saved SSH hosts, paired mesh devices, and per-host bookmarks (plus the editor command) to a single portable JSON file and restore them on another machine. Import merges (never wipes). Secrets are deliberately excluded — passwords stay in the OS keychain — so the file is safe to move around. New tested `ConfigBundle` core serializer; `JobController` exposes `exportConfig`/`importConfig`.
 
 - Snapshot timeline: when a remote directory holds snapshots, the browse tab shows a timeline strip — a "base" pill plus one pill per snapshot (formatted "Jun 27 · 14:03", newest first). Clicking a pill jumps to that point in time; the strip stays visible while browsing inside a snapshot, highlighting the active one, with a hint to download files to restore. `BrowseController` tracks the snapshot context (sticky base + active snapshot) across navigation.
