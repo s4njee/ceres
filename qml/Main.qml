@@ -342,6 +342,32 @@ ApplicationWindow {
         onAccepted: controller.importConfig(selectedFile)
     }
 
+    Menu {
+        id: settingsMenu
+        background: Rectangle {
+            implicitWidth: 190
+            color: Theme.bgSecondary
+            border.width: 1
+            border.color: Theme.borderStrong
+            radius: Theme.radius
+        }
+        component SettingsItem: MenuItem {
+            id: si
+            implicitHeight: 28
+            implicitWidth: 190
+            contentItem: Text {
+                text: si.text
+                color: Theme.textPrimary
+                font.pixelSize: 12
+                leftPadding: 8
+                verticalAlignment: Text.AlignVCenter
+            }
+            background: Rectangle { color: si.highlighted ? Theme.bgTertiary : "transparent"; radius: 4 }
+        }
+        SettingsItem { text: "Export settings…"; onTriggered: exportConfigDialog.open() }
+        SettingsItem { text: "Import settings…"; onTriggered: importConfigDialog.open() }
+    }
+
     Popup {
         id: completionPopup
 
@@ -716,6 +742,17 @@ ApplicationWindow {
                     }
                 }
                 Item { Layout.fillWidth: true }
+                Text {
+                    visible: root.configMessage.length > 0
+                    text: root.configMessage
+                    color: Theme.textTertiary
+                    font.pixelSize: 11
+                    elide: Text.ElideRight
+                    Layout.maximumWidth: 220
+                }
+                // Global settings menu (export/import) — in the shared header so it's
+                // reachable from either tab.
+                FlatButton { label: "⚙"; onClicked: settingsMenu.popup() }
                 Rectangle {
                     radius: Theme.radius
                     color: "transparent"
@@ -818,22 +855,6 @@ ApplicationWindow {
                             label: "Import config"
                             onClicked: controller.importSshConfig()
                         }
-                    }
-                    // Export/import all Ceres settings (hosts, paired devices, bookmarks)
-                    // as a portable JSON file — no secrets (those stay in the keychain).
-                    RowLayout {
-                        Layout.fillWidth: true
-                        spacing: 6
-                        FlatButton { Layout.fillWidth: true; label: "Export settings"; onClicked: exportConfigDialog.open() }
-                        FlatButton { Layout.fillWidth: true; label: "Import settings"; onClicked: importConfigDialog.open() }
-                    }
-                    Text {
-                        visible: root.configMessage.length > 0
-                        text: root.configMessage
-                        color: Theme.textTertiary
-                        font.pixelSize: 10
-                        wrapMode: Text.WordWrap
-                        Layout.fillWidth: true
                     }
 
                     Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: Theme.border; Layout.topMargin: 4 }
