@@ -128,6 +128,10 @@ QStringList ArgvBuilder::build(const SyncJob &job, const RsyncCapabilities &caps
         args << QStringLiteral("--ignore-existing");
     if (job.updateOnly)
         args << QStringLiteral("--update");
+    // Snapshot backups: hardlink files unchanged since a prior snapshot from that dir,
+    // so a new snapshot only stores what actually changed.
+    if (!job.linkDest.isEmpty())
+        args << (QStringLiteral("--link-dest=") + job.linkDest);
 
     // Always-on machine-readable output that drives the UI.
     args << QStringLiteral("--itemize-changes") << QStringLiteral("--stats");

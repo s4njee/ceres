@@ -60,6 +60,7 @@ private slots:
     void bwLimit();
     void partialOnlyForPerFileTransfers();
     void overwritePolicyFlags();
+    void linkDestForSnapshots();
     void expandsLocalTilde();
     void convertsWindowsLocalPaths();
     void windowsBuildConvertsLocalEndpoints();
@@ -332,6 +333,23 @@ void ArgvBuilderTest::overwritePolicyFlags()
     job.ignoreExisting = false;
     job.updateOnly = true;
     QVERIFY(ArgvBuilder::build(job, modern(), false).contains(QStringLiteral("--update")));
+}
+
+void ArgvBuilderTest::linkDestForSnapshots()
+{
+    SyncJob job;
+    job.source = QStringLiteral("a/");
+    job.destination = QStringLiteral("host:/backups/2026-06-27-140312/");
+
+    // No flag by default.
+    const QStringList plain = ArgvBuilder::build(job, modern(), false);
+    QVERIFY(std::none_of(plain.cbegin(), plain.cend(),
+                         [](const QString &a) { return a.startsWith(QStringLiteral("--link-dest")); }));
+
+    // A relative link-dest sibling is passed through verbatim.
+    job.linkDest = QStringLiteral("../2026-06-20-100000");
+    QVERIFY(ArgvBuilder::build(job, modern(), false)
+                .contains(QStringLiteral("--link-dest=../2026-06-20-100000")));
 }
 
 void ArgvBuilderTest::expandsLocalTilde()

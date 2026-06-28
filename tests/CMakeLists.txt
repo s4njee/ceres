@@ -28,6 +28,8 @@ ceres_add_test(SshKnownHosts tst_sshknownhosts tst_sshknownhosts.cpp)
 
 ceres_add_test(SshConfigImport tst_sshconfigimport tst_sshconfigimport.cpp)
 
+ceres_add_test(Snapshot tst_snapshot tst_snapshot.cpp)
+
 ceres_add_test(Beacon tst_beacon tst_beacon.cpp)
 
 ceres_add_test(PathCompleter tst_pathcompleter tst_pathcompleter.cpp)

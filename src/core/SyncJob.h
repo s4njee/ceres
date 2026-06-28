@@ -25,6 +25,8 @@ struct SyncJob {
     int bwLimitKBps = 0;            // --bwlimit=N transfer-rate cap in KB/s (0 = unlimited)
     bool ignoreExisting = false;    // --ignore-existing (skip files already on the dest)
     bool updateOnly = false;        // --update (skip files newer on the dest)
+    QString linkDest;               // --link-dest=DIR: hardlink unchanged files from a
+                                    // prior snapshot so each snapshot costs only its delta
 
     QStringList excludes;           // order-significant -> --exclude=<pat>
     QStringList extraArgs;          // appended verbatim before SRC/DEST
