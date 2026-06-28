@@ -32,6 +32,9 @@ add_library(ceres_core STATIC
     src/core/SshHostStore.h          src/core/SshHostStore.cpp
     src/core/SshConfigImport.h       src/core/SshConfigImport.cpp
     src/core/Snapshot.h              src/core/Snapshot.cpp
+    src/core/PairingCode.h           src/core/PairingCode.cpp
+    src/core/PairedDevice.h
+    src/core/PairedDeviceStore.h     src/core/PairedDeviceStore.cpp
     src/core/SecretStore.h           src/core/SecretStore.cpp
     src/engine/RsyncEvents.h
     src/engine/SyncEngine.h
