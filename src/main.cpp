@@ -15,6 +15,7 @@
 
 #include <cstdio>
 
+#include <QApplication>
 #include <QByteArray>
 #include <QCoreApplication>
 #include <QGuiApplication>
@@ -103,11 +104,16 @@ int main(int argc, char *argv[])
         return 64;
     }
 
-    QGuiApplication app(argc, argv);
+    // QApplication (not QGuiApplication) so Qt.labs.platform's SystemTrayIcon has its
+    // Widgets-backed fallback available on platforms without a native tray.
+    QApplication app(argc, argv);
     setAppIdentity();
     // Associates the window with its .desktop entry on Linux (Wayland app id / taskbar icon).
     QGuiApplication::setDesktopFileName(QStringLiteral("ceres"));
     app.setWindowIcon(QIcon(QStringLiteral(":/icons/ceres-512.png")));
+    // The app lives in the menu bar / tray: closing the window hides it rather than
+    // quitting, so background transfers keep running. Quit is via the tray menu / Cmd-Q.
+    QApplication::setQuitOnLastWindowClosed(false);
 
     QQuickStyle::setStyle(QStringLiteral("Basic"));  // custom high-contrast dark theme, no Material
 

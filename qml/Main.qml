@@ -23,6 +23,7 @@ import QtQuick
 import QtQuick.Controls.Basic
 import QtQuick.Layouts
 import QtQuick.Dialogs
+import Qt.labs.platform as Platform
 
 ApplicationWindow {
     id: root
@@ -33,6 +34,51 @@ ApplicationWindow {
     visible: true
     title: qsTr("Ceres")
     color: Theme.bgPrimary
+
+    // Closing the window hides it to the tray instead of quitting, so background
+    // transfers keep running. Re-open from the tray; quit from there or Cmd-Q.
+    onClosing: function(close) { close.accepted = false; root.hide() }
+
+    function showAndRaise() { root.show(); root.raise(); root.requestActivate() }
+
+    // Menu-bar / tray presence: live status + quick actions, and a way back to the
+    // window after it's been hidden.
+    Platform.SystemTrayIcon {
+        visible: true
+        icon.source: "qrc:/icons/ceres-512.png"
+        tooltip: transfers.activeCount > 0
+                 ? ("Ceres — " + transfers.activeCount + " transferring")
+                 : (transfers.pausedCount > 0 ? "Ceres — paused" : "Ceres")
+        onActivated: function(reason) {
+            if (reason === Platform.SystemTrayIcon.Trigger
+                || reason === Platform.SystemTrayIcon.DoubleClick)
+                root.showAndRaise()
+        }
+        menu: Platform.Menu {
+            Platform.MenuItem {
+                text: transfers.activeCount > 0 ? (transfers.activeCount + " transferring")
+                      : (transfers.pausedCount > 0 ? (transfers.pausedCount + " paused") : "Idle")
+                enabled: false
+            }
+            Platform.MenuSeparator {}
+            Platform.MenuItem {
+                text: root.visible ? "Hide window" : "Show window"
+                onTriggered: root.visible ? root.hide() : root.showAndRaise()
+            }
+            Platform.MenuItem {
+                text: "Pause all transfers"
+                enabled: transfers.activeCount > 0
+                onTriggered: transfers.pauseAll()
+            }
+            Platform.MenuItem {
+                text: "Resume all transfers"
+                enabled: transfers.pausedCount > 0
+                onTriggered: transfers.resumeAll()
+            }
+            Platform.MenuSeparator {}
+            Platform.MenuItem { text: "Quit Ceres"; onTriggered: Qt.quit() }
+        }
+    }
 
     property bool archiveOn: true
     property bool compressOn: false

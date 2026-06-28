@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Menu-bar / tray presence + background running: Ceres now puts a native tray icon (menu bar on macOS) with live status — "N transferring" / "N paused" / "Idle" — and a menu to show/hide the window, pause-all / resume-all transfers, and quit. Closing the window hides it to the tray instead of quitting, so queued/active transfers keep running in the background; reopen from the tray. `TransferManager` gains `pauseAll`/`resumeAll` + a `pausedCount` property (covered by a test). Uses `Qt.labs.platform` (the app now links Qt Widgets for the tray's cross-platform fallback; `ceres_core` stays GUI-free).
+
 - Tidied the "Import config" button: it lived in the Sync sidebar and gave no feedback (looking dead when ~/.ssh/config had nothing new). Moved it into the ⚙ settings menu as "Import hosts from ~/.ssh/config" alongside the other import/export actions, and it now reports its result ("Imported N host(s)…" / "No new hosts…").
 
 - Import/export settings: a ⚙ menu in the shared header (reachable from either tab) offers "Export settings…" / "Import settings…" that back up your saved SSH hosts, paired mesh devices, and per-host bookmarks (plus the editor command) to a single portable JSON file and restore them on another machine. Import merges (never wipes). Secrets are deliberately excluded — passwords stay in the OS keychain — so the file is safe to move around. New tested `ConfigBundle` core serializer; `JobController` exposes `exportConfig`/`importConfig`.

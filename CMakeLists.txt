@@ -6,7 +6,9 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
 
 # Qt 6.5+ (loadFromModule / objectCreationFailed). Install via: brew install qt
-find_package(Qt6 6.5 REQUIRED COMPONENTS Core Gui Qml Quick QuickControls2 Network Test)
+# Widgets is only used by the GUI app: Qt.labs.platform's SystemTrayIcon needs it for
+# the non-native (Linux) fallback. ceres_core stays Core/Network-only.
+find_package(Qt6 6.5 REQUIRED COMPONENTS Core Gui Qml Quick QuickControls2 Widgets Network Test)
 qt_standard_project_setup(REQUIRES 6.5)
 if(COMMAND qt_policy)
     qt_policy(SET QTP0004 NEW)
@@ -94,7 +96,7 @@ qt_add_qml_module(ceres
 )
 target_link_libraries(ceres PRIVATE
     ceres_core
-    Qt6::Gui Qt6::Qml Qt6::Quick Qt6::QuickControls2
+    Qt6::Gui Qt6::Qml Qt6::Quick Qt6::QuickControls2 Qt6::Widgets
 )
 target_compile_definitions(ceres PRIVATE CERES_VERSION="${PROJECT_VERSION}")
 

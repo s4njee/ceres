@@ -111,6 +111,7 @@ private slots:
     void allCompleteFiresWhenQueueDrains();
     void verifyStampsChecksumOnJob();
     void recordsHistoryOnFinish();
+    void pauseAllAndResumeAll();
 };
 
 // Find a file row (from the FilesRole tree) by its path, or an empty map if absent.
@@ -485,6 +486,30 @@ void TransferManagerTest::recordsHistoryOnFinish()
 
     mgr.clearHistory();
     QCOMPARE(mgr.history().size(), 0);
+}
+
+void TransferManagerTest::pauseAllAndResumeAll()
+{
+    FakeEngineFactory factory;
+    TransferManager mgr(std::ref(factory));
+    mgr.setMaxConcurrent(2);
+    TransfersModel *model = mgr.model();
+
+    for (int i = 0; i < 3; ++i)
+        mgr.enqueue(jobN(i), QStringLiteral("up"), QStringLiteral("t%1").arg(i));
+    // 2 active (cap 2), 1 queued.
+    QCOMPARE(mgr.pausedCount(), 0);
+
+    mgr.pauseAll();  // both active + the queued one
+    QCOMPARE(mgr.pausedCount(), 3);
+    QCOMPARE(countStatus(model, TransfersModel::Paused), 3);
+    QCOMPARE(factory.created.at(0)->pauses, 1);
+    QCOMPARE(factory.created.at(1)->pauses, 1);
+
+    mgr.resumeAll();
+    QCOMPARE(mgr.pausedCount(), 0);
+    QCOMPARE(countStatus(model, TransfersModel::Paused), 0);
+    QCOMPARE(factory.created.at(0)->resumes, 1);
 }
 
 QTEST_MAIN(TransferManagerTest)

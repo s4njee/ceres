@@ -263,7 +263,8 @@ void TransferManager::notifyIfDrained()
 
 void TransferManager::cancel(const QString &id)
 {
-    m_paused.remove(id);
+    if (m_paused.remove(id))
+        emit pausedCountChanged();
     if (SyncEngine *e = m_active.value(id, nullptr)) {
         // The finished() handler will mark the row Cancelled (crashed=true). cancel()
         // continues a paused group first, so the terminate is actually delivered.
@@ -296,7 +297,8 @@ void TransferManager::retry(const QString &id)
             return;  // already waiting in the queue
     }
 
-    m_paused.remove(id);
+    if (m_paused.remove(id))
+        emit pausedCountChanged();
     m_model.setStatus(id, TransfersModel::Queued);  // also clears the error text
     m_queue.append(Pending{id, it.value()});
     pump();
@@ -312,6 +314,7 @@ void TransferManager::pause(const QString &id)
         m_paused.insert(id);
         e->pause();
         m_model.setStatus(id, TransfersModel::Paused);
+        emit pausedCountChanged();
         return;
     }
     // Queued: hold it out of pump() until resumed.
@@ -319,6 +322,7 @@ void TransferManager::pause(const QString &id)
         if (p.id == id) {
             m_paused.insert(id);
             m_model.setStatus(id, TransfersModel::Paused);
+            emit pausedCountChanged();
             return;
         }
     }
@@ -329,6 +333,7 @@ void TransferManager::resume(const QString &id)
     if (!m_paused.contains(id))
         return;
     m_paused.remove(id);
+    emit pausedCountChanged();
 
     if (SyncEngine *e = m_active.value(id, nullptr)) {
         e->resume();
@@ -338,4 +343,25 @@ void TransferManager::resume(const QString &id)
     // Was a paused queued entry — back to Queued and let pump() pick it up.
     m_model.setStatus(id, TransfersModel::Queued);
     pump();
+}
+
+void TransferManager::pauseAll()
+{
+    // Snapshot ids first — pause() mutates m_active/m_queue membership only via m_paused,
+    // but copy to be safe against iterator surprises.
+    const QList<QString> active = m_active.keys();
+    QStringList queued;
+    for (const Pending &p : m_queue)
+        queued << p.id;
+    for (const QString &id : active)
+        pause(id);
+    for (const QString &id : queued)
+        pause(id);
+}
+
+void TransferManager::resumeAll()
+{
+    const QList<QString> paused = m_paused.values();
+    for (const QString &id : paused)
+        resume(id);
 }

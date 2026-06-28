@@ -40,6 +40,7 @@ class TransferManager : public QObject {
     Q_PROPERTY(bool verifyChecksums READ verifyChecksums WRITE setVerifyChecksums NOTIFY verifyChanged)
     Q_PROPERTY(int overwritePolicy READ overwritePolicy WRITE setOverwritePolicy NOTIFY overwritePolicyChanged)
     Q_PROPERTY(int activeCount READ activeCount NOTIFY activeCountChanged)
+    Q_PROPERTY(int pausedCount READ pausedCount NOTIFY pausedCountChanged)
 public:
     using EngineFactory = std::function<SyncEngine *()>;
 
@@ -74,6 +75,7 @@ public:
     void setOverwritePolicy(int policy);
 
     int activeCount() const { return m_active.size(); }
+    int pausedCount() const { return static_cast<int>(m_paused.size()); }
 
     // Enqueue one ad-hoc transfer. `direction` is "up"/"down", `name` is the
     // display label. Returns the generated transfer id. Emits enqueued() and
@@ -94,6 +96,10 @@ public:
     // slot); a queued one is held out of pump() until resumed.
     Q_INVOKABLE void pause(const QString &id);
     Q_INVOKABLE void resume(const QString &id);
+    // Suspend every active/queued transfer, or resume all paused ones. Drives the
+    // tray's "Pause all" / "Resume all".
+    Q_INVOKABLE void pauseAll();
+    Q_INVOKABLE void resumeAll();
     Q_INVOKABLE void clearCompleted() { m_model.clearCompleted(); }
 
     // Persistent log of finished transfers (most-recent first), survives restarts.
@@ -104,6 +110,7 @@ public:
 signals:
     void maxConcurrentChanged();
     void rateLimitChanged();
+    void pausedCountChanged();
     void verifyChanged();
     void overwritePolicyChanged();
     void activeCountChanged();

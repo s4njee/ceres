@@ -143,6 +143,14 @@ include/exclude toggles — then commit.
 
 ## 8. Background agent + menu-bar / tray presence
 
+> **Status: started.** A native tray/menu-bar icon now shows live status
+> (transferring / paused / idle) with show-hide-window, pause-all/resume-all, and
+> quit; closing the window hides to the tray so transfers keep running in the
+> background (`Qt.labs.platform` + `TransferManager::pauseAll/resumeAll`).
+> **Remaining:** the true process split — a long-lived headless agent the GUI
+> attaches to over a local socket — plus "sync now" / last-sync-time once scheduled
+> jobs (#5) exist.
+
 Run Ceres **headless** with a lightweight status surface (macOS menu bar, Linux
 tray, Windows notification area): live transfers, last-sync times, pause-all,
 "sync now". The GUI becomes one optional view onto a daemon.
