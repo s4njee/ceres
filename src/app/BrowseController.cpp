@@ -233,6 +233,12 @@ void BrowseController::disconnectHost()
         m_bookmarks.clear();
         emit bookmarksChanged();
     }
+    if (!m_remoteSnapshots.isEmpty() || !m_snapshotBase.isEmpty()) {
+        m_snapshotBase.clear();
+        m_remoteSnapshots.clear();
+        m_activeSnapshot.clear();
+        emit snapshotsChanged();
+    }
     setConnected(false);
     emit targetChanged();
     emit remotePathChanged();
@@ -280,6 +286,7 @@ void BrowseController::onListed(const QString & /*target*/, const QString &path,
         emit remotePathChanged();
     }
     setConnected(true);
+    updateSnapshotContext();  // refresh the snapshot timeline for the new listing
     reloadBookmarks();  // favorites are per-target; load them once connected
     // Refresh the free-space indicator for the now-current directory (cheap df pass).
     m_remoteFs.freeSpace(m_target, m_remotePath, m_sshKey, m_sshPort, m_sshPassword);
@@ -519,6 +526,50 @@ void BrowseController::remoteFolderSize(const QString &name)
 int BrowseController::snapshotCount() const
 {
     return static_cast<int>(Snapshot::sortedSnapshots(m_remote.names()).size());
+}
+
+void BrowseController::updateSnapshotContext()
+{
+    QString base;
+    QStringList snaps;
+    QString active;
+
+    const QStringList here = Snapshot::sortedSnapshots(m_remote.names());
+    if (!here.isEmpty()) {
+        // The current directory is a snapshot base.
+        base = m_remotePath;
+        snaps = here;
+    } else if (!m_snapshotBase.isEmpty() && m_remotePath.startsWith(m_snapshotBase)) {
+        // We've navigated into (or below) the remembered base: keep the timeline and
+        // highlight whichever snapshot we're inside.
+        const QString seg = m_remotePath.mid(m_snapshotBase.size())
+                                .split(QLatin1Char('/'), Qt::SkipEmptyParts)
+                                .value(0);
+        if (Snapshot::isSnapshotName(seg)) {
+            base = m_snapshotBase;
+            snaps = m_remoteSnapshots;
+            active = seg;
+        }
+    }
+
+    if (base != m_snapshotBase || snaps != m_remoteSnapshots || active != m_activeSnapshot) {
+        m_snapshotBase = base;
+        m_remoteSnapshots = snaps;
+        m_activeSnapshot = active;
+        emit snapshotsChanged();
+    }
+}
+
+void BrowseController::openSnapshot(const QString &name)
+{
+    if (m_connected && !m_snapshotBase.isEmpty() && !name.isEmpty())
+        listRemote(joinRemote(m_snapshotBase, name));
+}
+
+void BrowseController::openSnapshotBase()
+{
+    if (m_connected && !m_snapshotBase.isEmpty())
+        listRemote(m_snapshotBase);
 }
 
 void BrowseController::snapshotToRemote(const QString &localName)

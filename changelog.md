@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Snapshot timeline: when a remote directory holds snapshots, the browse tab shows a timeline strip — a "base" pill plus one pill per snapshot (formatted "Jun 27 · 14:03", newest first). Clicking a pill jumps to that point in time; the strip stays visible while browsing inside a snapshot, highlighting the active one, with a hint to download files to restore. `BrowseController` tracks the snapshot context (sticky base + active snapshot) across navigation.
+
 - Mesh pairing: discovered LAN devices in the "On your network" sidebar now have a "Pair" action that shows a six-digit verification code (the same on both devices) to confirm before trusting — then the device is remembered across restarts (by stable machine id) and badged "✓ paired". `JobController` gains pair/unpair/pairing-code invokables backed by `PairedDeviceStore`; `PeerModel` gains a `paired` role. Syncing to a paired device reuses the existing connect/transfer path.
 
 - Snapshots: "Snapshot to remote" on a local folder backs it up into the current remote directory as a timestamped snapshot, hardlinking unchanged files from the latest prior snapshot (`--link-dest`) so each snapshot costs only its delta, then repoints a `latest` symlink. Snapshots are plain timestamped dirs you can browse and download to restore. Added a remote `symlink` op and a `FileListModel::names()` accessor; the snapshot count shows in the menu label.

@@ -29,6 +29,15 @@ Item {
         deleteConfirm.open = true
     }
 
+    // Format a snapshot dir name ("YYYY-MM-DD-HHMMSS") as "Jun 27 · 14:03".
+    function formatSnapshot(n) {
+        var mo = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]
+        var m = parseInt(n.substr(5, 2))
+        if (isNaN(m) || m < 1 || m > 12) return n
+        return mo[m - 1] + " " + parseInt(n.substr(8, 2)) + " · "
+               + n.substr(11, 2) + ":" + n.substr(13, 2)
+    }
+
     // transient error/status message (cleared after a few seconds)
     property string message: ""
     Timer { id: messageTimer; interval: 5000; onTriggered: tab.message = "" }
@@ -404,6 +413,48 @@ Item {
                         removable: true
                         onRemoved: browse.removeBookmark(modelData)
                     }
+                }
+            }
+
+            // snapshot timeline: shown when the current remote location has snapshots.
+            // Each pill jumps to that point in time; the active one is highlighted. Stays
+            // visible (sticky to the base) while browsing inside a snapshot.
+            Flow {
+                Layout.fillWidth: true
+                Layout.leftMargin: 12
+                Layout.rightMargin: 12
+                spacing: 6
+                visible: browse.connected && browse.remoteSnapshots.length > 0
+                Text {
+                    text: "⛁ Snapshots"
+                    color: Theme.textTertiary
+                    font.pixelSize: 11
+                    height: 26
+                    verticalAlignment: Text.AlignVCenter
+                }
+                Chip {
+                    label: "base"
+                    active: browse.activeSnapshot === ""
+                    tooltip: "The snapshot base (list of all snapshots)"
+                    onToggled: browse.openSnapshotBase()
+                }
+                Repeater {
+                    model: browse.remoteSnapshots
+                    delegate: Chip {
+                        required property string modelData
+                        label: tab.formatSnapshot(modelData)
+                        active: browse.activeSnapshot === modelData
+                        tooltip: modelData
+                        onToggled: browse.openSnapshot(modelData)
+                    }
+                }
+                Text {
+                    visible: browse.activeSnapshot !== ""
+                    text: "— select files and Download to restore"
+                    color: Theme.textTertiary
+                    font.pixelSize: 10
+                    height: 26
+                    verticalAlignment: Text.AlignVCenter
                 }
             }
 

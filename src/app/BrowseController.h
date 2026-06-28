@@ -41,6 +41,10 @@ class BrowseController : public QObject {
     Q_PROPERTY(QString remoteFree READ remoteFree NOTIFY remoteFreeChanged)
     Q_PROPERTY(QString localFree READ localFree NOTIFY localFreeChanged)
     Q_PROPERTY(QStringList bookmarks READ bookmarks NOTIFY bookmarksChanged)
+    // Snapshot timeline for the current location: the snapshot names in the base (newest
+    // first), and which one we're currently inside (empty when at the base itself).
+    Q_PROPERTY(QStringList remoteSnapshots READ remoteSnapshots NOTIFY snapshotsChanged)
+    Q_PROPERTY(QString activeSnapshot READ activeSnapshot NOTIFY snapshotsChanged)
     Q_PROPERTY(QString editorCommand READ editorCommand WRITE setEditorCommand NOTIFY editorCommandChanged)
 public:
     BrowseController(RsyncCapabilities caps, SshHostStore hostStore, SecretStore secrets,
@@ -92,6 +96,12 @@ public:
     // How many snapshot subdirectories the current remote directory already holds (so
     // the UI can label the action / show the count).
     Q_INVOKABLE int snapshotCount() const;
+    QStringList remoteSnapshots() const { return m_remoteSnapshots; }
+    QString activeSnapshot() const { return m_activeSnapshot; }
+    // Navigate to a snapshot (by name) within the current snapshot base.
+    Q_INVOKABLE void openSnapshot(const QString &name);
+    // Navigate to the snapshot base itself (leave a snapshot, back to the timeline root).
+    Q_INVOKABLE void openSnapshotBase();
     // Download a remote file to a temp dir and open it: quickViewRemote with the OS
     // default app, editRemote with the configured editor (or default) plus a watch that
     // re-uploads on save.
@@ -128,6 +138,7 @@ signals:
     void remoteFreeChanged();
     void localFreeChanged();
     void bookmarksChanged();
+    void snapshotsChanged();
     /// Key auth failed; the UI should prompt for a password (prefilled with `user`)
     /// and call connectWithPassword(). `host` is shown for context.
     void authRequired(const QString &host, const QString &user);
@@ -190,6 +201,14 @@ private:
     // base's `latest` symlink can be repointed once the rsync finishes.
     struct PendingSnapshot { QString base; QString name; };
     QHash<QString, PendingSnapshot> m_pendingSnapshots;
+
+    // Snapshot timeline context, recomputed on each remote listing. The base "sticks"
+    // so the timeline stays visible (with the active one highlighted) while browsing
+    // inside a snapshot.
+    void updateSnapshotContext();
+    QString m_snapshotBase;        // base dir (trailing slash) holding the snapshots
+    QStringList m_remoteSnapshots; // snapshot names in the base, newest first
+    QString m_activeSnapshot;      // the snapshot we're currently inside, or empty
 
     QString m_localPath;
     QString m_remotePath;   // resolved absolute remote dir (trailing slash)
