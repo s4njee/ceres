@@ -579,6 +579,16 @@ Item {
             onTriggered: browse.revealLocal(localPane.selected[0])
         }
         CtxItem {
+            // Snapshot the selected folder into the current remote directory (the base),
+            // hardlinking unchanged files from the latest prior snapshot.
+            text: browse.connected
+                  ? "Snapshot to remote" + (browse.snapshotCount() > 0
+                        ? " (" + browse.snapshotCount() + " here)" : "")
+                  : "Snapshot to remote (connect first)"
+            enabled: browse.connected && localPane.selected.length === 1
+            onTriggered: { browse.snapshotToRemote(localPane.selected[0]); transfersDialog.open = true }
+        }
+        CtxItem {
             text: "New folder"
             onTriggered: tab.promptInput("New folder name", "", function(v) { browse.mkdirLocal(v) })
         }

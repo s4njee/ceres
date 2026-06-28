@@ -16,6 +16,7 @@
 #include "app/TransferManager.h"
 #include "core/AppSettings.h"
 #include "core/Format.h"
+#include "core/Snapshot.h"
 #include "core/SshKnownHosts.h"
 #include "core/SyncJob.h"
 
@@ -515,6 +516,34 @@ void BrowseController::remoteFolderSize(const QString &name)
     m_remoteFs.diskUsage(m_target, m_remotePath, name, m_sshKey, m_sshPort, m_sshPassword);
 }
 
+int BrowseController::snapshotCount() const
+{
+    return static_cast<int>(Snapshot::sortedSnapshots(m_remote.names()).size());
+}
+
+void BrowseController::snapshotToRemote(const QString &localName)
+{
+    if (!m_connected || !m_transfers || localName.isEmpty())
+        return;
+
+    // The current remote directory is the snapshot base. The newest existing snapshot
+    // (read from the loaded listing) becomes the --link-dest baseline.
+    const QString base = m_remotePath;
+    const QString latest = Snapshot::latestOf(m_remote.names());
+    const QString name = Snapshot::nameForTime(QDateTime::currentDateTime());
+
+    SyncJob job = transferJob();
+    job.source = QDir(m_localPath).filePath(localName);  // e.g. /home/u/Documents
+    job.destination = m_target + QLatin1Char(':') + withTrailingSlash(joinRemote(base, name));
+    if (!latest.isEmpty())
+        job.linkDest = QStringLiteral("../") + latest;  // sibling, relative to the dest dir
+
+    const QString id = m_transfers->enqueue(
+        job, QStringLiteral("up"), localName + QStringLiteral(" → ") + name);
+    m_pendingSnapshots.insert(id, PendingSnapshot{base, name});
+    seedFromLocalWalk(id, job.source, localName);
+}
+
 namespace {
 // Open `path` with the configured editor command (split into program + args), or the
 // OS default opener when no editor is set.
@@ -581,6 +610,20 @@ void BrowseController::fetchForOpen(const QString &name, bool edit)
 
 void BrowseController::onOpenFetched(const QString &id, bool success)
 {
+    // A finished snapshot: repoint the base's `latest` symlink at the new snapshot dir,
+    // then refresh so the new snapshot (and updated link) show up.
+    const auto snap = m_pendingSnapshots.constFind(id);
+    if (snap != m_pendingSnapshots.cend()) {
+        const PendingSnapshot s = snap.value();
+        m_pendingSnapshots.erase(snap);
+        if (success) {
+            m_remoteFs.symlink(m_target, s.base, Snapshot::latestLinkName(), s.name, m_sshKey,
+                               m_sshPort, m_sshPassword);
+            emit infoOccurred(QStringLiteral("Snapshot created: ") + s.name);
+        }
+        return;
+    }
+
     const auto it = m_pendingOpens.constFind(id);
     if (it == m_pendingOpens.cend())
         return;  // not one of ours

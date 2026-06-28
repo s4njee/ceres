@@ -156,6 +156,15 @@ bool FileListModel::isDirAt(int row) const
     return row >= 0 && row < m_entries.size() && m_entries.at(row).isDir;
 }
 
+QStringList FileListModel::names() const
+{
+    QStringList out;
+    out.reserve(m_source.size());
+    for (const FileEntry &e : m_source)
+        out << e.name;
+    return out;
+}
+
 QString FileListModel::humanSize(qint64 bytes)
 {
     return Format::humanSize(bytes);  // single definition lives in core/Format.h

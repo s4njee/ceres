@@ -33,6 +33,10 @@ public:
                 const QString &sshKey, int port, const QString &password);
     void rename(const QString &target, const QString &dir, const QString &from, const QString &to,
                 const QString &sshKey, int port, const QString &password);
+    // Create/replace a symlink `linkName` -> `pointsTo` inside `dir` (ln -sfn). Used to
+    // repoint a snapshot base's `latest` link. Reports via opFinished.
+    void symlink(const QString &target, const QString &dir, const QString &linkName,
+                 const QString &pointsTo, const QString &sshKey, int port, const QString &password);
 
     // Recursively list every non-directory entry under `dir`/`leaf` and report them
     // as paths relative to `dir` (i.e. prefixed with `leaf`), matching the form rsync

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Snapshots: "Snapshot to remote" on a local folder backs it up into the current remote directory as a timestamped snapshot, hardlinking unchanged files from the latest prior snapshot (`--link-dest`) so each snapshot costs only its delta, then repoints a `latest` symlink. Snapshots are plain timestamped dirs you can browse and download to restore. Added a remote `symlink` op and a `FileListModel::names()` accessor; the snapshot count shows in the menu label.
+
 - Refactor: extracted the ssh-invocation plumbing (argv building, ssh-binary location, SSH_ASKPASS environment, shell quoting, auth-failure detection) that was copy-pasted as file-local statics in `RemoteFs.cpp` and `PathCompleter.cpp` into one shared `SshCommand` module. The copies had already drifted — keepalive options were in only one — so completion ssh calls now also get keepalive. ~280 lines of duplication removed.
 
 - Packaging: added install rules and CPack configuration so the app builds into a distributable bundle — a macOS `.app` (with `Info.plist`, `.icns` icon, and the Qt runtime deployed) packaged as a `.dmg`, a Linux install with a `.desktop` entry and themed icons (`.tar.gz`/`.deb`), and a Windows `.zip`. App version, organization, window/dock icon, and Linux desktop-file association are now set. Icons are generated from `icons/ceres.svg` into `.icns`/`.ico`/`.png`. See the README "Packaging" section.

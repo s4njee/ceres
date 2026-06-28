@@ -85,6 +85,13 @@ public:
     Q_INVOKABLE void renameRemote(const QString &from, const QString &to);
     // Recursively compute the size of a remote folder/file; result arrives via infoOccurred.
     Q_INVOKABLE void remoteFolderSize(const QString &name);
+    // Snapshot a local folder into the current remote directory (the snapshot base):
+    // rsync into a new timestamped subdir, hardlinking unchanged files from the latest
+    // prior snapshot, then repoint the base's `latest` symlink. See core/Snapshot.
+    Q_INVOKABLE void snapshotToRemote(const QString &localName);
+    // How many snapshot subdirectories the current remote directory already holds (so
+    // the UI can label the action / show the count).
+    Q_INVOKABLE int snapshotCount() const;
     // Download a remote file to a temp dir and open it: quickViewRemote with the OS
     // default app, editRemote with the configured editor (or default) plus a watch that
     // re-uploads on save.
@@ -178,6 +185,11 @@ private:
     QHash<QString, PendingOpen> m_pendingOpens;  // transfer id -> file to open when done
     QHash<QString, QString> m_editTargets;       // watched localPath -> remote upload dir
     QFileSystemWatcher *m_editWatcher = nullptr;
+
+    // Snapshots awaiting completion: transfer id -> (base dir, new snapshot name), so the
+    // base's `latest` symlink can be repointed once the rsync finishes.
+    struct PendingSnapshot { QString base; QString name; };
+    QHash<QString, PendingSnapshot> m_pendingSnapshots;
 
     QString m_localPath;
     QString m_remotePath;   // resolved absolute remote dir (trailing slash)

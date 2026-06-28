@@ -266,6 +266,17 @@ void RemoteFs::rename(const QString &target, const QString &dir, const QString &
     runOpCommand(this, m_caps, target, sshKey, port, password, script);
 }
 
+void RemoteFs::symlink(const QString &target, const QString &dir, const QString &linkName,
+                       const QString &pointsTo, const QString &sshKey, int port,
+                       const QString &password)
+{
+    // -s symbolic, -f replace an existing link, -n treat an existing link-to-dir as a
+    // file (so we replace it rather than create one inside it).
+    const QString script = QStringLiteral("cd -- %1 && ln -sfn -- %2 %3\n")
+                .arg(shellPathArg(dir), shellSingleQuote(pointsTo), shellSingleQuote(linkName));
+    runOpCommand(this, m_caps, target, sshKey, port, password, script);
+}
+
 QString RemoteFs::friendlyError(const QString &raw)
 {
     struct Rule {
